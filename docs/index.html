@@ -1,0 +1,55 @@
+
+
+
+
+<!-- ========================================
+     SERVICE CONSOLE
+======================================== -->
+
+<div id="service-console">
+ loadComponent() делает всё необходимое:
+
+Загружает полноценный header.html.
+Переносит CSS из <head>.
+Вставляет разметку из <body>.
+После вставки разметки выполняет внутренние <script>.
+Загружает внешние скрипты с правильными относительными путями. | v5.2.0
+</div>
+
+<div class="row" id="build-down">
+deploy: --
+</div>
+
+<script>
+(function () {
+  const now = new Date();
+
+  const pad = n =>
+    String(n).padStart(2, "0");
+
+  const date =
+      pad(now.getDate())
+    + "."
+    + pad(now.getMonth() + 1)
+    + "."
+    + now.getFullYear();
+
+  const time =
+      pad(now.getHours())
+    + ":"
+    + pad(now.getMinutes());
+
+  document
+    .getElementById("build-down")
+    .textContent =
+      "deploy: "
+      + date
+      + " "
+      + time;
+})();
+</script>
+
+
+</body>
+</html>
+  
