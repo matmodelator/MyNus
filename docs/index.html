@@ -1,51 +1,46 @@
-
 <!DOCTYPE html>
 <html lang="ru">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>Создать минус</title>
+  <title>Разделение песни</title>
 
   <style>
     body {
       margin: 0;
       min-height: 100vh;
-
       display: flex;
       align-items: center;
       justify-content: center;
 
       font-family: Arial, sans-serif;
-
       background: #f3f3f3;
     }
 
     .app {
-      width: 340px;
-
+      width: 360px;
       padding: 30px;
 
       background: white;
-
       border-radius: 12px;
 
-      text-align: center;
+      box-shadow: 0 4px 20px rgba(0,0,0,.08);
     }
 
     h1 {
-      margin-top: 0;
+      margin: 0 0 25px;
+      text-align: center;
+      font-size: 24px;
     }
 
     input {
       width: 100%;
-      margin: 20px 0;
+      margin-bottom: 20px;
     }
 
     button {
       width: 100%;
-
       padding: 14px;
 
       border: 0;
@@ -55,29 +50,40 @@
       color: white;
 
       font-size: 16px;
-
       cursor: pointer;
     }
 
     button:disabled {
-      opacity: 0.5;
+      opacity: .5;
       cursor: default;
     }
 
     #status {
       margin-top: 20px;
+      text-align: center;
+    }
+
+    .result {
+      display: none;
+      margin-top: 25px;
+    }
+
+    .track {
+      margin-top: 20px;
+    }
+
+    .track-title {
+      margin-bottom: 8px;
+      font-weight: bold;
     }
 
     audio {
       width: 100%;
-      margin-top: 20px;
     }
 
-    #download {
-      display: none;
-
-      margin-top: 15px;
-
+    a {
+      display: inline-block;
+      margin-top: 8px;
       color: #222;
     }
   </style>
@@ -87,51 +93,90 @@
 
 <div class="app">
 
-  <h1>Создать минус</h1>
+  <h1>Разделить песню</h1>
 
   <input
-    id="audioFile"
     type="file"
+    id="audioFile"
     accept="audio/*"
   >
 
-  <button id="createBtn">
-    Создать минус
+  <button id="splitBtn">
+    Разделить
   </button>
 
   <div id="status"></div>
 
-  <audio
-    id="player"
-    controls
-    style="display:none"
-  ></audio>
 
-  <a
-    id="download"
-    download="minus.mp3"
-  >
-    Скачать минус
-  </a>
+  <div id="result" class="result">
+
+    <div class="track">
+      <div class="track-title">
+        Вокал
+      </div>
+
+      <audio
+        id="vocalsPlayer"
+        controls
+      ></audio>
+
+      <br>
+
+      <a
+        id="vocalsDownload"
+        download="vocals.mp3"
+      >
+        Скачать вокал
+      </a>
+    </div>
+
+
+    <div class="track">
+      <div class="track-title">
+        Минус
+      </div>
+
+      <audio
+        id="minusPlayer"
+        controls
+      ></audio>
+
+      <br>
+
+      <a
+        id="minusDownload"
+        download="minus.mp3"
+      >
+        Скачать минус
+      </a>
+    </div>
+
+  </div>
 
 </div>
 
 
 <script>
 
-const fileInput = document.getElementById("audioFile");
-const createBtn = document.getElementById("createBtn");
+const audioFile = document.getElementById("audioFile");
+const splitBtn = document.getElementById("splitBtn");
+
 const status = document.getElementById("status");
-const player = document.getElementById("player");
-const download = document.getElementById("download");
+const result = document.getElementById("result");
+
+const vocalsPlayer = document.getElementById("vocalsPlayer");
+const minusPlayer = document.getElementById("minusPlayer");
+
+const vocalsDownload = document.getElementById("vocalsDownload");
+const minusDownload = document.getElementById("minusDownload");
 
 
-createBtn.addEventListener("click", async () => {
+splitBtn.addEventListener("click", async () => {
 
-  const file = fileInput.files[0];
+  const file = audioFile.files[0];
 
   if (!file) {
-    status.textContent = "Выберите песню";
+    status.textContent = "Выберите аудиофайл";
     return;
   }
 
@@ -141,12 +186,10 @@ createBtn.addEventListener("click", async () => {
   formData.append("audio", file);
 
 
-  createBtn.disabled = true;
+  splitBtn.disabled = true;
 
-  status.textContent = "Обработка...";
-
-  player.style.display = "none";
-  download.style.display = "none";
+  status.textContent = "Разделение...";
+  result.style.display = "none";
 
 
   try {
@@ -158,24 +201,24 @@ createBtn.addEventListener("click", async () => {
 
 
     if (!response.ok) {
-      throw new Error("Ошибка обработки");
+      throw new Error("Ошибка сервера");
     }
 
 
-    const blob = await response.blob();
-
-    const url = URL.createObjectURL(blob);
+    const data = await response.json();
 
 
-    player.src = url;
-    player.style.display = "block";
+    vocalsPlayer.src = data.vocals;
+    minusPlayer.src = data.minus;
 
 
-    download.href = url;
-    download.style.display = "inline-block";
+    vocalsDownload.href = data.vocals;
+    minusDownload.href = data.minus;
 
 
-    status.textContent = "Минус готов";
+    result.style.display = "block";
+
+    status.textContent = "Готово";
 
   }
 
@@ -183,13 +226,13 @@ createBtn.addEventListener("click", async () => {
 
     console.error(error);
 
-    status.textContent = "Ошибка";
+    status.textContent = "Ошибка обработки";
 
   }
 
   finally {
 
-    createBtn.disabled = false;
+    splitBtn.disabled = false;
 
   }
 
