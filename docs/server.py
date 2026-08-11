@@ -1,17 +1,18 @@
 # ========================================
-# Version: GPT  1.0.0.
+# Processing типо 1.1.0.
 # ========================================
 
 
 
-
 # ========================================
-# ИМПОРТЫ
+# IMPORTS
 # ========================================
 
 import os
+import re
 import shutil
 import subprocess
+import threading
 import uuid
 
 from flask import Flask, request, jsonify, send_from_directory
@@ -19,15 +20,10 @@ from werkzeug.utils import secure_filename
 
 
 # ========================================
-# СОЗДАНИЕ СЕРВЕРА
+# APPLICATION
 # ========================================
 
 app = Flask(__name__)
-
-
-# ========================================
-# ПАПКИ ПРОЕКТА
-# ========================================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -39,7 +35,14 @@ os.makedirs(RESULT_DIR, exist_ok=True)
 
 
 # ========================================
-# ГЛАВНАЯ СТРАНИЦА
+# JOB STATE
+# ========================================
+
+jobs = {}
+
+
+# ========================================
+# INDEX
 # ========================================
 
 @app.route("/")
@@ -52,43 +55,30 @@ def index():
 
 
 # ========================================
-# ЗАГРУЗКА И РАЗДЕЛЕНИЕ ПЕСНИ
+# START SEPARATION
 # ========================================
 
 @app.route("/separate", methods=["POST"])
 def separate():
 
-    # ----------------------------------------
-    # ПРОВЕРЯЕМ, ЧТО ФАЙЛ ПРИШЁЛ
-    # ----------------------------------------
-
     if "audio" not in request.files:
 
         return jsonify({
-            "error": "Файл не получен"
+            "error": "Audio file not received"
         }), 400
 
 
     audio = request.files["audio"]
 
-
     if audio.filename == "":
 
         return jsonify({
-            "error": "Файл не выбран"
+            "error": "Audio file not selected"
         }), 400
 
 
-    # ----------------------------------------
-    # СОЗДАЁМ УНИКАЛЬНЫЙ ID ОБРАБОТКИ
-    # ----------------------------------------
-
     job_id = str(uuid.uuid4())
 
-
-    # ----------------------------------------
-    # СОЗДАЁМ ПАПКИ ДЛЯ ЭТОЙ ПЕСНИ
-    # ----------------------------------------
 
     job_upload_dir = os.path.join(
         UPLOAD_DIR,
@@ -99,7 +89,6 @@ def separate():
         RESULT_DIR,
         job_id
     )
-
 
     os.makedirs(
         job_upload_dir,
@@ -112,17 +101,9 @@ def separate():
     )
 
 
-    # ----------------------------------------
-    # СОХРАНЯЕМ ЗАГРУЖЕННУЮ ПЕСНЮ
-    # ----------------------------------------
-
     filename = secure_filename(
         audio.filename
     )
-
-
-    # Если имя оказалось неподходящим
-    # после обработки secure_filename
 
     if not filename:
         filename = "audio.mp3"
@@ -133,28 +114,47 @@ def separate():
         filename
     )
 
-
     audio.save(
         input_path
     )
 
 
-    # ========================================
-    # ЗАПУСК DEMUCS
-    # ========================================
+    jobs[job_id] = {
+        "progress": 0,
+        "status": "processing",
+        "vocals": None,
+        "minus": None,
+        "error": None
+    }
 
-    # --two-stems=vocals
-    #
-    # создаёт две дорожки:
-    #
-    # vocals.mp3
-    # no_vocals.mp3
-    #
-    # --mp3
-    #
-    # заставляет Demucs сохранить результат
-    # сразу в MP3
 
+    thread = threading.Thread(
+        target=run_demucs,
+        args=(
+            job_id,
+            input_path,
+            job_result_dir
+        ),
+        daemon=True
+    )
+
+    thread.start()
+
+
+    return jsonify({
+        "job_id": job_id
+    })
+
+
+# ========================================
+# DEMUCS PROCESS
+# ========================================
+
+def run_demucs(
+    job_id,
+    input_path,
+    job_result_dir
+):
 
     command = [
 
@@ -175,52 +175,79 @@ def separate():
 
     try:
 
-        # ----------------------------------------
-        # ЗАПУСКАЕМ DEMUCS И ЖДЁМ РЕЗУЛЬТАТ
-        # ----------------------------------------
-
-        process = subprocess.run(
+        process = subprocess.Popen(
 
             command,
 
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
 
-            text=True
+            text=True,
+
+            bufsize=1
         )
 
 
-        # ----------------------------------------
-        # ЕСЛИ DEMUCS ВЕРНУЛ ОШИБКУ
-        # ----------------------------------------
+        # ========================================
+        # READ DEMUCS OUTPUT
+        # ========================================
+
+        for line in process.stdout:
+
+            print(line, end="")
+
+
+            # Demucs / tqdm outputs values such as:
+            #
+            # 23%
+            # 51%
+            # 100%
+
+            matches = re.findall(
+                r"(\d{1,3})%",
+                line
+            )
+
+
+            if matches:
+
+                percent = int(
+                    matches[-1]
+                )
+
+                percent = max(
+                    0,
+                    min(
+                        100,
+                        percent
+                    )
+                )
+
+
+                jobs[job_id]["progress"] = (
+                    percent
+                )
+
+
+        process.wait()
+
 
         if process.returncode != 0:
 
-            print(process.stdout)
-            print(process.stderr)
+            jobs[job_id]["status"] = (
+                "error"
+            )
 
-            return jsonify({
+            jobs[job_id]["error"] = (
+                "Demucs process failed"
+            )
 
-                "error": "Ошибка Demucs",
-
-                "details": process.stderr
-
-            }), 500
+            return
 
 
         # ========================================
-        # ИЩЕМ РЕЗУЛЬТАТ DEMUCS
+        # FIND DEMUCS OUTPUT
         # ========================================
-
-        # Demucs создаёт структуру:
-        #
-        # results/
-        #     job_id/
-        #         htdemucs/
-        #             название_песни/
-        #
-        #                 vocals.mp3
-        #                 no_vocals.mp3
-
 
         model_dir = os.path.join(
             job_result_dir,
@@ -228,17 +255,12 @@ def separate():
         )
 
 
-        # ----------------------------------------
-        # НАХОДИМ ПАПКУ ПЕСНИ
-        # ----------------------------------------
-
         song_dirs = [
 
             directory
 
-            for directory in os.listdir(
-                model_dir
-            )
+            for directory
+            in os.listdir(model_dir)
 
             if os.path.isdir(
 
@@ -252,12 +274,9 @@ def separate():
 
         if not song_dirs:
 
-            return jsonify({
-
-                "error":
-                    "Demucs не создал результат"
-
-            }), 500
+            raise Exception(
+                "Demucs output not found"
+            )
 
 
         song_dir = os.path.join(
@@ -265,10 +284,6 @@ def separate():
             song_dirs[0]
         )
 
-
-        # ========================================
-        # ИСХОДНЫЕ ФАЙЛЫ DEMUCS
-        # ========================================
 
         vocals_source = os.path.join(
             song_dir,
@@ -282,10 +297,6 @@ def separate():
         )
 
 
-        # ========================================
-        # ФАЙЛЫ, КОТОРЫЕ ОТДАДИМ САЙТУ
-        # ========================================
-
         vocals_target = os.path.join(
             job_result_dir,
             "vocals.mp3"
@@ -297,10 +308,6 @@ def separate():
             "minus.mp3"
         )
 
-
-        # ----------------------------------------
-        # КОПИРУЕМ РЕЗУЛЬТАТЫ
-        # ----------------------------------------
 
         shutil.copy(
             vocals_source,
@@ -315,36 +322,62 @@ def separate():
 
 
         # ========================================
-        # ВОЗВРАЩАЕМ ССЫЛКИ В INDEX.HTML
+        # JOB COMPLETE
         # ========================================
 
-        return jsonify({
+        jobs[job_id]["progress"] = 100
 
-            "vocals":
-                f"/results/{job_id}/vocals.mp3",
-
-            "minus":
-                f"/results/{job_id}/minus.mp3"
-        })
+        jobs[job_id]["status"] = (
+            "done"
+        )
 
 
-    # ========================================
-    # НЕПРЕДВИДЕННАЯ ОШИБКА
-    # ========================================
+        jobs[job_id]["vocals"] = (
+            f"/results/{job_id}/vocals.mp3"
+        )
+
+
+        jobs[job_id]["minus"] = (
+            f"/results/{job_id}/minus.mp3"
+        )
+
 
     except Exception as error:
 
         print(error)
 
-        return jsonify({
 
-            "error": str(error)
+        jobs[job_id]["status"] = (
+            "error"
+        )
 
-        }), 500
+
+        jobs[job_id]["error"] = str(
+            error
+        )
 
 
 # ========================================
-# ВЫДАЧА ГОТОВЫХ АУДИОФАЙЛОВ
+# PROCESS PROGRESS
+# ========================================
+
+@app.route("/progress/<job_id>")
+def progress(job_id):
+
+    if job_id not in jobs:
+
+        return jsonify({
+            "error": "Job not found"
+        }), 404
+
+
+    return jsonify(
+        jobs[job_id]
+    )
+
+
+# ========================================
+# RESULT FILES
 # ========================================
 
 @app.route(
@@ -368,7 +401,7 @@ def result_file(
 
 
 # ========================================
-# ЗАПУСК СЕРВЕРА
+# SERVER START
 # ========================================
 
 if __name__ == "__main__":
@@ -379,5 +412,7 @@ if __name__ == "__main__":
 
         port=5000,
 
-        debug=True
+        debug=True,
+
+        threaded=True
     )
