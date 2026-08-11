@@ -1,15 +1,28 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
+
 <head>
+
+  <!-- ========================================
+       BASIC SETTINGS
+  ======================================== -->
+
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>Разделение песни</title>
+  <title>MyNus — Split Song</title>
+
 
   <style>
+
+    /* ========================================
+       PAGE LAYOUT
+    ======================================== */
+
     body {
       margin: 0;
       min-height: 100vh;
+
       display: flex;
       align-items: center;
       justify-content: center;
@@ -17,6 +30,11 @@
       font-family: Arial, sans-serif;
       background: #f3f3f3;
     }
+
+
+    /* ========================================
+       APPLICATION
+    ======================================== */
 
     .app {
       width: 360px;
@@ -30,6 +48,7 @@
 
     h1 {
       margin: 0 0 25px;
+
       text-align: center;
       font-size: 24px;
     }
@@ -58,10 +77,56 @@
       cursor: default;
     }
 
+
+    /* ========================================
+       STATUS AND PROCESS MARKER
+    ======================================== */
+
     #status {
       margin-top: 20px;
       text-align: center;
     }
+
+    .progress-wrap {
+      display: none;
+
+      width: 100%;
+      height: 8px;
+
+      margin-top: 16px;
+
+      background: #e5e5e5;
+
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      width: 35%;
+      height: 100%;
+
+      background: #222;
+      border-radius: 4px;
+
+      animation: processing 1.2s linear infinite;
+    }
+
+    @keyframes processing {
+
+      0% {
+        transform: translateX(-110%);
+      }
+
+      100% {
+        transform: translateX(300%);
+      }
+
+    }
+
+
+    /* ========================================
+       RESULTS
+    ======================================== */
 
     .result {
       display: none;
@@ -86,14 +151,22 @@
       margin-top: 8px;
       color: #222;
     }
+
   </style>
+
 </head>
+
 
 <body>
 
+
+<!-- ========================================
+     MAIN APPLICATION
+======================================== -->
+
 <div class="app">
 
-  <h1>Разделить песню</h1>
+  <h1>Split Song</h1>
 
   <input
     type="file"
@@ -102,17 +175,37 @@
   >
 
   <button id="splitBtn">
-    Разделить
+    Split
   </button>
 
   <div id="status"></div>
 
 
-  <div id="result" class="result">
+  <!-- ========================================
+       PROCESS MARKER
+  ======================================== -->
+
+  <div
+    id="progressWrap"
+    class="progress-wrap"
+  >
+    <div class="progress-bar"></div>
+  </div>
+
+
+  <!-- ========================================
+       SEPARATION RESULTS
+  ======================================== -->
+
+  <div
+    id="result"
+    class="result"
+  >
 
     <div class="track">
+
       <div class="track-title">
-        Вокал
+        Vocals
       </div>
 
       <audio
@@ -126,14 +219,16 @@
         id="vocalsDownload"
         download="vocals.mp3"
       >
-        Скачать вокал
+        Download Vocals
       </a>
+
     </div>
 
 
     <div class="track">
+
       <div class="track-title">
-        Минус
+        Instrumental
       </div>
 
       <audio
@@ -145,10 +240,11 @@
 
       <a
         id="minusDownload"
-        download="minus.mp3"
+        download="instrumental.mp3"
       >
-        Скачать минус
+        Download Instrumental
       </a>
+
     </div>
 
   </div>
@@ -158,10 +254,16 @@
 
 <script>
 
+
+// ========================================
+// PAGE ELEMENTS
+// ========================================
+
 const audioFile = document.getElementById("audioFile");
 const splitBtn = document.getElementById("splitBtn");
 
 const status = document.getElementById("status");
+const progressWrap = document.getElementById("progressWrap");
 const result = document.getElementById("result");
 
 const vocalsPlayer = document.getElementById("vocalsPlayer");
@@ -171,12 +273,16 @@ const vocalsDownload = document.getElementById("vocalsDownload");
 const minusDownload = document.getElementById("minusDownload");
 
 
+// ========================================
+// AUDIO SEPARATION
+// ========================================
+
 splitBtn.addEventListener("click", async () => {
 
   const file = audioFile.files[0];
 
   if (!file) {
-    status.textContent = "Выберите аудиофайл";
+    status.textContent = "Select an audio file";
     return;
   }
 
@@ -188,8 +294,10 @@ splitBtn.addEventListener("click", async () => {
 
   splitBtn.disabled = true;
 
-  status.textContent = "Разделение...";
+  status.textContent = "Separating...";
+
   result.style.display = "none";
+  progressWrap.style.display = "block";
 
 
   try {
@@ -201,7 +309,7 @@ splitBtn.addEventListener("click", async () => {
 
 
     if (!response.ok) {
-      throw new Error("Ошибка сервера");
+      throw new Error("Server error");
     }
 
 
@@ -211,14 +319,13 @@ splitBtn.addEventListener("click", async () => {
     vocalsPlayer.src = data.vocals;
     minusPlayer.src = data.minus;
 
-
     vocalsDownload.href = data.vocals;
     minusDownload.href = data.minus;
 
 
     result.style.display = "block";
 
-    status.textContent = "Готово";
+    status.textContent = "Done";
 
   }
 
@@ -226,11 +333,13 @@ splitBtn.addEventListener("click", async () => {
 
     console.error(error);
 
-    status.textContent = "Ошибка обработки";
+    status.textContent = "Processing error";
 
   }
 
   finally {
+
+    progressWrap.style.display = "none";
 
     splitBtn.disabled = false;
 
@@ -238,7 +347,9 @@ splitBtn.addEventListener("click", async () => {
 
 });
 
+
 </script>
+
 
 
 
@@ -247,7 +358,7 @@ splitBtn.addEventListener("click", async () => {
 ======================================== -->
 
 <div id="service-console">
- GPT | 1.0.0
+ Маркер процесса\комменты\англ | 1.1.0
 </div>
 
 <div class="row" id="build-down">
