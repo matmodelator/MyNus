@@ -8,27 +8,33 @@
   ======================================== -->
 
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>MyNus — Split Song</title>
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>MyNus</title>
 
 
   <style>
 
     /* ========================================
-       PAGE LAYOUT
+       PAGE
     ======================================== */
+
+    * {
+      box-sizing: border-box;
+    }
 
     body {
       margin: 0;
       min-height: 100vh;
 
-      display: flex;
-      align-items: center;
-      justify-content: center;
-
       font-family: Arial, sans-serif;
+
       background: #f3f3f3;
+      color: #222;
     }
 
 
@@ -37,38 +43,51 @@
     ======================================== */
 
     .app {
-      width: 360px;
-      padding: 30px;
+      width: min(1100px, calc(100% - 30px));
+
+      margin: 30px auto;
+      padding: 25px;
 
       background: white;
+
       border-radius: 12px;
 
-      box-shadow: 0 4px 20px rgba(0,0,0,.08);
+      box-shadow:
+        0 4px 20px rgba(0, 0, 0, .08);
     }
 
     h1 {
       margin: 0 0 25px;
 
       text-align: center;
-      font-size: 24px;
+      font-size: 26px;
     }
 
-    input {
-      width: 100%;
-      margin-bottom: 20px;
+
+    /* ========================================
+       FILE LOAD
+    ======================================== */
+
+    .load-row {
+      display: flex;
+      gap: 10px;
+
+      align-items: center;
+    }
+
+    #audioFile {
+      flex: 1;
     }
 
     button {
-      width: 100%;
-      padding: 14px;
+      padding: 10px 16px;
 
       border: 0;
-      border-radius: 8px;
+      border-radius: 7px;
 
       background: #222;
       color: white;
 
-      font-size: 16px;
       cursor: pointer;
     }
 
@@ -77,14 +96,20 @@
       cursor: default;
     }
 
+    button.active {
+      background: #666;
+    }
+
 
     /* ========================================
        STATUS AND PROCESS MARKER
     ======================================== */
 
     #status {
-      margin-top: 20px;
+      margin-top: 15px;
+
       text-align: center;
+      min-height: 20px;
     }
 
     .progress-wrap {
@@ -93,11 +118,12 @@
       width: 100%;
       height: 8px;
 
-      margin-top: 16px;
+      margin-top: 12px;
 
       background: #e5e5e5;
 
       border-radius: 4px;
+
       overflow: hidden;
     }
 
@@ -106,9 +132,9 @@
       height: 100%;
 
       background: #222;
-      border-radius: 4px;
 
-      animation: processing 1.2s linear infinite;
+      animation:
+        processing 1.2s linear infinite;
     }
 
     @keyframes processing {
@@ -125,31 +151,235 @@
 
 
     /* ========================================
-       RESULTS
+       STUDIO
     ======================================== */
 
-    .result {
+    #studio {
       display: none;
+
       margin-top: 25px;
     }
 
+
+    /* ========================================
+       TRANSPORT
+    ======================================== */
+
+    .transport {
+      display: flex;
+      flex-wrap: wrap;
+
+      align-items: center;
+      justify-content: center;
+
+      gap: 10px;
+
+      margin-bottom: 20px;
+    }
+
+    .transport button {
+      min-width: 85px;
+    }
+
+    #playBtn {
+      min-width: 100px;
+    }
+
+    .time-display {
+      min-width: 150px;
+
+      padding: 8px 10px;
+
+      text-align: center;
+
+      font-family: monospace;
+      font-size: 14px;
+
+      background: #f3f3f3;
+
+      border-radius: 6px;
+    }
+
+
+    /* ========================================
+       ZOOM
+    ======================================== */
+
+    .zoom-row {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+
+      gap: 8px;
+
+      margin-bottom: 10px;
+    }
+
+    .zoom-row button {
+      width: 38px;
+      min-width: 38px;
+      padding: 7px;
+    }
+
+    #zoomValue {
+      min-width: 65px;
+      text-align: center;
+
+      font-size: 13px;
+    }
+
+
+    /* ========================================
+       TRACKS
+    ======================================== */
+
     .track {
-      margin-top: 20px;
+      display: grid;
+
+      grid-template-columns: 180px 1fr;
+
+      gap: 12px;
+
+      margin-bottom: 12px;
+    }
+
+    .track-controls {
+      padding: 10px;
+
+      background: #f5f5f5;
+
+      border-radius: 8px;
     }
 
     .track-title {
-      margin-bottom: 8px;
+      margin-bottom: 10px;
+
       font-weight: bold;
     }
 
-    audio {
+    .track-buttons {
+      display: flex;
+      gap: 6px;
+
+      margin-bottom: 10px;
+    }
+
+    .track-buttons button {
+      flex: 1;
+
+      padding: 6px;
+      font-size: 12px;
+    }
+
+    .volume-row {
+      display: flex;
+
+      align-items: center;
+
+      gap: 7px;
+    }
+
+    .volume-row input {
       width: 100%;
     }
 
-    a {
-      display: inline-block;
-      margin-top: 8px;
-      color: #222;
+    .volume-value {
+      width: 38px;
+
+      text-align: right;
+
+      font-size: 12px;
+    }
+
+
+    /* ========================================
+       WAVEFORM TIMELINE
+    ======================================== */
+
+    .timeline-scroll {
+      position: relative;
+
+      height: 92px;
+
+      overflow-x: auto;
+      overflow-y: hidden;
+
+      background: #fafafa;
+
+      border: 1px solid #ddd;
+      border-radius: 8px;
+
+      scrollbar-width: thin;
+    }
+
+    .timeline-inner {
+      position: relative;
+
+      height: 90px;
+
+      min-width: 100%;
+    }
+
+    canvas {
+      display: block;
+
+      width: 100%;
+      height: 90px;
+
+      cursor: pointer;
+    }
+
+    .playhead {
+      position: absolute;
+
+      top: 0;
+      bottom: 0;
+
+      width: 2px;
+
+      background: #111;
+
+      pointer-events: none;
+
+      z-index: 5;
+    }
+
+
+    /* ========================================
+       ORIGINAL TRACK
+    ======================================== */
+
+    .original-controls {
+      display: flex;
+
+      align-items: center;
+      justify-content: center;
+
+      height: 100%;
+
+      font-weight: bold;
+
+      background: #ececec;
+
+      border-radius: 8px;
+    }
+
+
+    /* ========================================
+       RESPONSIVE
+    ======================================== */
+
+    @media (max-width: 700px) {
+
+      .track {
+        grid-template-columns: 1fr;
+      }
+
+      .load-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
     }
 
   </style>
@@ -160,30 +390,35 @@
 <body>
 
 
-<!-- ========================================
-     MAIN APPLICATION
-======================================== -->
-
 <div class="app">
 
-  <h1>Split Song</h1>
-
-  <input
-    type="file"
-    id="audioFile"
-    accept="audio/*"
-  >
-
-  <button id="splitBtn">
-    Split
-  </button>
-
-  <div id="status"></div>
+  <h1>MyNus</h1>
 
 
   <!-- ========================================
-       PROCESS MARKER
+       FILE LOAD
   ======================================== -->
+
+  <div class="load-row">
+
+    <input
+      type="file"
+      id="audioFile"
+      accept="audio/*"
+    >
+
+    <button id="splitBtn">
+      Split
+    </button>
+
+  </div>
+
+
+  <!-- ========================================
+       PROCESS STATUS
+  ======================================== -->
+
+  <div id="status"></div>
 
   <div
     id="progressWrap"
@@ -194,62 +429,255 @@
 
 
   <!-- ========================================
-       SEPARATION RESULTS
+       STUDIO
   ======================================== -->
 
-  <div
-    id="result"
-    class="result"
-  >
+  <div id="studio">
 
-    <div class="track">
 
-      <div class="track-title">
-        Vocals
-      </div>
+    <!-- ========================================
+         TRANSPORT
+    ======================================== -->
 
-      <audio
-        id="vocalsPlayer"
-        controls
-      ></audio>
+    <div class="transport">
 
-      <br>
-
-      <a
-        id="vocalsDownload"
-        download="vocals.mp3"
+      <button
+        id="originalModeBtn"
+        class="active"
       >
-        Download Vocals
-      </a>
+        Original
+      </button>
+
+      <button id="mixModeBtn">
+        Mix
+      </button>
+
+      <button id="playBtn">
+        Play
+      </button>
+
+      <button id="stopBtn">
+        Stop
+      </button>
+
+      <div
+        id="timeDisplay"
+        class="time-display"
+      >
+        00:00.00 / 00:00.00
+      </div>
 
     </div>
 
 
+    <!-- ========================================
+         TIMELINE ZOOM
+    ======================================== -->
+
+    <div class="zoom-row">
+
+      <span>Timeline</span>
+
+      <button id="zoomOutBtn">
+        −
+      </button>
+
+      <span id="zoomValue">
+        40 px/s
+      </span>
+
+      <button id="zoomInBtn">
+        +
+      </button>
+
+    </div>
+
+
+    <!-- ========================================
+         ORIGINAL
+    ======================================== -->
+
     <div class="track">
 
-      <div class="track-title">
-        Instrumental
+      <div class="original-controls">
+        Original
       </div>
 
-      <audio
-        id="minusPlayer"
-        controls
-      ></audio>
-
-      <br>
-
-      <a
-        id="minusDownload"
-        download="instrumental.mp3"
+      <div
+        class="timeline-scroll"
+        data-track="original"
       >
-        Download Instrumental
-      </a>
+
+        <div
+          class="timeline-inner"
+          id="originalTimeline"
+        >
+
+          <canvas id="originalCanvas"></canvas>
+
+          <div
+            class="playhead"
+            id="originalPlayhead"
+          ></div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- ========================================
+         VOCALS
+    ======================================== -->
+
+    <div class="track">
+
+      <div class="track-controls">
+
+        <div class="track-title">
+          Vocals
+        </div>
+
+        <div class="track-buttons">
+
+          <button id="vocalsMuteBtn">
+            Mute
+          </button>
+
+          <button id="vocalsSoloBtn">
+            Solo
+          </button>
+
+        </div>
+
+        <div class="volume-row">
+
+          <input
+            type="range"
+            id="vocalsVolume"
+            min="0"
+            max="100"
+            value="100"
+          >
+
+          <span
+            id="vocalsVolumeValue"
+            class="volume-value"
+          >
+            100%
+          </span>
+
+        </div>
+
+      </div>
+
+
+      <div
+        class="timeline-scroll"
+        data-track="vocals"
+      >
+
+        <div
+          class="timeline-inner"
+          id="vocalsTimeline"
+        >
+
+          <canvas id="vocalsCanvas"></canvas>
+
+          <div
+            class="playhead"
+            id="vocalsPlayhead"
+          ></div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- ========================================
+         INSTRUMENTAL
+    ======================================== -->
+
+    <div class="track">
+
+      <div class="track-controls">
+
+        <div class="track-title">
+          Instrumental
+        </div>
+
+        <div class="track-buttons">
+
+          <button id="minusMuteBtn">
+            Mute
+          </button>
+
+          <button id="minusSoloBtn">
+            Solo
+          </button>
+
+        </div>
+
+        <div class="volume-row">
+
+          <input
+            type="range"
+            id="minusVolume"
+            min="0"
+            max="100"
+            value="100"
+          >
+
+          <span
+            id="minusVolumeValue"
+            class="volume-value"
+          >
+            100%
+          </span>
+
+        </div>
+
+      </div>
+
+
+      <div
+        class="timeline-scroll"
+        data-track="minus"
+      >
+
+        <div
+          class="timeline-inner"
+          id="minusTimeline"
+        >
+
+          <canvas id="minusCanvas"></canvas>
+
+          <div
+            class="playhead"
+            id="minusPlayhead"
+          ></div>
+
+        </div>
+
+      </div>
 
     </div>
 
   </div>
 
 </div>
+
+
+<!-- ========================================
+     HIDDEN AUDIO SOURCES
+======================================== -->
+
+<audio id="originalAudio"></audio>
+<audio id="vocalsAudio"></audio>
+<audio id="minusAudio"></audio>
 
 
 <script>
@@ -264,13 +692,92 @@ const splitBtn = document.getElementById("splitBtn");
 
 const status = document.getElementById("status");
 const progressWrap = document.getElementById("progressWrap");
-const result = document.getElementById("result");
+const studio = document.getElementById("studio");
 
-const vocalsPlayer = document.getElementById("vocalsPlayer");
-const minusPlayer = document.getElementById("minusPlayer");
+const originalModeBtn = document.getElementById("originalModeBtn");
+const mixModeBtn = document.getElementById("mixModeBtn");
 
-const vocalsDownload = document.getElementById("vocalsDownload");
-const minusDownload = document.getElementById("minusDownload");
+const playBtn = document.getElementById("playBtn");
+const stopBtn = document.getElementById("stopBtn");
+
+const timeDisplay = document.getElementById("timeDisplay");
+
+const originalAudio = document.getElementById("originalAudio");
+const vocalsAudio = document.getElementById("vocalsAudio");
+const minusAudio = document.getElementById("minusAudio");
+
+const vocalsMuteBtn = document.getElementById("vocalsMuteBtn");
+const vocalsSoloBtn = document.getElementById("vocalsSoloBtn");
+
+const minusMuteBtn = document.getElementById("minusMuteBtn");
+const minusSoloBtn = document.getElementById("minusSoloBtn");
+
+const vocalsVolume = document.getElementById("vocalsVolume");
+const minusVolume = document.getElementById("minusVolume");
+
+const vocalsVolumeValue = document.getElementById("vocalsVolumeValue");
+const minusVolumeValue = document.getElementById("minusVolumeValue");
+
+const zoomOutBtn = document.getElementById("zoomOutBtn");
+const zoomInBtn = document.getElementById("zoomInBtn");
+
+const zoomValue = document.getElementById("zoomValue");
+
+
+const canvases = {
+  original: document.getElementById("originalCanvas"),
+  vocals: document.getElementById("vocalsCanvas"),
+  minus: document.getElementById("minusCanvas")
+};
+
+
+const timelines = {
+  original: document.getElementById("originalTimeline"),
+  vocals: document.getElementById("vocalsTimeline"),
+  minus: document.getElementById("minusTimeline")
+};
+
+
+const playheads = {
+  original: document.getElementById("originalPlayhead"),
+  vocals: document.getElementById("vocalsPlayhead"),
+  minus: document.getElementById("minusPlayhead")
+};
+
+
+const scrollAreas =
+  [...document.querySelectorAll(".timeline-scroll")];
+
+
+// ========================================
+// APPLICATION STATE
+// ========================================
+
+let mode = "original";
+
+let isPlaying = false;
+
+let duration = 0;
+
+let pixelsPerSecond = 40;
+
+let originalFileURL = null;
+
+let waveformData = {
+  original: null,
+  vocals: null,
+  minus: null
+};
+
+let vocalsMuted = false;
+let vocalsSolo = false;
+
+let minusMuted = false;
+let minusSolo = false;
+
+let animationFrame = null;
+
+let scrollSyncLock = false;
 
 
 // ========================================
@@ -282,73 +789,1352 @@ splitBtn.addEventListener("click", async () => {
   const file = audioFile.files[0];
 
   if (!file) {
-    status.textContent = "Select an audio file";
+
+    status.textContent =
+      "Select an audio file";
+
     return;
+
   }
-
-
-  const formData = new FormData();
-
-  formData.append("audio", file);
 
 
   splitBtn.disabled = true;
 
-  status.textContent = "Separating...";
+  studio.style.display = "none";
 
-  result.style.display = "none";
   progressWrap.style.display = "block";
+
+  status.textContent =
+    "Separating...";
+
+
+  const formData =
+    new FormData();
+
+  formData.append(
+    "audio",
+    file
+  );
 
 
   try {
 
-    const response = await fetch("/separate", {
-      method: "POST",
-      body: formData
-    });
+    if (originalFileURL) {
 
+      URL.revokeObjectURL(
+        originalFileURL
+      );
 
-    if (!response.ok) {
-      throw new Error("Server error");
     }
 
 
-    const data = await response.json();
+    originalFileURL =
+      URL.createObjectURL(file);
+
+    originalAudio.src =
+      originalFileURL;
 
 
-    vocalsPlayer.src = data.vocals;
-    minusPlayer.src = data.minus;
+    const response =
+      await fetch(
+        "/separate",
+        {
+          method: "POST",
+          body: formData
+        }
+      );
 
-    vocalsDownload.href = data.vocals;
-    minusDownload.href = data.minus;
+
+    // ========================================
+    // SERVER ERROR DETAILS
+    // ========================================
+
+    if (!response.ok) {
+
+      let errorData = {};
+
+      try {
+
+        errorData =
+          await response.json();
+
+      }
+
+      catch {
+
+        errorData = {};
+
+      }
 
 
-    result.style.display = "block";
+      throw new Error(
+        errorData.details
+        || errorData.error
+        || "Server error"
+      );
 
-    status.textContent = "Done";
+    }
+
+
+    const data =
+      await response.json();
+
+
+    vocalsAudio.src =
+      data.vocals;
+
+    minusAudio.src =
+      data.minus;
+
+
+    status.textContent =
+      "Loading tracks...";
+
+
+    await Promise.all([
+
+      waitForMetadata(originalAudio),
+
+      waitForMetadata(vocalsAudio),
+
+      waitForMetadata(minusAudio)
+
+    ]);
+
+
+    duration =
+      originalAudio.duration;
+
+
+    await loadWaveforms(
+      file,
+      data.vocals,
+      data.minus
+    );
+
+
+    resetTransport();
+
+    drawAllWaveforms();
+
+
+    studio.style.display =
+      "block";
+
+
+    status.textContent =
+      "Ready";
 
   }
+
+
+  // ========================================
+  // PROCESSING ERROR
+  // ========================================
 
   catch (error) {
 
     console.error(error);
 
-    status.textContent = "Processing error";
+
+    status.textContent =
+      "Processing error: "
+      + error.message;
 
   }
 
+
   finally {
 
-    progressWrap.style.display = "none";
+    progressWrap.style.display =
+      "none";
 
-    splitBtn.disabled = false;
+    splitBtn.disabled =
+      false;
 
   }
 
 });
 
 
+// ========================================
+// AUDIO METADATA
+// ========================================
+
+function waitForMetadata(audio) {
+
+  return new Promise((resolve, reject) => {
+
+    if (
+      Number.isFinite(audio.duration)
+      && audio.duration > 0
+    ) {
+
+      resolve();
+
+      return;
+
+    }
+
+
+    audio.addEventListener(
+      "loadedmetadata",
+      resolve,
+      {
+        once: true
+      }
+    );
+
+
+    audio.addEventListener(
+      "error",
+      reject,
+      {
+        once: true
+      }
+    );
+
+  });
+
+}
+
+
+// ========================================
+// WAVEFORM DECODING
+// ========================================
+
+async function loadWaveforms(
+  originalFile,
+  vocalsURL,
+  minusURL
+) {
+
+  const audioContext =
+    new AudioContext();
+
+
+  const originalBuffer =
+    await originalFile.arrayBuffer();
+
+
+  const vocalsBuffer =
+    await fetch(
+      vocalsURL
+    ).then(
+      response =>
+        response.arrayBuffer()
+    );
+
+
+  const minusBuffer =
+    await fetch(
+      minusURL
+    ).then(
+      response =>
+        response.arrayBuffer()
+    );
+
+
+  waveformData.original =
+    await audioContext.decodeAudioData(
+      originalBuffer.slice(0)
+    );
+
+
+  waveformData.vocals =
+    await audioContext.decodeAudioData(
+      vocalsBuffer.slice(0)
+    );
+
+
+  waveformData.minus =
+    await audioContext.decodeAudioData(
+      minusBuffer.slice(0)
+    );
+
+
+  await audioContext.close();
+
+}
+
+
+// ========================================
+// WAVEFORM DRAWING
+// ========================================
+
+function drawAllWaveforms() {
+
+  drawWaveform(
+    canvases.original,
+    timelines.original,
+    waveformData.original
+  );
+
+
+  drawWaveform(
+    canvases.vocals,
+    timelines.vocals,
+    waveformData.vocals
+  );
+
+
+  drawWaveform(
+    canvases.minus,
+    timelines.minus,
+    waveformData.minus
+  );
+
+
+  updatePlayheads();
+
+}
+
+
+function drawWaveform(
+  canvas,
+  timeline,
+  audioBuffer
+) {
+
+  if (!audioBuffer) {
+    return;
+  }
+
+
+  const width =
+    Math.max(
+      800,
+      Math.ceil(
+        duration
+        * pixelsPerSecond
+      )
+    );
+
+
+  const height = 90;
+
+
+  timeline.style.width =
+    width + "px";
+
+
+  canvas.width = width;
+  canvas.height = height;
+
+  canvas.style.width =
+    width + "px";
+
+  canvas.style.height =
+    height + "px";
+
+
+  const context =
+    canvas.getContext("2d");
+
+
+  context.clearRect(
+    0,
+    0,
+    width,
+    height
+  );
+
+
+  const samples =
+    audioBuffer.getChannelData(0);
+
+
+  const step =
+    Math.max(
+      1,
+      Math.floor(
+        samples.length
+        / width
+      )
+    );
+
+
+  const middle =
+    height / 2;
+
+
+  context.beginPath();
+
+
+  for (
+    let x = 0;
+    x < width;
+    x++
+  ) {
+
+    const start =
+      x * step;
+
+
+    let min = 1;
+    let max = -1;
+
+
+    for (
+      let i = 0;
+      i < step;
+      i++
+    ) {
+
+      const sample =
+        samples[start + i];
+
+
+      if (
+        sample === undefined
+      ) {
+        break;
+      }
+
+
+      if (sample < min) {
+        min = sample;
+      }
+
+
+      if (sample > max) {
+        max = sample;
+      }
+
+    }
+
+
+    const y1 =
+      middle
+      + min * middle;
+
+
+    const y2 =
+      middle
+      + max * middle;
+
+
+    context.moveTo(
+      x,
+      y1
+    );
+
+
+    context.lineTo(
+      x,
+      y2
+    );
+
+  }
+
+
+  context.strokeStyle =
+    "#333";
+
+  context.lineWidth =
+    1;
+
+  context.stroke();
+
+}
+
+
+// ========================================
+// PLAY / PAUSE
+// ========================================
+
+playBtn.addEventListener(
+  "click",
+  () => {
+
+    if (isPlaying) {
+
+      pauseAll();
+
+    }
+
+    else {
+
+      playCurrentMode();
+
+    }
+
+  }
+);
+
+
+function playCurrentMode() {
+
+  const time =
+    getCurrentTime();
+
+
+  syncAllTo(
+    time
+  );
+
+
+  if (
+    mode === "original"
+  ) {
+
+    originalAudio.play();
+
+  }
+
+  else {
+
+    applyMix();
+
+    vocalsAudio.play();
+    minusAudio.play();
+
+  }
+
+
+  isPlaying =
+    true;
+
+
+  playBtn.textContent =
+    "Pause";
+
+
+  startAnimation();
+
+}
+
+
+// ========================================
+// PAUSE / STOP
+// ========================================
+
+function pauseAll() {
+
+  originalAudio.pause();
+  vocalsAudio.pause();
+  minusAudio.pause();
+
+
+  isPlaying =
+    false;
+
+
+  playBtn.textContent =
+    "Play";
+
+
+  stopAnimation();
+
+}
+
+
+stopBtn.addEventListener(
+  "click",
+  () => {
+
+    pauseAll();
+
+    syncAllTo(0);
+
+    updatePlayheads();
+
+    updateTimeDisplay();
+
+  }
+);
+
+
+// ========================================
+// ORIGINAL / MIX MODE
+// ========================================
+
+originalModeBtn.addEventListener(
+  "click",
+  () => {
+
+    switchMode(
+      "original"
+    );
+
+  }
+);
+
+
+mixModeBtn.addEventListener(
+  "click",
+  () => {
+
+    switchMode(
+      "mix"
+    );
+
+  }
+);
+
+
+function switchMode(newMode) {
+
+  if (
+    mode === newMode
+  ) {
+    return;
+  }
+
+
+  const time =
+    getCurrentTime();
+
+
+  const wasPlaying =
+    isPlaying;
+
+
+  pauseAll();
+
+  mode =
+    newMode;
+
+
+  originalModeBtn.classList.toggle(
+    "active",
+    mode === "original"
+  );
+
+
+  mixModeBtn.classList.toggle(
+    "active",
+    mode === "mix"
+  );
+
+
+  syncAllTo(
+    time
+  );
+
+
+  if (wasPlaying) {
+
+    playCurrentMode();
+
+  }
+
+}
+
+
+// ========================================
+// MIX CONTROL
+// ========================================
+
+vocalsMuteBtn.addEventListener(
+  "click",
+  () => {
+
+    vocalsMuted =
+      !vocalsMuted;
+
+    vocalsMuteBtn.classList.toggle(
+      "active",
+      vocalsMuted
+    );
+
+    applyMix();
+
+  }
+);
+
+
+minusMuteBtn.addEventListener(
+  "click",
+  () => {
+
+    minusMuted =
+      !minusMuted;
+
+    minusMuteBtn.classList.toggle(
+      "active",
+      minusMuted
+    );
+
+    applyMix();
+
+  }
+);
+
+
+vocalsSoloBtn.addEventListener(
+  "click",
+  () => {
+
+    vocalsSolo =
+      !vocalsSolo;
+
+    vocalsSoloBtn.classList.toggle(
+      "active",
+      vocalsSolo
+    );
+
+    applyMix();
+
+  }
+);
+
+
+minusSoloBtn.addEventListener(
+  "click",
+  () => {
+
+    minusSolo =
+      !minusSolo;
+
+    minusSoloBtn.classList.toggle(
+      "active",
+      minusSolo
+    );
+
+    applyMix();
+
+  }
+);
+
+
+vocalsVolume.addEventListener(
+  "input",
+  () => {
+
+    vocalsVolumeValue.textContent =
+      vocalsVolume.value
+      + "%";
+
+    applyMix();
+
+  }
+);
+
+
+minusVolume.addEventListener(
+  "input",
+  () => {
+
+    minusVolumeValue.textContent =
+      minusVolume.value
+      + "%";
+
+    applyMix();
+
+  }
+);
+
+
+function applyMix() {
+
+  const anySolo =
+    vocalsSolo
+    || minusSolo;
+
+
+  const vocalsEnabled =
+    !vocalsMuted
+    &&
+    (
+      !anySolo
+      || vocalsSolo
+    );
+
+
+  const minusEnabled =
+    !minusMuted
+    &&
+    (
+      !anySolo
+      || minusSolo
+    );
+
+
+  vocalsAudio.volume =
+    vocalsEnabled
+      ? vocalsVolume.value / 100
+      : 0;
+
+
+  minusAudio.volume =
+    minusEnabled
+      ? minusVolume.value / 100
+      : 0;
+
+}
+
+
+// ========================================
+// COMMON TIME POSITION
+// ========================================
+
+function getCurrentTime() {
+
+  if (
+    mode === "original"
+  ) {
+
+    return originalAudio.currentTime || 0;
+
+  }
+
+
+  return minusAudio.currentTime || 0;
+
+}
+
+
+function syncAllTo(time) {
+
+  const safeTime =
+    Math.max(
+      0,
+      Math.min(
+        time,
+        duration || 0
+      )
+    );
+
+
+  originalAudio.currentTime =
+    safeTime;
+
+
+  vocalsAudio.currentTime =
+    safeTime;
+
+
+  minusAudio.currentTime =
+    safeTime;
+
+}
+
+
+// ========================================
+// TIMELINE SEEK
+// ========================================
+
+Object.entries(
+  canvases
+).forEach(
+  ([name, canvas]) => {
+
+    canvas.addEventListener(
+      "click",
+      event => {
+
+        if (!duration) {
+          return;
+        }
+
+
+        const rect =
+          canvas.getBoundingClientRect();
+
+
+        const x =
+          event.clientX
+          - rect.left;
+
+
+        const ratio =
+          x
+          / rect.width;
+
+
+        const time =
+          ratio
+          * duration;
+
+
+        syncAllTo(
+          time
+        );
+
+
+        updatePlayheads();
+
+        updateTimeDisplay();
+
+      }
+    );
+
+  }
+);
+
+
+// ========================================
+// PLAYHEAD
+// ========================================
+
+function updatePlayheads() {
+
+  if (!duration) {
+    return;
+  }
+
+
+  const time =
+    getCurrentTime();
+
+
+  const x =
+    time
+    * pixelsPerSecond;
+
+
+  Object.values(
+    playheads
+  ).forEach(
+    playhead => {
+
+      playhead.style.left =
+        x + "px";
+
+    }
+  );
+
+}
+
+
+// ========================================
+// TIME DISPLAY
+// ========================================
+
+function formatTime(seconds) {
+
+  if (
+    !Number.isFinite(seconds)
+  ) {
+
+    seconds = 0;
+
+  }
+
+
+  const minutes =
+    Math.floor(
+      seconds / 60
+    );
+
+
+  const secs =
+    Math.floor(
+      seconds % 60
+    );
+
+
+  const hundredths =
+    Math.floor(
+      (seconds % 1)
+      * 100
+    );
+
+
+  return (
+    String(minutes)
+      .padStart(2, "0")
+    + ":"
+    + String(secs)
+      .padStart(2, "0")
+    + "."
+    + String(hundredths)
+      .padStart(2, "0")
+  );
+
+}
+
+
+function updateTimeDisplay() {
+
+  timeDisplay.textContent =
+    formatTime(
+      getCurrentTime()
+    )
+    + " / "
+    + formatTime(
+      duration
+    );
+
+}
+
+
+// ========================================
+// ANIMATION LOOP
+// ========================================
+
+function startAnimation() {
+
+  stopAnimation();
+
+
+  const update =
+    () => {
+
+      if (!isPlaying) {
+        return;
+      }
+
+
+      keepTracksSynchronized();
+
+      updatePlayheads();
+
+      updateTimeDisplay();
+
+      followPlayhead();
+
+
+      if (
+        getCurrentTime()
+        >= duration
+      ) {
+
+        pauseAll();
+
+        return;
+
+      }
+
+
+      animationFrame =
+        requestAnimationFrame(
+          update
+        );
+
+    };
+
+
+  animationFrame =
+    requestAnimationFrame(
+      update
+    );
+
+}
+
+
+function stopAnimation() {
+
+  if (animationFrame) {
+
+    cancelAnimationFrame(
+      animationFrame
+    );
+
+
+    animationFrame =
+      null;
+
+  }
+
+}
+
+
+// ========================================
+// AUDIO SYNCHRONIZATION
+// ========================================
+
+function keepTracksSynchronized() {
+
+  if (
+    mode !== "mix"
+  ) {
+    return;
+  }
+
+
+  const reference =
+    minusAudio.currentTime;
+
+
+  if (
+    Math.abs(
+      vocalsAudio.currentTime
+      - reference
+    )
+    > 0.08
+  ) {
+
+    vocalsAudio.currentTime =
+      reference;
+
+  }
+
+}
+
+
+// ========================================
+// AUTO SCROLL
+// ========================================
+
+function followPlayhead() {
+
+  const x =
+    getCurrentTime()
+    * pixelsPerSecond;
+
+
+  const mainScroll =
+    scrollAreas[0];
+
+
+  const left =
+    mainScroll.scrollLeft;
+
+
+  const right =
+    left
+    + mainScroll.clientWidth;
+
+
+  const margin =
+    100;
+
+
+  if (
+    x > right - margin
+  ) {
+
+    syncScrollTo(
+      x
+      - mainScroll.clientWidth
+      + margin
+    );
+
+  }
+
+  else if (
+    x < left + margin
+  ) {
+
+    syncScrollTo(
+      Math.max(
+        0,
+        x - margin
+      )
+    );
+
+  }
+
+}
+
+
+// ========================================
+// SYNCHRONIZED TIMELINE SCROLL
+// ========================================
+
+scrollAreas.forEach(
+  area => {
+
+    area.addEventListener(
+      "scroll",
+      () => {
+
+        if (scrollSyncLock) {
+          return;
+        }
+
+
+        scrollSyncLock =
+          true;
+
+
+        const left =
+          area.scrollLeft;
+
+
+        scrollAreas.forEach(
+          other => {
+
+            if (
+              other !== area
+            ) {
+
+              other.scrollLeft =
+                left;
+
+            }
+
+          }
+        );
+
+
+        scrollSyncLock =
+          false;
+
+      }
+    );
+
+  }
+);
+
+
+function syncScrollTo(left) {
+
+  scrollSyncLock =
+    true;
+
+
+  scrollAreas.forEach(
+    area => {
+
+      area.scrollLeft =
+        left;
+
+    }
+  );
+
+
+  scrollSyncLock =
+    false;
+
+}
+
+
+// ========================================
+// TIMELINE ZOOM
+// ========================================
+
+zoomInBtn.addEventListener(
+  "click",
+  () => {
+
+    changeZoom(
+      pixelsPerSecond + 10
+    );
+
+  }
+);
+
+
+zoomOutBtn.addEventListener(
+  "click",
+  () => {
+
+    changeZoom(
+      pixelsPerSecond - 10
+    );
+
+  }
+);
+
+
+function changeZoom(value) {
+
+  const time =
+    getCurrentTime();
+
+
+  pixelsPerSecond =
+    Math.max(
+      10,
+      Math.min(
+        200,
+        value
+      )
+    );
+
+
+  zoomValue.textContent =
+    pixelsPerSecond
+    + " px/s";
+
+
+  drawAllWaveforms();
+
+
+  const left =
+    Math.max(
+      0,
+      time
+      * pixelsPerSecond
+      - 150
+    );
+
+
+  syncScrollTo(
+    left
+  );
+
+}
+
+
+// ========================================
+// RESET
+// ========================================
+
+function resetTransport() {
+
+  pauseAll();
+
+  syncAllTo(0);
+
+  mode =
+    "original";
+
+
+  originalModeBtn.classList.add(
+    "active"
+  );
+
+
+  mixModeBtn.classList.remove(
+    "active"
+  );
+
+
+  vocalsMuted =
+    false;
+
+  vocalsSolo =
+    false;
+
+  minusMuted =
+    false;
+
+  minusSolo =
+    false;
+
+
+  vocalsVolume.value =
+    100;
+
+  minusVolume.value =
+    100;
+
+
+  vocalsVolumeValue.textContent =
+    "100%";
+
+  minusVolumeValue.textContent =
+    "100%";
+
+
+  [
+    vocalsMuteBtn,
+    vocalsSoloBtn,
+    minusMuteBtn,
+    minusSoloBtn
+  ].forEach(
+    button =>
+      button.classList.remove(
+        "active"
+      )
+  );
+
+
+  applyMix();
+
+  updateTimeDisplay();
+
+  syncScrollTo(0);
+
+}
+
+
 </script>
+
 
 
 
@@ -358,7 +2144,23 @@ splitBtn.addEventListener("click", async () => {
 ======================================== -->
 
 <div id="service-console">
- Маркер процесса\комменты\англ | 1.1.0
+ После сепарации теперь логика такая:
+
+Original — играет исходный файл.
+
+Mix — одновременно играют Vocals + Instrumental.
+
+Mute и Solo меняются прямо во время воспроизведения без остановки.
+
+Фейдеры 100% позволяют уже сейчас менять соотношение вокала и минуса в реальном времени.
+
+При переключении Original ↔ Mix сохраняется тот же timecode.
+
+Все три waveform имеют общий playhead. Клик по любой волне переводит все дорожки в одну и ту же позицию.
+
+Горизонтальный scroll синхронный: двигаешь одну дорожку — остальные двигаются вместе. Во время проигрывания таймлайн автоматически следует за playhead.
+
+− / + меняют масштаб waveform. | 1.2.0
 </div>
 
 <div class="row" id="build-down">
