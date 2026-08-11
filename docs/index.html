@@ -1642,39 +1642,32 @@ function buildMasterWaveform() {
     waveformData.minus;
 
 
-  const length =
-    Math.min(
-      vocals.length,
-      minus.length
-    );
-
-
-  const sampleRate =
-    vocals.sampleRate;
-
-
-  const audioContext =
-    new AudioContext();
-
-
-  const masterBuffer =
-    audioContext.createBuffer(
-      1,
-      length,
-      sampleRate
-    );
-
-
-  const output =
-    masterBuffer.getChannelData(0);
-
-
   const vocalsData =
     vocals.getChannelData(0);
 
 
   const minusData =
     minus.getChannelData(0);
+
+
+  const sourceLength =
+    Math.min(
+      vocalsData.length,
+      minusData.length
+    );
+
+
+  const displayLength =
+    Math.max(
+      800,
+      getTimelineWidth()
+    );
+
+
+  const masterData =
+    new Float32Array(
+      displayLength
+    );
 
 
   const anySolo =
@@ -1719,29 +1712,54 @@ function buildMasterWaveform() {
     0;
 
 
+  const step =
+    sourceLength
+    / displayLength;
+
+
   for (
     let i = 0;
-    i < length;
+    i < displayLength;
     i++
   ) {
 
-    output[i] =
-      vocalsData[i]
+    const sourceIndex =
+      Math.min(
+        sourceLength - 1,
+        Math.floor(
+          i * step
+        )
+      );
+
+
+    masterData[i] =
+      vocalsData[sourceIndex]
       * vocalsGain
-
       +
-
-      minusData[i]
+      minusData[sourceIndex]
       * minusGain;
 
   }
 
 
-  waveformData.master =
-    masterBuffer;
+  waveformData.master = {
 
+    length:
+      masterData.length,
 
-  audioContext.close();
+    sampleRate:
+      vocals.sampleRate,
+
+    duration:
+      vocals.duration,
+
+    getChannelData() {
+
+      return masterData;
+
+    }
+
+  };
 
 }
 
@@ -3473,7 +3491,7 @@ function resetTransport() {
 
 <div id="service-console">
 Proccesing..
-   | 1.4.0
+   | 1.4.1
 </div>
 
 <div class="row" id="build-down">
