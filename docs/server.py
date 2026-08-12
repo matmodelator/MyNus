@@ -1,5 +1,6 @@
 # ========================================
-# Version: WAV/MP3/FLAC/M4A конвертируются сервером через FFmpeg | 1.2.0
+# Сервер теперь принимает любой из исходных типов файлов, и сам ищет ffmpeg.exe в PATH и в стандартной папке WinGet. 
+Кроме того, если FFmpeg снова упадёт, страница теперь покажет уже его настоящий текст ошибки, а не просто Master export failed / 1.3.0
 # ========================================
 
 
@@ -9,6 +10,7 @@
 
 import os
 import re
+import glob
 import shutil
 import subprocess
 import threading
@@ -397,25 +399,96 @@ def result_file(
 
 
 # ========================================
-# MASTER EXPORT
+# AUDIO EXPORT
 # ========================================
 
+def find_ffmpeg():
+
+    ffmpeg = shutil.which(
+        "ffmpeg"
+    )
+
+
+    if ffmpeg:
+
+        return ffmpeg
+
+
+    local_app_data = os.environ.get(
+        "LOCALAPPDATA",
+        ""
+    )
+
+
+    candidates = [
+
+        os.path.join(
+            local_app_data,
+            "Microsoft",
+            "WinGet",
+            "Links",
+            "ffmpeg.exe"
+        )
+
+    ]
+
+
+    package_pattern = os.path.join(
+        local_app_data,
+        "Microsoft",
+        "WinGet",
+        "Packages",
+        "*FFmpeg*",
+        "**",
+        "ffmpeg.exe"
+    )
+
+
+    candidates.extend(
+        glob.glob(
+            package_pattern,
+            recursive=True
+        )
+    )
+
+
+    for candidate in candidates:
+
+        if os.path.isfile(
+            candidate
+        ):
+
+            return candidate
+
+
+    return None
+
+
 @app.route(
-    "/export-master",
+    "/export-audio",
     methods=["POST"]
 )
-def export_master():
+def export_audio():
 
-    if "master" not in request.files:
+    if "audio" not in request.files:
 
         return jsonify({
-            "error": "Master recording not received"
+            "error":
+                "Audio file not received"
         }), 400
+
+
+    audio = request.files[
+        "audio"
+    ]
 
 
     export_format = (
         request.form
-        .get("format", "")
+        .get(
+            "format",
+            ""
+        )
         .lower()
     )
 
@@ -431,11 +504,80 @@ def export_master():
     if export_format not in allowed_formats:
 
         return jsonify({
-            "error": "Unsupported export format"
+            "error":
+                "Unsupported export format"
         }), 400
 
 
-    master = request.files["master"]
+    track_name = secure_filename(
+        request.form.get(
+            "track",
+            "audio"
+        )
+    )
+
+
+    start_value = request.form.get(
+        "start"
+    )
+
+
+    end_value = request.form.get(
+        "end"
+    )
+
+
+    start_time = None
+    end_time = None
+
+
+    try:
+
+        if start_value is not None:
+
+            start_time = float(
+                start_value
+            )
+
+
+        if end_value is not None:
+
+            end_time = float(
+                end_value
+            )
+
+
+    except ValueError:
+
+        return jsonify({
+            "error":
+                "Invalid selection time"
+        }), 400
+
+
+    if (
+        start_time is not None
+        and
+        end_time is not None
+        and
+        end_time <= start_time
+    ):
+
+        return jsonify({
+            "error":
+                "Invalid selection range"
+        }), 400
+
+
+    ffmpeg = find_ffmpeg()
+
+
+    if not ffmpeg:
+
+        return jsonify({
+            "error":
+                "FFmpeg not found"
+        }), 500
 
 
     export_id = str(
@@ -455,29 +597,80 @@ def export_master():
     )
 
 
+    incoming_name = secure_filename(
+        audio.filename
+        or
+        "audio.bin"
+    )
+
+
+    extension = os.path.splitext(
+        incoming_name
+    )[1]
+
+
+    if not extension:
+
+        extension = ".bin"
+
+
     input_path = os.path.join(
         export_job_dir,
-        "master-input.webm"
+        "input"
+        + extension
     )
 
 
     output_path = os.path.join(
         export_job_dir,
-        "master." + export_format
+        (
+            track_name
+            or
+            "audio"
+        )
+        + "."
+        + export_format
     )
 
 
-    master.save(
+    audio.save(
         input_path
     )
 
 
     command = [
-        "ffmpeg",
-        "-y",
+        ffmpeg,
+        "-y"
+    ]
+
+
+    if start_time is not None:
+
+        command += [
+            "-ss",
+            f"{start_time:.6f}"
+        ]
+
+
+    command += [
         "-i",
         input_path
     ]
+
+
+    if (
+        start_time is not None
+        and
+        end_time is not None
+    ):
+
+        command += [
+            "-t",
+            f"{(
+                end_time
+                - start_time
+            ):.6f}"
+        ]
 
 
     if export_format == "wav":
@@ -521,6 +714,12 @@ def export_master():
     )
 
 
+    print(
+        "FFmpeg command:",
+        command
+    )
+
+
     try:
 
         process = subprocess.run(
@@ -535,12 +734,21 @@ def export_master():
 
         if process.returncode != 0:
 
-            print(process.stdout)
-            print(process.stderr)
+            print(
+                process.stdout
+            )
+
+
+            print(
+                process.stderr
+            )
+
 
             return jsonify({
-                "error": "FFmpeg export failed",
-                "details": process.stderr
+                "error":
+                    "FFmpeg export failed",
+                "details":
+                    process.stderr
             }), 500
 
 
@@ -551,27 +759,26 @@ def export_master():
             as_attachment=True,
 
             download_name=(
-                "master."
+                (
+                    track_name
+                    or
+                    "audio"
+                )
+                + "."
                 + export_format
             )
 
         )
 
 
-    except FileNotFoundError:
-
-        return jsonify({
-            "error":
-                "FFmpeg not found. Add FFmpeg to PATH."
-        }), 500
-
-
     except Exception as error:
 
         print(error)
 
+
         return jsonify({
-            "error": str(error)
+            "error":
+                str(error)
         }), 500
 
 
