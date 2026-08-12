@@ -408,7 +408,7 @@
     ======================================== */
 
     .master-timeline-title {
-      margin: 20px 0 8px;
+      margin: 20px 0 8px 202px;
 
       font-size: 13px;
       font-weight: bold;
@@ -416,6 +416,9 @@
 
     .master-timeline {
       position: relative;
+
+      width: calc(100% - 202px);
+      margin-left: 202px;
 
       height: 42px;
 
@@ -527,6 +530,15 @@
         width: 100%;
       }
 
+      .master-timeline-title {
+        margin-left: 0;
+      }
+
+      .master-timeline {
+        width: 100%;
+        margin-left: 0;
+      }
+
     }
 
   </style>
@@ -620,6 +632,10 @@
 
       <button id="mixModeBtn">
         Mix
+      </button>
+
+      <button id="recordMasterBtn">
+        Record Master
       </button>
 
       <button id="startBtn">
@@ -965,6 +981,9 @@ const originalModeBtn =
 const mixModeBtn =
   document.getElementById("mixModeBtn");
 
+const recordMasterBtn =
+  document.getElementById("recordMasterBtn");
+
 const startBtn =
   document.getElementById("startBtn");
 
@@ -1141,6 +1160,21 @@ let scrollSyncLock =
 
 let masterCursorDragging =
   false;
+
+
+// ========================================
+// MASTER RECORDING STATE
+// ========================================
+
+let mixAudioContext = null;
+let vocalsSourceNode = null;
+let minusSourceNode = null;
+let vocalsGainNode = null;
+let minusGainNode = null;
+let masterRecordDestination = null;
+let masterRecorder = null;
+let masterRecordChunks = [];
+let masterRecording = false;
 
 
 // ========================================
@@ -1642,32 +1676,39 @@ function buildMasterWaveform() {
     waveformData.minus;
 
 
+  const length =
+    Math.min(
+      vocals.length,
+      minus.length
+    );
+
+
+  const sampleRate =
+    vocals.sampleRate;
+
+
+  const audioContext =
+    new AudioContext();
+
+
+  const masterBuffer =
+    audioContext.createBuffer(
+      1,
+      length,
+      sampleRate
+    );
+
+
+  const output =
+    masterBuffer.getChannelData(0);
+
+
   const vocalsData =
     vocals.getChannelData(0);
 
 
   const minusData =
     minus.getChannelData(0);
-
-
-  const sourceLength =
-    Math.min(
-      vocalsData.length,
-      minusData.length
-    );
-
-
-  const displayLength =
-    Math.max(
-      800,
-      getTimelineWidth()
-    );
-
-
-  const masterData =
-    new Float32Array(
-      displayLength
-    );
 
 
   const anySolo =
@@ -1712,54 +1753,29 @@ function buildMasterWaveform() {
     0;
 
 
-  const step =
-    sourceLength
-    / displayLength;
-
-
   for (
     let i = 0;
-    i < displayLength;
+    i < length;
     i++
   ) {
 
-    const sourceIndex =
-      Math.min(
-        sourceLength - 1,
-        Math.floor(
-          i * step
-        )
-      );
-
-
-    masterData[i] =
-      vocalsData[sourceIndex]
+    output[i] =
+      vocalsData[i]
       * vocalsGain
+
       +
-      minusData[sourceIndex]
+
+      minusData[i]
       * minusGain;
 
   }
 
 
-  waveformData.master = {
+  waveformData.master =
+    masterBuffer;
 
-    length:
-      masterData.length,
 
-    sampleRate:
-      vocals.sampleRate,
-
-    duration:
-      vocals.duration,
-
-    getChannelData() {
-
-      return masterData;
-
-    }
-
-  };
+  audioContext.close();
 
 }
 
@@ -2150,6 +2166,12 @@ function playCurrentMode() {
 
   else {
 
+    ensureMixAudioGraph();
+
+    if (mixAudioContext.state === "suspended") {
+      mixAudioContext.resume();
+    }
+
     applyMix();
 
     vocalsAudio.play();
@@ -2360,6 +2382,12 @@ function switchMode(
 
     else {
 
+      ensureMixAudioGraph();
+
+      if (mixAudioContext.state === "suspended") {
+        mixAudioContext.resume();
+      }
+
       applyMix();
 
       vocalsAudio.play();
@@ -2555,24 +2583,40 @@ function applyMix() {
     );
 
 
-  vocalsAudio.volume =
+  const vocalsLevel =
     vocalsEnabled
-    ?
-    Number(
-      vocalsVolume.value
-    ) / 100
-    :
-    0;
+    ? Number(vocalsVolume.value) / 100
+    : 0;
 
 
-  minusAudio.volume =
+  const minusLevel =
     minusEnabled
-    ?
-    Number(
-      minusVolume.value
-    ) / 100
-    :
-    0;
+    ? Number(minusVolume.value) / 100
+    : 0;
+
+
+  if (vocalsGainNode && minusGainNode) {
+
+    vocalsAudio.volume = 1;
+    minusAudio.volume = 1;
+
+    vocalsGainNode.gain.value =
+      vocalsLevel;
+
+    minusGainNode.gain.value =
+      minusLevel;
+
+  }
+
+  else {
+
+    vocalsAudio.volume =
+      vocalsLevel;
+
+    minusAudio.volume =
+      minusLevel;
+
+  }
 
 
   buildMasterWaveform();
@@ -2586,6 +2630,307 @@ function applyMix() {
 
 
   updatePlayheads();
+
+}
+
+
+// ========================================
+// MASTER AUDIO ROUTING
+// ========================================
+
+function ensureMixAudioGraph() {
+
+  if (mixAudioContext) {
+    return;
+  }
+
+
+  mixAudioContext =
+    new AudioContext();
+
+
+  vocalsSourceNode =
+    mixAudioContext
+      .createMediaElementSource(
+        vocalsAudio
+      );
+
+
+  minusSourceNode =
+    mixAudioContext
+      .createMediaElementSource(
+        minusAudio
+      );
+
+
+  vocalsGainNode =
+    mixAudioContext.createGain();
+
+
+  minusGainNode =
+    mixAudioContext.createGain();
+
+
+  masterRecordDestination =
+    mixAudioContext
+      .createMediaStreamDestination();
+
+
+  vocalsSourceNode.connect(
+    vocalsGainNode
+  );
+
+
+  minusSourceNode.connect(
+    minusGainNode
+  );
+
+
+  vocalsGainNode.connect(
+    mixAudioContext.destination
+  );
+
+
+  minusGainNode.connect(
+    mixAudioContext.destination
+  );
+
+
+  vocalsGainNode.connect(
+    masterRecordDestination
+  );
+
+
+  minusGainNode.connect(
+    masterRecordDestination
+  );
+
+
+  vocalsAudio.volume = 1;
+  minusAudio.volume = 1;
+
+
+  applyMix();
+
+}
+
+
+// ========================================
+// MASTER RECORDING
+// ========================================
+
+recordMasterBtn.addEventListener(
+  "click",
+  async () => {
+
+    if (masterRecording) {
+
+      stopMasterRecording();
+
+      return;
+
+    }
+
+
+    activateMixMode();
+
+    ensureMixAudioGraph();
+
+
+    if (
+      mixAudioContext.state === "suspended"
+    ) {
+
+      await mixAudioContext.resume();
+
+    }
+
+
+    const mimeTypes = [
+
+      "audio/webm;codecs=opus",
+
+      "audio/webm",
+
+      "audio/ogg;codecs=opus"
+
+    ];
+
+
+    const mimeType =
+      mimeTypes.find(
+        type =>
+          MediaRecorder
+            .isTypeSupported(type)
+      )
+      || "";
+
+
+    masterRecordChunks =
+      [];
+
+
+    masterRecorder =
+      mimeType
+
+      ? new MediaRecorder(
+          masterRecordDestination.stream,
+          {
+            mimeType
+          }
+        )
+
+      : new MediaRecorder(
+          masterRecordDestination.stream
+        );
+
+
+    masterRecorder.addEventListener(
+      "dataavailable",
+      event => {
+
+        if (
+          event.data
+          &&
+          event.data.size > 0
+        ) {
+
+          masterRecordChunks.push(
+            event.data
+          );
+
+        }
+
+      }
+    );
+
+
+    masterRecorder.addEventListener(
+      "stop",
+      () => {
+
+        const type =
+          masterRecorder.mimeType
+          || "audio/webm";
+
+
+        const blob =
+          new Blob(
+            masterRecordChunks,
+            {
+              type
+            }
+          );
+
+
+        const url =
+          URL.createObjectURL(
+            blob
+          );
+
+
+        const link =
+          document.createElement(
+            "a"
+          );
+
+
+        link.href =
+          url;
+
+
+        link.download =
+          type.includes("ogg")
+          ? "master.ogg"
+          : "master.webm";
+
+
+        document.body.appendChild(
+          link
+        );
+
+
+        link.click();
+
+
+        link.remove();
+
+
+        setTimeout(
+          () =>
+            URL.revokeObjectURL(
+              url
+            ),
+          1000
+        );
+
+
+        status.textContent =
+          "Master saved";
+
+      }
+    );
+
+
+    masterRecorder.start(
+      250
+    );
+
+
+    masterRecording =
+      true;
+
+
+    recordMasterBtn.classList.add(
+      "active"
+    );
+
+
+    recordMasterBtn.textContent =
+      "Stop Recording";
+
+
+    status.textContent =
+      "Recording Master...";
+
+
+    if (!isPlaying) {
+
+      playCurrentMode();
+
+    }
+
+  }
+);
+
+
+function stopMasterRecording() {
+
+  if (
+    !masterRecorder
+    ||
+    masterRecorder.state === "inactive"
+  ) {
+
+    return;
+
+  }
+
+
+  masterRecorder.stop();
+
+
+  masterRecording =
+    false;
+
+
+  recordMasterBtn.classList.remove(
+    "active"
+  );
+
+
+  recordMasterBtn.textContent =
+    "Record Master";
 
 }
 
@@ -3491,7 +3836,7 @@ function resetTransport() {
 
 <div id="service-console">
 Proccesing..
-   | 1.4.1
+   | 1.5.0
 </div>
 
 <div class="row" id="build-down">
