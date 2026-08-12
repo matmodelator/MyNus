@@ -207,11 +207,19 @@
     }
 
     .fx-panel {
-      position: sticky;
-      top: 12px;
+      position: relative;
+      min-height: 100%;
+    }
 
-      margin-top: 96px;
+    .fx-eq-block,
+    .fx-lower-block {
+      position: absolute;
+      left: 0;
+      right: 0;
+    }
 
+    .fx-eq-card,
+    .fx-effects-card {
       padding: 12px;
 
       background: #f5f5f5;
@@ -225,21 +233,23 @@
       font-weight: bold;
     }
 
-    .fx-target-row {
-      display: flex;
-      gap: 6px;
-      margin-bottom: 12px;
+    .fx-lower-block {
+      display: grid;
+      grid-template-columns: 110px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
     }
 
-    .fx-target-row button {
-      flex: 1;
+    .fx-target-column {
+      position: relative;
+      min-height: 100%;
     }
 
-    .fx-section {
-      margin-top: 12px;
-      padding-top: 12px;
-
-      border-top: 1px solid #ddd;
+    .fx-target-column button {
+      position: absolute;
+      left: 0;
+      width: 100%;
+      min-height: 36px;
     }
 
     .fx-section-title {
@@ -697,7 +707,29 @@
 
       .fx-panel {
         position: static;
-        margin-top: 0;
+        min-height: 0;
+      }
+
+      .fx-eq-block,
+      .fx-lower-block {
+        position: static;
+      }
+
+      .fx-lower-block {
+        grid-template-columns: 1fr;
+      }
+
+      .fx-target-column {
+        display: flex;
+        gap: 6px;
+        min-height: 0;
+        margin-bottom: 10px;
+      }
+
+      .fx-target-column button {
+        position: static;
+        flex: 1;
+        width: auto;
       }
 
     }
@@ -889,7 +921,7 @@
          ORIGINAL TRACK
     ======================================== -->
 
-    <div class="track">
+    <div class="track" id="originalTrackRow">
 
       <div class="track-controls">
 
@@ -936,7 +968,7 @@
          VOCALS TRACK
     ======================================== -->
 
-    <div class="track">
+    <div class="track" id="vocalsTrackRow">
 
       <div class="track-controls">
 
@@ -1015,7 +1047,7 @@
          INSTRUMENTAL TRACK
     ======================================== -->
 
-    <div class="track">
+    <div class="track" id="minusTrackRow">
 
       <div class="track-controls">
 
@@ -1094,7 +1126,7 @@
          MASTER TRACK
     ======================================== -->
 
-    <div class="track">
+    <div class="track" id="masterTrackRow">
 
       <div class="track-controls master-controls">
 
@@ -1200,39 +1232,24 @@
            MIX / MASTER EQ AND EFFECTS
       ======================================== -->
 
-      <aside class="fx-panel">
+      <aside class="fx-panel" id="fxPanel">
 
-        <div class="fx-panel-title">
-          EQ / Effects
-        </div>
+        <!-- ========================================
+             EQ — ALIGNED WITH ORIGINAL ROW
+        ======================================== -->
 
-        <div class="fx-target-row">
+        <div
+          class="fx-eq-block"
+          id="fxEqBlock"
+        >
 
-          <button
-            id="fxTargetVocalsBtn"
-            class="active"
-          >
-            Vocals
-          </button>
+          <div class="fx-eq-card">
 
-          <button id="fxTargetMinusBtn">
-            Instrumental
-          </button>
+            <div class="fx-panel-title">
+              Equalizer
+            </div>
 
-          <button id="fxTargetMasterBtn">
-            Master
-          </button>
-
-        </div>
-
-
-        <div class="fx-section">
-
-          <div class="fx-section-title">
-            Frequency
-          </div>
-
-          <div class="eq-row">
+            <div class="eq-row">
             <label>Low 80 Hz</label>
             <input
               id="eqLow"
@@ -1322,16 +1339,51 @@
             </span>
           </div>
 
+          </div>
+
         </div>
 
 
-        <div class="fx-section">
+        <!-- ========================================
+             BUS SWITCHES + EFFECTS
+             ALIGNED WITH VOCALS / INSTRUMENTAL / MASTER
+        ======================================== -->
 
-          <div class="fx-section-title">
-            Effects
+        <div
+          class="fx-lower-block"
+          id="fxLowerBlock"
+        >
+
+          <div
+            class="fx-target-column"
+            id="fxTargetColumn"
+          >
+
+            <button
+              id="fxTargetVocalsBtn"
+              class="active"
+            >
+              Vocals
+            </button>
+
+            <button id="fxTargetMinusBtn">
+              Instrumental
+            </button>
+
+            <button id="fxTargetMasterBtn">
+              Master
+            </button>
+
           </div>
 
-          <div class="fx-toggle-row">
+
+          <div class="fx-effects-card">
+
+            <div class="fx-panel-title">
+              Effects
+            </div>
+
+            <div class="fx-toggle-row">
             <span>Compressor</span>
             <button
               id="compressorToggleBtn"
@@ -1493,6 +1545,8 @@
             </span>
           </div>
 
+          </div>
+
         </div>
 
       </aside>
@@ -1610,6 +1664,30 @@ const selectionInfo =
 const masterState =
   document.getElementById("masterState");
 
+
+const fxPanel =
+  document.getElementById("fxPanel");
+
+const fxEqBlock =
+  document.getElementById("fxEqBlock");
+
+const fxLowerBlock =
+  document.getElementById("fxLowerBlock");
+
+const fxTargetColumn =
+  document.getElementById("fxTargetColumn");
+
+const originalTrackRow =
+  document.getElementById("originalTrackRow");
+
+const vocalsTrackRow =
+  document.getElementById("vocalsTrackRow");
+
+const minusTrackRow =
+  document.getElementById("minusTrackRow");
+
+const masterTrackRow =
+  document.getElementById("masterTrackRow");
 
 const fxTargetVocalsBtn =
   document.getElementById("fxTargetVocalsBtn");
@@ -2238,6 +2316,14 @@ splitBtn.addEventListener(
 
       studio.style.display =
         "block";
+
+
+      requestAnimationFrame(
+        () =>
+          requestAnimationFrame(
+            alignFxPanelToTracks
+          )
+      );
 
 
       progressBar.style.width =
@@ -3545,6 +3631,161 @@ function applyMix() {
   updatePlayheads();
 
 }
+
+
+// ========================================
+// EXACT FX PANEL ALIGNMENT
+// ========================================
+
+function alignFxPanelToTracks() {
+
+  if (
+    !fxPanel
+    ||
+    !originalTrackRow
+    ||
+    !vocalsTrackRow
+    ||
+    !minusTrackRow
+    ||
+    !masterTrackRow
+  ) {
+
+    return;
+
+  }
+
+
+  if (
+    window.innerWidth <= 1000
+  ) {
+
+    fxEqBlock.style.top =
+      "";
+
+    fxLowerBlock.style.top =
+      "";
+
+    fxTargetColumn.style.height =
+      "";
+
+    [
+      fxTargetVocalsBtn,
+      fxTargetMinusBtn,
+      fxTargetMasterBtn
+    ]
+    .forEach(
+      button => {
+
+        button.style.top =
+          "";
+
+      }
+    );
+
+    return;
+
+  }
+
+
+  const panelRect =
+    fxPanel.getBoundingClientRect();
+
+
+  const originalRect =
+    originalTrackRow
+      .getBoundingClientRect();
+
+
+  const vocalsRect =
+    vocalsTrackRow
+      .getBoundingClientRect();
+
+
+  const minusRect =
+    minusTrackRow
+      .getBoundingClientRect();
+
+
+  const masterRect =
+    masterTrackRow
+      .getBoundingClientRect();
+
+
+  const originalTop =
+    originalRect.top
+    - panelRect.top;
+
+
+  const vocalsTop =
+    vocalsRect.top
+    - panelRect.top;
+
+
+  const minusTop =
+    minusRect.top
+    - panelRect.top;
+
+
+  const masterTop =
+    masterRect.top
+    - panelRect.top;
+
+
+  fxEqBlock.style.top =
+    originalTop
+    + "px";
+
+
+  fxLowerBlock.style.top =
+    vocalsTop
+    + "px";
+
+
+  const lowerHeight =
+    masterRect.bottom
+    - vocalsRect.top;
+
+
+  fxTargetColumn.style.height =
+    lowerHeight
+    + "px";
+
+
+  fxTargetVocalsBtn.style.top =
+    "0px";
+
+
+  fxTargetMinusBtn.style.top =
+    (
+      minusTop
+      - vocalsTop
+    )
+    + "px";
+
+
+  fxTargetMasterBtn.style.top =
+    (
+      masterTop
+      - vocalsTop
+    )
+    + "px";
+
+
+  fxPanel.style.minHeight =
+    (
+      masterRect.bottom
+      - panelRect.top
+    )
+    + "px";
+
+}
+
+
+window.addEventListener(
+  "resize",
+  alignFxPanelToTracks
+);
 
 
 // ========================================
@@ -7482,6 +7723,10 @@ updateSelectionButtons();
 
 updateMasterHistoryButtons();
 
+requestAnimationFrame(
+  alignFxPanelToTracks
+);
+
 
 </script>
 
@@ -7494,8 +7739,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-три шины эффектов
-   | 1.10.1
+Вертикальный блок эффектов
+   | 1.10.2
 </div>
 
 <div class="row" id="build-down">
