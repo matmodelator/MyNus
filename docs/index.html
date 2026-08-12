@@ -195,6 +195,100 @@
       margin-top: 25px;
     }
 
+    .studio-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 320px;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .studio-main {
+      min-width: 0;
+    }
+
+    .fx-panel {
+      position: sticky;
+      top: 12px;
+
+      padding: 12px;
+
+      background: #f5f5f5;
+      border-radius: 10px;
+    }
+
+    .fx-panel-title {
+      margin-bottom: 10px;
+
+      font-size: 15px;
+      font-weight: bold;
+    }
+
+    .fx-target-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .fx-target-row button {
+      flex: 1;
+    }
+
+    .fx-section {
+      margin-top: 12px;
+      padding-top: 12px;
+
+      border-top: 1px solid #ddd;
+    }
+
+    .fx-section-title {
+      margin-bottom: 8px;
+
+      font-size: 13px;
+      font-weight: bold;
+    }
+
+    .eq-row,
+    .fx-control-row {
+      display: grid;
+      grid-template-columns: 72px 1fr 48px;
+      gap: 8px;
+      align-items: center;
+
+      margin-bottom: 8px;
+    }
+
+    .eq-row label,
+    .fx-control-row label {
+      font-size: 12px;
+    }
+
+    .eq-row input,
+    .fx-control-row input {
+      width: 100%;
+      margin: 0;
+    }
+
+    .fx-value {
+      text-align: right;
+      font-family: monospace;
+      font-size: 11px;
+    }
+
+    .fx-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+
+      gap: 10px;
+
+      margin-bottom: 8px;
+    }
+
+    .fx-toggle-row button {
+      padding: 7px 10px;
+    }
+
+
 
     /* ========================================
        TRANSPORT
@@ -593,6 +687,19 @@
        RESPONSIVE
     ======================================== */
 
+    @media (max-width: 1000px) {
+
+      .studio-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .fx-panel {
+        position: static;
+      }
+
+    }
+
+
     @media (max-width: 700px) {
 
       .track {
@@ -698,6 +805,11 @@
   ======================================== -->
 
   <div id="studio">
+
+    <div class="studio-layout">
+
+      <div class="studio-main">
+
 
 
     <!-- ========================================
@@ -1077,10 +1189,312 @@
       Selection: none
     </div>
 
+
+      </div>
+
+
+      <!-- ========================================
+           MIX / MASTER EQ AND EFFECTS
+      ======================================== -->
+
+      <aside class="fx-panel">
+
+        <div class="fx-panel-title">
+          EQ / Effects
+        </div>
+
+        <div class="fx-target-row">
+
+          <button
+            id="fxTargetMixBtn"
+            class="active"
+          >
+            Mix
+          </button>
+
+          <button id="fxTargetMasterBtn">
+            Master
+          </button>
+
+        </div>
+
+
+        <div class="fx-section">
+
+          <div class="fx-section-title">
+            Frequency
+          </div>
+
+          <div class="eq-row">
+            <label>Low 80 Hz</label>
+            <input
+              id="eqLow"
+              type="range"
+              min="-12"
+              max="12"
+              step="0.5"
+              value="0"
+            >
+            <span
+              id="eqLowValue"
+              class="fx-value"
+            >
+              0 dB
+            </span>
+          </div>
+
+          <div class="eq-row">
+            <label>Low-Mid 250</label>
+            <input
+              id="eqLowMid"
+              type="range"
+              min="-12"
+              max="12"
+              step="0.5"
+              value="0"
+            >
+            <span
+              id="eqLowMidValue"
+              class="fx-value"
+            >
+              0 dB
+            </span>
+          </div>
+
+          <div class="eq-row">
+            <label>Mid 1 kHz</label>
+            <input
+              id="eqMid"
+              type="range"
+              min="-12"
+              max="12"
+              step="0.5"
+              value="0"
+            >
+            <span
+              id="eqMidValue"
+              class="fx-value"
+            >
+              0 dB
+            </span>
+          </div>
+
+          <div class="eq-row">
+            <label>High-Mid 4k</label>
+            <input
+              id="eqHighMid"
+              type="range"
+              min="-12"
+              max="12"
+              step="0.5"
+              value="0"
+            >
+            <span
+              id="eqHighMidValue"
+              class="fx-value"
+            >
+              0 dB
+            </span>
+          </div>
+
+          <div class="eq-row">
+            <label>High 12 kHz</label>
+            <input
+              id="eqHigh"
+              type="range"
+              min="-12"
+              max="12"
+              step="0.5"
+              value="0"
+            >
+            <span
+              id="eqHighValue"
+              class="fx-value"
+            >
+              0 dB
+            </span>
+          </div>
+
+        </div>
+
+
+        <div class="fx-section">
+
+          <div class="fx-section-title">
+            Effects
+          </div>
+
+          <div class="fx-toggle-row">
+            <span>Compressor</span>
+            <button
+              id="compressorToggleBtn"
+              class="active"
+            >
+              On
+            </button>
+          </div>
+
+          <div class="fx-control-row">
+            <label>Threshold</label>
+            <input
+              id="compressorThreshold"
+              type="range"
+              min="-60"
+              max="0"
+              step="1"
+              value="-18"
+            >
+            <span
+              id="compressorThresholdValue"
+              class="fx-value"
+            >
+              -18 dB
+            </span>
+          </div>
+
+          <div class="fx-control-row">
+            <label>Ratio</label>
+            <input
+              id="compressorRatio"
+              type="range"
+              min="1"
+              max="20"
+              step="0.5"
+              value="4"
+            >
+            <span
+              id="compressorRatioValue"
+              class="fx-value"
+            >
+              4:1
+            </span>
+          </div>
+
+
+          <div class="fx-toggle-row">
+            <span>Reverb</span>
+            <button id="reverbToggleBtn">
+              Off
+            </button>
+          </div>
+
+          <div class="fx-control-row">
+            <label>Reverb</label>
+            <input
+              id="reverbAmount"
+              type="range"
+              min="0"
+              max="100"
+              value="20"
+            >
+            <span
+              id="reverbAmountValue"
+              class="fx-value"
+            >
+              20%
+            </span>
+          </div>
+
+
+          <div class="fx-toggle-row">
+            <span>Delay</span>
+            <button id="delayToggleBtn">
+              Off
+            </button>
+          </div>
+
+          <div class="fx-control-row">
+            <label>Time</label>
+            <input
+              id="delayTime"
+              type="range"
+              min="0"
+              max="1000"
+              step="10"
+              value="220"
+            >
+            <span
+              id="delayTimeValue"
+              class="fx-value"
+            >
+              220 ms
+            </span>
+          </div>
+
+          <div class="fx-control-row">
+            <label>Feedback</label>
+            <input
+              id="delayFeedback"
+              type="range"
+              min="0"
+              max="90"
+              value="25"
+            >
+            <span
+              id="delayFeedbackValue"
+              class="fx-value"
+            >
+              25%
+            </span>
+          </div>
+
+
+          <div class="fx-toggle-row">
+            <span>Limiter</span>
+            <button
+              id="limiterToggleBtn"
+              class="active"
+            >
+              On
+            </button>
+          </div>
+
+          <div class="fx-control-row">
+            <label>Ceiling</label>
+            <input
+              id="limiterCeiling"
+              type="range"
+              min="-6"
+              max="0"
+              step="0.1"
+              value="-0.5"
+            >
+            <span
+              id="limiterCeilingValue"
+              class="fx-value"
+            >
+              -0.5 dB
+            </span>
+          </div>
+
+
+          <div class="fx-control-row">
+            <label>Output</label>
+            <input
+              id="fxOutputGain"
+              type="range"
+              min="-12"
+              max="12"
+              step="0.5"
+              value="0"
+            >
+            <span
+              id="fxOutputGainValue"
+              class="fx-value"
+            >
+              0 dB
+            </span>
+          </div>
+
+        </div>
+
+      </aside>
+
+    </div>
+
   </div>
 
 </div>
-
 
 
 <!-- ========================================
@@ -1188,6 +1602,97 @@ const selectionInfo =
 
 const masterState =
   document.getElementById("masterState");
+
+
+const fxTargetMixBtn =
+  document.getElementById("fxTargetMixBtn");
+
+const fxTargetMasterBtn =
+  document.getElementById("fxTargetMasterBtn");
+
+const eqLow =
+  document.getElementById("eqLow");
+
+const eqLowMid =
+  document.getElementById("eqLowMid");
+
+const eqMid =
+  document.getElementById("eqMid");
+
+const eqHighMid =
+  document.getElementById("eqHighMid");
+
+const eqHigh =
+  document.getElementById("eqHigh");
+
+const eqLowValue =
+  document.getElementById("eqLowValue");
+
+const eqLowMidValue =
+  document.getElementById("eqLowMidValue");
+
+const eqMidValue =
+  document.getElementById("eqMidValue");
+
+const eqHighMidValue =
+  document.getElementById("eqHighMidValue");
+
+const eqHighValue =
+  document.getElementById("eqHighValue");
+
+const compressorToggleBtn =
+  document.getElementById("compressorToggleBtn");
+
+const compressorThreshold =
+  document.getElementById("compressorThreshold");
+
+const compressorRatio =
+  document.getElementById("compressorRatio");
+
+const compressorThresholdValue =
+  document.getElementById("compressorThresholdValue");
+
+const compressorRatioValue =
+  document.getElementById("compressorRatioValue");
+
+const reverbToggleBtn =
+  document.getElementById("reverbToggleBtn");
+
+const reverbAmount =
+  document.getElementById("reverbAmount");
+
+const reverbAmountValue =
+  document.getElementById("reverbAmountValue");
+
+const delayToggleBtn =
+  document.getElementById("delayToggleBtn");
+
+const delayTime =
+  document.getElementById("delayTime");
+
+const delayFeedback =
+  document.getElementById("delayFeedback");
+
+const delayTimeValue =
+  document.getElementById("delayTimeValue");
+
+const delayFeedbackValue =
+  document.getElementById("delayFeedbackValue");
+
+const limiterToggleBtn =
+  document.getElementById("limiterToggleBtn");
+
+const limiterCeiling =
+  document.getElementById("limiterCeiling");
+
+const limiterCeilingValue =
+  document.getElementById("limiterCeilingValue");
+
+const fxOutputGain =
+  document.getElementById("fxOutputGain");
+
+const fxOutputGainValue =
+  document.getElementById("fxOutputGainValue");
 
 const masterExportDialog =
   document.getElementById("masterExportDialog");
@@ -1416,6 +1921,88 @@ let exportTargetScope = "full";
 let currentOriginalFile = null;
 let currentVocalsURL = null;
 let currentMinusURL = null;
+
+
+let fxTarget =
+  "mix";
+
+const fxSettings = {
+
+  mix: {
+    eqLow: 0,
+    eqLowMid: 0,
+    eqMid: 0,
+    eqHighMid: 0,
+    eqHigh: 0,
+    compressorOn: true,
+    compressorThreshold: -18,
+    compressorRatio: 4,
+    reverbOn: false,
+    reverbAmount: 20,
+    delayOn: false,
+    delayTime: 220,
+    delayFeedback: 25,
+    limiterOn: true,
+    limiterCeiling: -0.5,
+    outputGain: 0
+  },
+
+  master: {
+    eqLow: 0,
+    eqLowMid: 0,
+    eqMid: 0,
+    eqHighMid: 0,
+    eqHigh: 0,
+    compressorOn: true,
+    compressorThreshold: -18,
+    compressorRatio: 4,
+    reverbOn: false,
+    reverbAmount: 20,
+    delayOn: false,
+    delayTime: 220,
+    delayFeedback: 25,
+    limiterOn: true,
+    limiterCeiling: -0.5,
+    outputGain: 0
+  }
+
+};
+
+let mixFxInput = null;
+let masterFxInput = null;
+
+let mixEqNodes = [];
+let masterEqNodes = [];
+
+let mixCompressorNode = null;
+let masterCompressorNode = null;
+
+let mixReverbNode = null;
+let masterReverbNode = null;
+
+let mixReverbDryGain = null;
+let mixReverbWetGain = null;
+let masterReverbDryGain = null;
+let masterReverbWetGain = null;
+
+let mixDelayNode = null;
+let masterDelayNode = null;
+
+let mixDelayFeedbackGain = null;
+let masterDelayFeedbackGain = null;
+
+let mixDelayDryGain = null;
+let mixDelayWetGain = null;
+let masterDelayDryGain = null;
+let masterDelayWetGain = null;
+
+let mixLimiterNode = null;
+let masterLimiterNode = null;
+
+let mixFxOutputGainNode = null;
+let masterFxOutputGainNode = null;
+
+let masterSourceNode = null;
 
 
 // ========================================
@@ -2687,6 +3274,21 @@ function switchMode(
       mode === "master"
     ) {
 
+      ensureMixAudioGraph();
+
+      if (
+        mixAudioContext.state ===
+        "suspended"
+      ) {
+
+        mixAudioContext.resume();
+
+      }
+
+      applyFxSettings(
+        "master"
+      );
+
       masterAudio.play();
 
     }
@@ -2936,6 +3538,464 @@ function applyMix() {
 
 
 // ========================================
+// EQ / EFFECTS PANEL
+// ========================================
+
+fxTargetMixBtn.addEventListener(
+  "click",
+  () => {
+
+    setFxTarget(
+      "mix"
+    );
+
+  }
+);
+
+
+fxTargetMasterBtn.addEventListener(
+  "click",
+  () => {
+
+    setFxTarget(
+      "master"
+    );
+
+  }
+);
+
+
+function setFxTarget(
+  target
+) {
+
+  fxTarget =
+    target;
+
+
+  fxTargetMixBtn
+    .classList.toggle(
+      "active",
+      target === "mix"
+    );
+
+
+  fxTargetMasterBtn
+    .classList.toggle(
+      "active",
+      target === "master"
+    );
+
+
+  loadFxPanelValues();
+
+}
+
+
+function loadFxPanelValues() {
+
+  const settings =
+    fxSettings[
+      fxTarget
+    ];
+
+
+  eqLow.value =
+    settings.eqLow;
+
+
+  eqLowMid.value =
+    settings.eqLowMid;
+
+
+  eqMid.value =
+    settings.eqMid;
+
+
+  eqHighMid.value =
+    settings.eqHighMid;
+
+
+  eqHigh.value =
+    settings.eqHigh;
+
+
+  compressorThreshold.value =
+    settings.compressorThreshold;
+
+
+  compressorRatio.value =
+    settings.compressorRatio;
+
+
+  reverbAmount.value =
+    settings.reverbAmount;
+
+
+  delayTime.value =
+    settings.delayTime;
+
+
+  delayFeedback.value =
+    settings.delayFeedback;
+
+
+  limiterCeiling.value =
+    settings.limiterCeiling;
+
+
+  fxOutputGain.value =
+    settings.outputGain;
+
+
+  compressorToggleBtn
+    .classList.toggle(
+      "active",
+      settings.compressorOn
+    );
+
+
+  compressorToggleBtn.textContent =
+    settings.compressorOn
+    ? "On"
+    : "Off";
+
+
+  reverbToggleBtn
+    .classList.toggle(
+      "active",
+      settings.reverbOn
+    );
+
+
+  reverbToggleBtn.textContent =
+    settings.reverbOn
+    ? "On"
+    : "Off";
+
+
+  delayToggleBtn
+    .classList.toggle(
+      "active",
+      settings.delayOn
+    );
+
+
+  delayToggleBtn.textContent =
+    settings.delayOn
+    ? "On"
+    : "Off";
+
+
+  limiterToggleBtn
+    .classList.toggle(
+      "active",
+      settings.limiterOn
+    );
+
+
+  limiterToggleBtn.textContent =
+    settings.limiterOn
+    ? "On"
+    : "Off";
+
+
+  updateFxLabels();
+
+}
+
+
+function updateFxLabels() {
+
+  eqLowValue.textContent =
+    eqLow.value
+    + " dB";
+
+
+  eqLowMidValue.textContent =
+    eqLowMid.value
+    + " dB";
+
+
+  eqMidValue.textContent =
+    eqMid.value
+    + " dB";
+
+
+  eqHighMidValue.textContent =
+    eqHighMid.value
+    + " dB";
+
+
+  eqHighValue.textContent =
+    eqHigh.value
+    + " dB";
+
+
+  compressorThresholdValue
+    .textContent =
+      compressorThreshold.value
+      + " dB";
+
+
+  compressorRatioValue
+    .textContent =
+      compressorRatio.value
+      + ":1";
+
+
+  reverbAmountValue
+    .textContent =
+      reverbAmount.value
+      + "%";
+
+
+  delayTimeValue.textContent =
+    delayTime.value
+    + " ms";
+
+
+  delayFeedbackValue
+    .textContent =
+      delayFeedback.value
+      + "%";
+
+
+  limiterCeilingValue
+    .textContent =
+      limiterCeiling.value
+      + " dB";
+
+
+  fxOutputGainValue
+    .textContent =
+      fxOutputGain.value
+      + " dB";
+
+}
+
+
+[
+  eqLow,
+  eqLowMid,
+  eqMid,
+  eqHighMid,
+  eqHigh,
+  compressorThreshold,
+  compressorRatio,
+  reverbAmount,
+  delayTime,
+  delayFeedback,
+  limiterCeiling,
+  fxOutputGain
+]
+.forEach(
+  control => {
+
+    control.addEventListener(
+      "input",
+      () => {
+
+        const settings =
+          fxSettings[
+            fxTarget
+          ];
+
+
+        settings.eqLow =
+          Number(
+            eqLow.value
+          );
+
+
+        settings.eqLowMid =
+          Number(
+            eqLowMid.value
+          );
+
+
+        settings.eqMid =
+          Number(
+            eqMid.value
+          );
+
+
+        settings.eqHighMid =
+          Number(
+            eqHighMid.value
+          );
+
+
+        settings.eqHigh =
+          Number(
+            eqHigh.value
+          );
+
+
+        settings.compressorThreshold =
+          Number(
+            compressorThreshold.value
+          );
+
+
+        settings.compressorRatio =
+          Number(
+            compressorRatio.value
+          );
+
+
+        settings.reverbAmount =
+          Number(
+            reverbAmount.value
+          );
+
+
+        settings.delayTime =
+          Number(
+            delayTime.value
+          );
+
+
+        settings.delayFeedback =
+          Number(
+            delayFeedback.value
+          );
+
+
+        settings.limiterCeiling =
+          Number(
+            limiterCeiling.value
+          );
+
+
+        settings.outputGain =
+          Number(
+            fxOutputGain.value
+          );
+
+
+        updateFxLabels();
+
+
+        applyFxSettings(
+          fxTarget
+        );
+
+      }
+    );
+
+  }
+);
+
+
+compressorToggleBtn
+  .addEventListener(
+    "click",
+    () => {
+
+      const settings =
+        fxSettings[
+          fxTarget
+        ];
+
+
+      settings.compressorOn =
+        !settings.compressorOn;
+
+
+      loadFxPanelValues();
+
+
+      applyFxSettings(
+        fxTarget
+      );
+
+    }
+  );
+
+
+reverbToggleBtn
+  .addEventListener(
+    "click",
+    () => {
+
+      const settings =
+        fxSettings[
+          fxTarget
+        ];
+
+
+      settings.reverbOn =
+        !settings.reverbOn;
+
+
+      loadFxPanelValues();
+
+
+      applyFxSettings(
+        fxTarget
+      );
+
+    }
+  );
+
+
+delayToggleBtn
+  .addEventListener(
+    "click",
+    () => {
+
+      const settings =
+        fxSettings[
+          fxTarget
+        ];
+
+
+      settings.delayOn =
+        !settings.delayOn;
+
+
+      loadFxPanelValues();
+
+
+      applyFxSettings(
+        fxTarget
+      );
+
+    }
+  );
+
+
+limiterToggleBtn
+  .addEventListener(
+    "click",
+    () => {
+
+      const settings =
+        fxSettings[
+          fxTarget
+        ];
+
+
+      settings.limiterOn =
+        !settings.limiterOn;
+
+
+      loadFxPanelValues();
+
+
+      applyFxSettings(
+        fxTarget
+      );
+
+    }
+  );
+
+
+loadFxPanelValues();
+
+
+// ========================================
 // MASTER AUDIO ROUTING
 // ========================================
 
@@ -2945,8 +4005,10 @@ function ensureMixAudioGraph() {
     return;
   }
 
+
   mixAudioContext =
     new AudioContext();
+
 
   vocalsSourceNode =
     mixAudioContext
@@ -2954,66 +4016,725 @@ function ensureMixAudioGraph() {
         vocalsAudio
       );
 
+
   minusSourceNode =
     mixAudioContext
       .createMediaElementSource(
         minusAudio
       );
 
+
+  masterSourceNode =
+    mixAudioContext
+      .createMediaElementSource(
+        masterAudio
+      );
+
+
   vocalsGainNode =
     mixAudioContext.createGain();
+
 
   minusGainNode =
     mixAudioContext.createGain();
 
+
   masterAnalyserNode =
     mixAudioContext.createAnalyser();
 
+
   masterAnalyserNode.fftSize =
     2048;
+
 
   masterRecordDestination =
     mixAudioContext
       .createMediaStreamDestination();
 
+
+  mixFxInput =
+    mixAudioContext.createGain();
+
+
+  masterFxInput =
+    mixAudioContext.createGain();
+
+
   vocalsSourceNode.connect(
     vocalsGainNode
   );
+
 
   minusSourceNode.connect(
     minusGainNode
   );
 
+
   vocalsGainNode.connect(
+    mixFxInput
+  );
+
+
+  minusGainNode.connect(
+    mixFxInput
+  );
+
+
+  masterSourceNode.connect(
+    masterFxInput
+  );
+
+
+  const mixChain =
+    createFxChain(
+      mixFxInput,
+      "mix"
+    );
+
+
+  const masterChain =
+    createFxChain(
+      masterFxInput,
+      "master"
+    );
+
+
+  mixChain.output.connect(
     mixAudioContext.destination
   );
 
-  minusGainNode.connect(
+
+  masterChain.output.connect(
     mixAudioContext.destination
   );
 
-  vocalsGainNode.connect(
+
+  mixChain.output.connect(
     masterAnalyserNode
   );
 
-  minusGainNode.connect(
-    masterAnalyserNode
-  );
 
-  vocalsGainNode.connect(
+  mixChain.output.connect(
     masterRecordDestination
   );
 
-  minusGainNode.connect(
-    masterRecordDestination
-  );
 
   vocalsAudio.volume = 1;
   minusAudio.volume = 1;
+  masterAudio.volume = 1;
+
 
   applyMix();
 
+  applyFxSettings(
+    "mix"
+  );
+
+  applyFxSettings(
+    "master"
+  );
+
 }
+
+
+function createFxChain(
+  inputNode,
+  target
+) {
+
+  const eqDefinitions = [
+
+    {
+      type: "lowshelf",
+      frequency: 80
+    },
+
+    {
+      type: "peaking",
+      frequency: 250,
+      Q: 1
+    },
+
+    {
+      type: "peaking",
+      frequency: 1000,
+      Q: 1
+    },
+
+    {
+      type: "peaking",
+      frequency: 4000,
+      Q: 1
+    },
+
+    {
+      type: "highshelf",
+      frequency: 12000
+    }
+
+  ];
+
+
+  const eqNodes =
+    eqDefinitions.map(
+      definition => {
+
+        const filter =
+          mixAudioContext
+            .createBiquadFilter();
+
+
+        filter.type =
+          definition.type;
+
+
+        filter.frequency.value =
+          definition.frequency;
+
+
+        if (
+          definition.Q !== undefined
+        ) {
+
+          filter.Q.value =
+            definition.Q;
+
+        }
+
+
+        return filter;
+
+      }
+    );
+
+
+  inputNode.connect(
+    eqNodes[0]
+  );
+
+
+  for (
+    let i = 0;
+    i < eqNodes.length - 1;
+    i++
+  ) {
+
+    eqNodes[i].connect(
+      eqNodes[i + 1]
+    );
+
+  }
+
+
+  const compressor =
+    mixAudioContext
+      .createDynamicsCompressor();
+
+
+  eqNodes[
+    eqNodes.length - 1
+  ].connect(
+    compressor
+  );
+
+
+  const reverbInput =
+    mixAudioContext.createGain();
+
+
+  compressor.connect(
+    reverbInput
+  );
+
+
+  const reverbDry =
+    mixAudioContext.createGain();
+
+
+  const convolver =
+    mixAudioContext.createConvolver();
+
+
+  convolver.buffer =
+    createImpulseResponse(
+      mixAudioContext,
+      2.2,
+      2.5
+    );
+
+
+  const reverbWet =
+    mixAudioContext.createGain();
+
+
+  reverbInput.connect(
+    reverbDry
+  );
+
+
+  reverbInput.connect(
+    convolver
+  );
+
+
+  convolver.connect(
+    reverbWet
+  );
+
+
+  const reverbSum =
+    mixAudioContext.createGain();
+
+
+  reverbDry.connect(
+    reverbSum
+  );
+
+
+  reverbWet.connect(
+    reverbSum
+  );
+
+
+  const delayInput =
+    mixAudioContext.createGain();
+
+
+  reverbSum.connect(
+    delayInput
+  );
+
+
+  const delayDry =
+    mixAudioContext.createGain();
+
+
+  const delay =
+    mixAudioContext.createDelay(
+      2
+    );
+
+
+  const delayFeedback =
+    mixAudioContext.createGain();
+
+
+  const delayWet =
+    mixAudioContext.createGain();
+
+
+  delayInput.connect(
+    delayDry
+  );
+
+
+  delayInput.connect(
+    delay
+  );
+
+
+  delay.connect(
+    delayFeedback
+  );
+
+
+  delayFeedback.connect(
+    delay
+  );
+
+
+  delay.connect(
+    delayWet
+  );
+
+
+  const delaySum =
+    mixAudioContext.createGain();
+
+
+  delayDry.connect(
+    delaySum
+  );
+
+
+  delayWet.connect(
+    delaySum
+  );
+
+
+  const limiter =
+    mixAudioContext
+      .createDynamicsCompressor();
+
+
+  limiter.ratio.value =
+    20;
+
+
+  limiter.attack.value =
+    0.003;
+
+
+  limiter.release.value =
+    0.05;
+
+
+  delaySum.connect(
+    limiter
+  );
+
+
+  const outputGain =
+    mixAudioContext.createGain();
+
+
+  limiter.connect(
+    outputGain
+  );
+
+
+  if (
+    target === "mix"
+  ) {
+
+    mixEqNodes =
+      eqNodes;
+
+    mixCompressorNode =
+      compressor;
+
+    mixReverbNode =
+      convolver;
+
+    mixReverbDryGain =
+      reverbDry;
+
+    mixReverbWetGain =
+      reverbWet;
+
+    mixDelayNode =
+      delay;
+
+    mixDelayFeedbackGain =
+      delayFeedback;
+
+    mixDelayDryGain =
+      delayDry;
+
+    mixDelayWetGain =
+      delayWet;
+
+    mixLimiterNode =
+      limiter;
+
+    mixFxOutputGainNode =
+      outputGain;
+
+  }
+
+  else {
+
+    masterEqNodes =
+      eqNodes;
+
+    masterCompressorNode =
+      compressor;
+
+    masterReverbNode =
+      convolver;
+
+    masterReverbDryGain =
+      reverbDry;
+
+    masterReverbWetGain =
+      reverbWet;
+
+    masterDelayNode =
+      delay;
+
+    masterDelayFeedbackGain =
+      delayFeedback;
+
+    masterDelayDryGain =
+      delayDry;
+
+    masterDelayWetGain =
+      delayWet;
+
+    masterLimiterNode =
+      limiter;
+
+    masterFxOutputGainNode =
+      outputGain;
+
+  }
+
+
+  return {
+    output:
+      outputGain
+  };
+
+}
+
+
+function createImpulseResponse(
+  audioContext,
+  seconds,
+  decay
+) {
+
+  const sampleRate =
+    audioContext.sampleRate;
+
+
+  const length =
+    Math.floor(
+      sampleRate
+      * seconds
+    );
+
+
+  const impulse =
+    audioContext.createBuffer(
+      2,
+      length,
+      sampleRate
+    );
+
+
+  for (
+    let channel = 0;
+    channel < 2;
+    channel++
+  ) {
+
+    const data =
+      impulse.getChannelData(
+        channel
+      );
+
+
+    for (
+      let i = 0;
+      i < length;
+      i++
+    ) {
+
+      data[i] =
+        (
+          Math.random()
+          * 2
+          - 1
+        )
+        *
+        Math.pow(
+          1
+          - i / length,
+          decay
+        );
+
+    }
+
+  }
+
+
+  return impulse;
+
+}
+
+
+function dbToGain(
+  db
+) {
+
+  return Math.pow(
+    10,
+    db / 20
+  );
+
+}
+
+
+function getFxNodes(
+  target
+) {
+
+  if (
+    target === "mix"
+  ) {
+
+    return {
+      eq:
+        mixEqNodes,
+      compressor:
+        mixCompressorNode,
+      reverbDry:
+        mixReverbDryGain,
+      reverbWet:
+        mixReverbWetGain,
+      delay:
+        mixDelayNode,
+      delayFeedback:
+        mixDelayFeedbackGain,
+      delayDry:
+        mixDelayDryGain,
+      delayWet:
+        mixDelayWetGain,
+      limiter:
+        mixLimiterNode,
+      output:
+        mixFxOutputGainNode
+    };
+
+  }
+
+
+  return {
+    eq:
+      masterEqNodes,
+    compressor:
+      masterCompressorNode,
+    reverbDry:
+      masterReverbDryGain,
+    reverbWet:
+      masterReverbWetGain,
+    delay:
+      masterDelayNode,
+    delayFeedback:
+      masterDelayFeedbackGain,
+    delayDry:
+      masterDelayDryGain,
+    delayWet:
+      masterDelayWetGain,
+    limiter:
+      masterLimiterNode,
+    output:
+      masterFxOutputGainNode
+  };
+
+}
+
+
+function applyFxSettings(
+  target
+) {
+
+  if (!mixAudioContext) {
+    return;
+  }
+
+
+  const settings =
+    fxSettings[target];
+
+
+  const nodes =
+    getFxNodes(
+      target
+    );
+
+
+  if (
+    !nodes.eq
+    ||
+    nodes.eq.length === 0
+  ) {
+
+    return;
+
+  }
+
+
+  const eqValues = [
+    settings.eqLow,
+    settings.eqLowMid,
+    settings.eqMid,
+    settings.eqHighMid,
+    settings.eqHigh
+  ];
+
+
+  nodes.eq.forEach(
+    (
+      node,
+      index
+    ) => {
+
+      node.gain.value =
+        eqValues[index];
+
+    }
+  );
+
+
+  nodes.compressor.threshold.value =
+    settings.compressorOn
+    ? settings.compressorThreshold
+    : 0;
+
+
+  nodes.compressor.ratio.value =
+    settings.compressorOn
+    ? settings.compressorRatio
+    : 1;
+
+
+  const reverbMix =
+    settings.reverbOn
+    ? settings.reverbAmount / 100
+    : 0;
+
+
+  nodes.reverbDry.gain.value =
+    1;
+
+
+  nodes.reverbWet.gain.value =
+    reverbMix;
+
+
+  nodes.delay.delayTime.value =
+    settings.delayOn
+    ? settings.delayTime / 1000
+    : 0;
+
+
+  nodes.delayFeedback.gain.value =
+    settings.delayOn
+    ? settings.delayFeedback / 100
+    : 0;
+
+
+  nodes.delayDry.gain.value =
+    1;
+
+
+  nodes.delayWet.gain.value =
+    settings.delayOn
+    ? 0.65
+    : 0;
+
+
+  nodes.limiter.threshold.value =
+    settings.limiterOn
+    ? settings.limiterCeiling
+    : 0;
+
+
+  nodes.limiter.ratio.value =
+    settings.limiterOn
+    ? 20
+    : 1;
+
+
+  nodes.output.gain.value =
+    dbToGain(
+      settings.outputGain
+    );
+
+}
+
 
 
 // ========================================
@@ -5906,11 +7627,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Save полностью убран.
-Undo отменяет последнюю записанную операцию Master и перестраивает сам Master + waveform.
-Redo возвращает отменённую запись.
-исправлены потерянные объявления masterSegments, selection-state и export-state, из-за которых 1.8.2 мог дальше падать уже при работе с Master.
-   | 1.9.0
+блок EQ / Effects для Mix и Master
+   | 1.10.0
 </div>
 
 <div class="row" id="build-down">
