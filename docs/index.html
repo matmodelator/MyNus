@@ -510,6 +510,40 @@
     }
 
 
+    .selection-range {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      display: none;
+      background: rgba(0,0,0,.12);
+      border-left: 2px solid #555;
+      border-right: 2px solid #555;
+      pointer-events: none;
+      z-index: 8;
+    }
+
+    .selection-info {
+      margin-left: 202px;
+      margin-top: 6px;
+      min-height: 16px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #666;
+    }
+
+    .track-save-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .track-save-row button {
+      flex: 1;
+      padding: 6px;
+      font-size: 11px;
+    }
+
+
 
     .master-controls {
       align-self: stretch;
@@ -581,6 +615,10 @@
 
       .master-timeline {
         width: 100%;
+        margin-left: 0;
+      }
+
+      .selection-info {
         margin-left: 0;
       }
 
@@ -738,8 +776,21 @@
 
     <div class="track">
 
-      <div class="static-track-title">
-        Original
+      <div class="track-controls">
+
+        <div class="track-title">
+          Original
+        </div>
+
+        <div class="track-save-row">
+          <button data-export-track="original" data-export-scope="full">
+            Save As...
+          </button>
+          <button data-export-track="original" data-export-scope="selection">
+            Save Selection
+          </button>
+        </div>
+
       </div>
 
       <div
@@ -807,6 +858,15 @@
             100%
           </span>
 
+        </div>
+
+        <div class="track-save-row">
+          <button data-export-track="vocals" data-export-scope="full">
+            Save As...
+          </button>
+          <button data-export-track="vocals" data-export-scope="selection">
+            Save Selection
+          </button>
         </div>
 
       </div>
@@ -879,6 +939,15 @@
 
         </div>
 
+        <div class="track-save-row">
+          <button data-export-track="minus" data-export-scope="full">
+            Save As...
+          </button>
+          <button data-export-track="minus" data-export-scope="selection">
+            Save Selection
+          </button>
+        </div>
+
       </div>
 
 
@@ -926,6 +995,12 @@
         <div class="track-buttons">
           <button id="saveMasterBtn" disabled>Save</button>
           <button id="saveAsMasterBtn" disabled>Save As...</button>
+        </div>
+
+        <div class="track-save-row">
+          <button id="saveMasterSelectionBtn" disabled>
+            Save Selection
+          </button>
         </div>
 
         <div id="masterState" class="master-state">
@@ -982,6 +1057,11 @@
         ></div>
 
         <div
+          id="selectionRange"
+          class="selection-range"
+        ></div>
+
+        <div
           id="masterCursor"
           class="master-cursor"
         ></div>
@@ -1004,7 +1084,7 @@
   <div class="export-dialog-card">
 
     <div class="export-dialog-title">
-      Save Master As
+      Save Audio As
     </div>
 
     <div class="export-format-grid">
@@ -1086,6 +1166,15 @@ const saveMasterBtn =
 
 const saveAsMasterBtn =
   document.getElementById("saveAsMasterBtn");
+
+const saveMasterSelectionBtn =
+  document.getElementById("saveMasterSelectionBtn");
+
+const selectionRange =
+  document.getElementById("selectionRange");
+
+const selectionInfo =
+  document.getElementById("selectionInfo");
 
 const masterState =
   document.getElementById("masterState");
@@ -1478,6 +1567,18 @@ splitBtn.addEventListener(
         data.minus;
 
 
+      currentOriginalFile =
+        file;
+
+
+      currentVocalsURL =
+        data.vocals;
+
+
+      currentMinusURL =
+        data.minus;
+
+
       status.textContent =
         "Loading tracks...";
 
@@ -1824,19 +1925,10 @@ function clearMasterCanvas() {
 
 function resetMaster() {
 
-  waveformData.master =
-    null;
-
-  masterBlob =
-    null;
-
-  savedMasterBlob =
-    null;
-
   masterLivePeaks =
     [];
 
-  clearMasterCanvas();
+  drawMasterCompositeWaveform();
 
   masterState.textContent =
     "Empty";
@@ -1883,19 +1975,7 @@ function drawAllWaveforms() {
   );
 
 
-  if (
-    waveformData.master
-  ) {
-
-    drawRecordedMasterWaveform();
-
-  }
-
-  else {
-
-    clearMasterCanvas();
-
-  }
+  drawMasterCompositeWaveform();
 
 
   updatePlayheads();
@@ -3019,78 +3099,87 @@ async function finishMasterRecording() {
     masterRecorder.mimeType
     || "audio/webm";
 
-  masterBlob =
+
+  const segmentBlob =
     new Blob(
       masterRecordChunks,
       { type }
     );
 
 
-  if (masterObjectURL) {
-
-    URL.revokeObjectURL(
-      masterObjectURL
-    );
-
-  }
-
-
-  masterObjectURL =
-    URL.createObjectURL(
-      masterBlob
-    );
-
-
-  masterAudio.src =
-    masterObjectURL;
-
-
-  await waitForMetadata(
-    masterAudio
-  );
-
-
-  masterDuration =
-    masterAudio.duration;
-
-
   try {
 
     const arrayBuffer =
-      await masterBlob.arrayBuffer();
+      await segmentBlob.arrayBuffer();
+
 
     const decodeContext =
       new AudioContext();
 
-    waveformData.master =
+
+    const segmentBuffer =
       await decodeContext
         .decodeAudioData(
           arrayBuffer.slice(0)
         );
 
+
     await decodeContext.close();
 
-    drawRecordedMasterWaveform();
+
+    masterSegments.push({
+      start:
+        masterRecordTimelineStart,
+      buffer:
+        segmentBuffer
+    });
+
+
+    await rebuildMasterTrack();
+
+
+    drawMasterCompositeWaveform();
 
   }
 
   catch (error) {
 
     console.error(
-      "Master waveform decode error:",
+      "Master segment decode error:",
       error
     );
 
+
+    masterState.textContent =
+      "Master recording error";
+
+
+    status.textContent =
+      "Master recording error";
+
+
+    return;
+
   }
+
 
   masterState.textContent =
     "Recorded — not saved";
 
+
   saveMasterBtn.disabled =
     false;
 
+
   saveAsMasterBtn.disabled =
     false;
+
+
+  saveMasterSelectionBtn.disabled =
+    selectionStart !== null
+    &&
+    selectionEnd !== null;
+
 
   status.textContent =
     "Master recording complete";
@@ -3098,67 +3187,81 @@ async function finishMasterRecording() {
 }
 
 
-function drawRecordedMasterWaveform() {
 
-  const audioBuffer =
-    waveformData.master;
+function drawMasterCompositeWaveform() {
 
-
-  if (!audioBuffer) {
-
-    clearMasterCanvas();
-
-    return;
-
-  }
+  clearMasterCanvas();
 
 
   const canvas =
     canvases.master;
 
 
-  const timeline =
-    timelines.master;
-
-
-  const width =
-    getTimelineWidth();
+  const context =
+    canvas.getContext("2d");
 
 
   const height =
     90;
 
 
-  timeline.style.width =
-    width + "px";
+  const middle =
+    height / 2;
 
 
-  canvas.width =
-    width;
+  context.beginPath();
 
 
-  canvas.height =
-    height;
+  masterSegments.forEach(
+    segment => {
 
+      drawBufferAtTimelinePosition(
+        context,
+        segment.buffer,
+        segment.start,
+        middle
+      );
 
-  canvas.style.width =
-    width + "px";
-
-
-  canvas.style.height =
-    height + "px";
-
-
-  const context =
-    canvas.getContext("2d");
-
-
-  context.clearRect(
-    0,
-    0,
-    width,
-    height
+    }
   );
+
+
+  if (
+    masterRecording
+    &&
+    masterLivePeaks.length > 0
+  ) {
+
+    drawLivePeaksIntoContext(
+      context,
+      middle
+    );
+
+  }
+
+
+  context.strokeStyle =
+    "#333";
+
+
+  context.lineWidth =
+    1;
+
+
+  context.stroke();
+
+}
+
+
+function drawBufferAtTimelinePosition(
+  context,
+  audioBuffer,
+  startTime,
+  middle
+) {
+
+  const width =
+    getTimelineWidth();
 
 
   const samples =
@@ -3176,7 +3279,7 @@ function drawRecordedMasterWaveform() {
 
 
   const startX =
-    masterRecordTimelineStart
+    startTime
     * pixelsPerSecond;
 
 
@@ -3188,13 +3291,6 @@ function drawRecordedMasterWaveform() {
         / recordWidth
       )
     );
-
-
-  const middle =
-    height / 2;
-
-
-  context.beginPath();
 
 
   for (
@@ -3270,18 +3366,462 @@ function drawRecordedMasterWaveform() {
 
   }
 
-
-  context.strokeStyle =
-    "#333";
+}
 
 
-  context.lineWidth =
-    1;
+function drawLivePeaksIntoContext(
+  context,
+  middle
+) {
+
+  const elapsed =
+    Math.max(
+      0,
+      (
+        performance.now()
+        - masterRecordStartTime
+      ) / 1000
+    );
 
 
-  context.stroke();
+  const startX =
+    masterRecordTimelineStart
+    * pixelsPerSecond;
+
+
+  const recordedWidth =
+    Math.max(
+      0,
+      Math.min(
+        getTimelineWidth()
+        - startX,
+        elapsed
+        * pixelsPerSecond
+      )
+    );
+
+
+  if (recordedWidth <= 0) {
+    return;
+  }
+
+
+  for (
+    let x = 0;
+    x < recordedWidth;
+    x++
+  ) {
+
+    const index =
+      Math.min(
+        masterLivePeaks.length - 1,
+        Math.floor(
+          x
+          / recordedWidth
+          * masterLivePeaks.length
+        )
+      );
+
+
+    const peak =
+      masterLivePeaks[index];
+
+
+    const drawX =
+      startX + x;
+
+
+    context.moveTo(
+      drawX,
+      middle - peak * middle
+    );
+
+
+    context.lineTo(
+      drawX,
+      middle + peak * middle
+    );
+
+  }
 
 }
+
+
+async function rebuildMasterTrack() {
+
+  if (
+    !duration
+    ||
+    masterSegments.length === 0
+  ) {
+
+    return;
+
+  }
+
+
+  const sampleRate =
+    masterSegments[0]
+      .buffer
+      .sampleRate;
+
+
+  const channels =
+    Math.max(
+      1,
+      ...masterSegments.map(
+        segment =>
+          segment.buffer
+            .numberOfChannels
+      )
+    );
+
+
+  const frameCount =
+    Math.ceil(
+      duration
+      * sampleRate
+    );
+
+
+  const audioContext =
+    new AudioContext();
+
+
+  const fullBuffer =
+    audioContext.createBuffer(
+      channels,
+      frameCount,
+      sampleRate
+    );
+
+
+  masterSegments.forEach(
+    segment => {
+
+      const startFrame =
+        Math.max(
+          0,
+          Math.floor(
+            segment.start
+            * sampleRate
+          )
+        );
+
+
+      for (
+        let channel = 0;
+        channel < channels;
+        channel++
+      ) {
+
+        const output =
+          fullBuffer
+            .getChannelData(
+              channel
+            );
+
+
+        const source =
+          segment.buffer
+            .getChannelData(
+              Math.min(
+                channel,
+                segment.buffer
+                  .numberOfChannels - 1
+              )
+            );
+
+
+        const copyLength =
+          Math.min(
+            source.length,
+            output.length
+            - startFrame
+          );
+
+
+        for (
+          let i = 0;
+          i < copyLength;
+          i++
+        ) {
+
+          const index =
+            startFrame + i;
+
+
+          output[index] =
+            Math.max(
+              -1,
+              Math.min(
+                1,
+                output[index]
+                + source[i]
+              )
+            );
+
+        }
+
+      }
+
+    }
+  );
+
+
+  masterBlob =
+    audioBufferToWavBlob(
+      fullBuffer
+    );
+
+
+  waveformData.master =
+    fullBuffer;
+
+
+  masterDuration =
+    duration;
+
+
+  if (masterObjectURL) {
+
+    URL.revokeObjectURL(
+      masterObjectURL
+    );
+
+  }
+
+
+  masterObjectURL =
+    URL.createObjectURL(
+      masterBlob
+    );
+
+
+  masterAudio.src =
+    masterObjectURL;
+
+
+  await waitForMetadata(
+    masterAudio
+  );
+
+
+  await audioContext.close();
+
+}
+
+
+function audioBufferToWavBlob(
+  audioBuffer
+) {
+
+  const channels =
+    audioBuffer.numberOfChannels;
+
+
+  const sampleRate =
+    audioBuffer.sampleRate;
+
+
+  const frameCount =
+    audioBuffer.length;
+
+
+  const bytesPerSample =
+    2;
+
+
+  const blockAlign =
+    channels
+    * bytesPerSample;
+
+
+  const dataSize =
+    frameCount
+    * blockAlign;
+
+
+  const buffer =
+    new ArrayBuffer(
+      44 + dataSize
+    );
+
+
+  const view =
+    new DataView(
+      buffer
+    );
+
+
+  function writeString(
+    offset,
+    value
+  ) {
+
+    for (
+      let i = 0;
+      i < value.length;
+      i++
+    ) {
+
+      view.setUint8(
+        offset + i,
+        value.charCodeAt(i)
+      );
+
+    }
+
+  }
+
+
+  writeString(
+    0,
+    "RIFF"
+  );
+
+
+  view.setUint32(
+    4,
+    36 + dataSize,
+    true
+  );
+
+
+  writeString(
+    8,
+    "WAVE"
+  );
+
+
+  writeString(
+    12,
+    "fmt "
+  );
+
+
+  view.setUint32(
+    16,
+    16,
+    true
+  );
+
+
+  view.setUint16(
+    20,
+    1,
+    true
+  );
+
+
+  view.setUint16(
+    22,
+    channels,
+    true
+  );
+
+
+  view.setUint32(
+    24,
+    sampleRate,
+    true
+  );
+
+
+  view.setUint32(
+    28,
+    sampleRate
+    * blockAlign,
+    true
+  );
+
+
+  view.setUint16(
+    32,
+    blockAlign,
+    true
+  );
+
+
+  view.setUint16(
+    34,
+    16,
+    true
+  );
+
+
+  writeString(
+    36,
+    "data"
+  );
+
+
+  view.setUint32(
+    40,
+    dataSize,
+    true
+  );
+
+
+  let offset =
+    44;
+
+
+  for (
+    let i = 0;
+    i < frameCount;
+    i++
+  ) {
+
+    for (
+      let channel = 0;
+      channel < channels;
+      channel++
+    ) {
+
+      const sample =
+        Math.max(
+          -1,
+          Math.min(
+            1,
+            audioBuffer
+              .getChannelData(
+                channel
+              )[i]
+          )
+        );
+
+
+      const value =
+        sample < 0
+        ? sample * 0x8000
+        : sample * 0x7fff;
+
+
+      view.setInt16(
+        offset,
+        value,
+        true
+      );
+
+
+      offset +=
+        2;
+
+    }
+
+  }
+
+
+  return new Blob(
+    [buffer],
+    {
+      type: "audio/wav"
+    }
+  );
+
+}
+
 
 
 // ========================================
@@ -3367,158 +3907,7 @@ function stopMasterWaveformCapture() {
 
 function drawLiveMasterWaveform() {
 
-  const canvas =
-    canvases.master;
-
-
-  const timeline =
-    timelines.master;
-
-
-  const width =
-    getTimelineWidth();
-
-
-  const height =
-    90;
-
-
-  timeline.style.width =
-    width + "px";
-
-
-  canvas.width =
-    width;
-
-
-  canvas.height =
-    height;
-
-
-  canvas.style.width =
-    width + "px";
-
-
-  canvas.style.height =
-    height + "px";
-
-
-  const context =
-    canvas.getContext("2d");
-
-
-  context.clearRect(
-    0,
-    0,
-    width,
-    height
-  );
-
-
-  if (
-    masterLivePeaks.length === 0
-  ) {
-
-    return;
-
-  }
-
-
-  const elapsed =
-    Math.max(
-      0,
-      (
-        performance.now()
-        - masterRecordStartTime
-      ) / 1000
-    );
-
-
-  const startX =
-    masterRecordTimelineStart
-    * pixelsPerSecond;
-
-
-  const endX =
-    Math.min(
-      width,
-      (
-        masterRecordTimelineStart
-        + elapsed
-      )
-      * pixelsPerSecond
-    );
-
-
-  const recordedWidth =
-    Math.max(
-      0,
-      endX - startX
-    );
-
-
-  if (recordedWidth <= 0) {
-    return;
-  }
-
-
-  const middle =
-    height / 2;
-
-
-  context.beginPath();
-
-
-  for (
-    let x = 0;
-    x < recordedWidth;
-    x++
-  ) {
-
-    const index =
-      Math.min(
-        masterLivePeaks.length - 1,
-        Math.floor(
-          x
-          / recordedWidth
-          * masterLivePeaks.length
-        )
-      );
-
-
-    const peak =
-      masterLivePeaks[index];
-
-
-    const drawX =
-      startX + x;
-
-
-    context.moveTo(
-      drawX,
-      middle
-      - peak * middle
-    );
-
-
-    context.lineTo(
-      drawX,
-      middle
-      + peak * middle
-    );
-
-  }
-
-
-  context.strokeStyle =
-    "#333";
-
-
-  context.lineWidth =
-    1;
-
-
-  context.stroke();
+  drawMasterCompositeWaveform();
 
 }
 
@@ -3562,11 +3951,7 @@ saveAsMasterBtn.addEventListener(
   "click",
   () => {
 
-    if (
-      !savedMasterBlob
-      &&
-      !masterBlob
-    ) {
+    if (!masterBlob) {
 
       status.textContent =
         "No Master recording";
@@ -3575,6 +3960,15 @@ saveAsMasterBtn.addEventListener(
 
     }
 
+
+    exportTargetTrack =
+      "master";
+
+
+    exportTargetScope =
+      "full";
+
+
     masterExportDialog
       .classList.add(
         "open"
@@ -3582,6 +3976,89 @@ saveAsMasterBtn.addEventListener(
 
   }
 );
+
+
+saveMasterSelectionBtn.addEventListener(
+  "click",
+  () => {
+
+    if (
+      !masterBlob
+      ||
+      !hasSelection()
+    ) {
+
+      status.textContent =
+        "Select a Master fragment first";
+
+      return;
+
+    }
+
+
+    exportTargetTrack =
+      "master";
+
+
+    exportTargetScope =
+      "selection";
+
+
+    masterExportDialog
+      .classList.add(
+        "open"
+      );
+
+  }
+);
+
+
+document
+  .querySelectorAll(
+    "[data-export-track]"
+  )
+  .forEach(
+    button => {
+
+      button.addEventListener(
+        "click",
+        () => {
+
+          exportTargetTrack =
+            button.dataset
+              .exportTrack;
+
+
+          exportTargetScope =
+            button.dataset
+              .exportScope;
+
+
+          if (
+            exportTargetScope ===
+            "selection"
+            &&
+            !hasSelection()
+          ) {
+
+            status.textContent =
+              "Select a fragment first";
+
+            return;
+
+          }
+
+
+          masterExportDialog
+            .classList.add(
+              "open"
+            );
+
+        }
+      );
+
+    }
+  );
 
 cancelMasterExportBtn.addEventListener(
   "click",
@@ -3634,7 +4111,9 @@ document
               "open"
             );
 
-          await exportMaster(
+          await exportTrack(
+            exportTargetTrack,
+            exportTargetScope,
             format
           );
 
@@ -3645,73 +4124,185 @@ document
   );
 
 
-async function exportMaster(
+async function getTrackBlob(
+  track
+) {
+
+  if (
+    track === "original"
+  ) {
+
+    return {
+      blob:
+        currentOriginalFile,
+      filename:
+        currentOriginalFile
+        ? currentOriginalFile.name
+        : "original.bin"
+    };
+
+  }
+
+
+  if (
+    track === "vocals"
+  ) {
+
+    const response =
+      await fetch(
+        currentVocalsURL
+      );
+
+
+    return {
+      blob:
+        await response.blob(),
+      filename:
+        "vocals.mp3"
+    };
+
+  }
+
+
+  if (
+    track === "minus"
+  ) {
+
+    const response =
+      await fetch(
+        currentMinusURL
+      );
+
+
+    return {
+      blob:
+        await response.blob(),
+      filename:
+        "instrumental.mp3"
+    };
+
+  }
+
+
+  return {
+    blob:
+      savedMasterBlob
+      || masterBlob,
+    filename:
+      "master.wav"
+  };
+
+}
+
+
+async function exportTrack(
+  track,
+  scope,
   format
 ) {
 
-  const blob =
-    savedMasterBlob
-    || masterBlob;
+  const source =
+    await getTrackBlob(
+      track
+    );
 
-  if (!blob) {
+
+  if (!source.blob) {
 
     status.textContent =
-      "No Master recording";
+      "Track is not available";
 
     return;
 
   }
 
+
   const formData =
     new FormData();
 
+
   formData.append(
-    "master",
-    blob,
-    "master.webm"
+    "audio",
+    source.blob,
+    source.filename
   );
+
 
   formData.append(
     "format",
     format
   );
 
-  saveAsMasterBtn.disabled =
-    true;
+
+  formData.append(
+    "track",
+    track
+  );
+
+
+  if (
+    scope === "selection"
+  ) {
+
+    formData.append(
+      "start",
+      String(
+        selectionStart
+      )
+    );
+
+
+    formData.append(
+      "end",
+      String(
+        selectionEnd
+      )
+    );
+
+  }
+
 
   status.textContent =
-    "Exporting Master as "
+    "Exporting "
+    + track
+    + " as "
     + format.toUpperCase()
     + "...";
+
 
   try {
 
     const response =
       await fetch(
-        "/export-master",
+        "/export-audio",
         {
           method: "POST",
           body: formData
         }
       );
 
+
     if (!response.ok) {
 
       let message =
-        "Master export failed";
+        "Audio export failed";
+
 
       try {
 
         const data =
           await response.json();
 
+
         message =
-          data.error
+          data.details
+          || data.error
           || message;
 
       }
 
       catch {}
+
 
       throw new Error(
         message
@@ -3719,33 +4310,50 @@ async function exportMaster(
 
     }
 
+
     const exportBlob =
       await response.blob();
+
 
     const url =
       URL.createObjectURL(
         exportBlob
       );
 
+
     const link =
       document.createElement(
         "a"
       );
 
+
+    const suffix =
+      scope === "selection"
+      ? "-selection"
+      : "";
+
+
     link.href =
       url;
 
+
     link.download =
-      "master."
+      track
+      + suffix
+      + "."
       + format;
+
 
     document.body.appendChild(
       link
     );
 
+
     link.click();
 
+
     link.remove();
+
 
     setTimeout(
       () =>
@@ -3755,9 +4363,9 @@ async function exportMaster(
       1000
     );
 
+
     status.textContent =
-      "Master exported as "
-      + format.toUpperCase();
+      "Export complete";
 
   }
 
@@ -3767,20 +4375,15 @@ async function exportMaster(
       error
     );
 
+
     status.textContent =
       "Export error: "
       + error.message;
 
   }
 
-  finally {
-
-    saveAsMasterBtn.disabled =
-      false;
-
-  }
-
 }
+
 
 
 // ========================================
@@ -3948,6 +4551,311 @@ function seekFromWaveform(
 }
 
 
+
+
+// ========================================
+// TIMELINE SELECTION
+// ========================================
+
+masterTimelineInner.addEventListener(
+  "pointerdown",
+  event => {
+
+    if (
+      event.target === masterCursor
+    ) {
+
+      return;
+
+    }
+
+
+    selectionDragging =
+      true;
+
+
+    selectionMoved =
+      false;
+
+
+    const rect =
+      masterTimelineInner
+        .getBoundingClientRect();
+
+
+    selectionPointerStartX =
+      Math.max(
+        0,
+        Math.min(
+          rect.width,
+          event.clientX
+          - rect.left
+        )
+      );
+
+
+    masterTimelineInner
+      .setPointerCapture(
+        event.pointerId
+      );
+
+
+    event.preventDefault();
+
+  }
+);
+
+
+masterTimelineInner.addEventListener(
+  "pointermove",
+  event => {
+
+    if (!selectionDragging) {
+      return;
+    }
+
+
+    const rect =
+      masterTimelineInner
+        .getBoundingClientRect();
+
+
+    const x =
+      Math.max(
+        0,
+        Math.min(
+          rect.width,
+          event.clientX
+          - rect.left
+        )
+      );
+
+
+    if (
+      Math.abs(
+        x - selectionPointerStartX
+      )
+      > 4
+    ) {
+
+      selectionMoved =
+        true;
+
+    }
+
+
+    if (!selectionMoved) {
+      return;
+    }
+
+
+    const startX =
+      Math.min(
+        selectionPointerStartX,
+        x
+      );
+
+
+    const endX =
+      Math.max(
+        selectionPointerStartX,
+        x
+      );
+
+
+    selectionStart =
+      startX
+      / rect.width
+      * duration;
+
+
+    selectionEnd =
+      endX
+      / rect.width
+      * duration;
+
+
+    updateSelectionDisplay();
+
+  }
+);
+
+
+masterTimelineInner.addEventListener(
+  "pointerup",
+  event => {
+
+    if (!selectionDragging) {
+      return;
+    }
+
+
+    selectionDragging =
+      false;
+
+
+    if (
+      masterTimelineInner
+        .hasPointerCapture(
+          event.pointerId
+        )
+    ) {
+
+      masterTimelineInner
+        .releasePointerCapture(
+          event.pointerId
+        );
+
+    }
+
+
+    if (!selectionMoved) {
+
+      clearSelection();
+
+
+      seekFromMasterTimeline(
+        event
+      );
+
+    }
+
+
+    updateSelectionButtons();
+
+  }
+);
+
+
+function updateSelectionDisplay() {
+
+  if (
+    selectionStart === null
+    ||
+    selectionEnd === null
+    ||
+    selectionEnd <= selectionStart
+  ) {
+
+    selectionRange.style.display =
+      "none";
+
+
+    selectionInfo.textContent =
+      "Selection: none";
+
+
+    return;
+
+  }
+
+
+  const startX =
+    selectionStart
+    * pixelsPerSecond;
+
+
+  const endX =
+    selectionEnd
+    * pixelsPerSecond;
+
+
+  selectionRange.style.display =
+    "block";
+
+
+  selectionRange.style.left =
+    startX + "px";
+
+
+  selectionRange.style.width =
+    Math.max(
+      1,
+      endX - startX
+    )
+    + "px";
+
+
+  selectionInfo.textContent =
+    "Selection: "
+    + formatTime(
+        selectionStart
+      )
+    + " — "
+    + formatTime(
+        selectionEnd
+      );
+
+
+  updateSelectionButtons();
+
+}
+
+
+function clearSelection() {
+
+  selectionStart =
+    null;
+
+
+  selectionEnd =
+    null;
+
+
+  selectionRange.style.display =
+    "none";
+
+
+  selectionInfo.textContent =
+    "Selection: none";
+
+
+  updateSelectionButtons();
+
+}
+
+
+function hasSelection() {
+
+  return (
+    selectionStart !== null
+    &&
+    selectionEnd !== null
+    &&
+    selectionEnd > selectionStart
+  );
+
+}
+
+
+function updateSelectionButtons() {
+
+  const enabled =
+    hasSelection();
+
+
+  document
+    .querySelectorAll(
+      '[data-export-scope="selection"]'
+    )
+    .forEach(
+      button => {
+
+        button.disabled =
+          !enabled;
+
+      }
+    );
+
+
+  saveMasterSelectionBtn.disabled =
+    !enabled
+    ||
+    !masterBlob;
+
+}
+
+
 // ========================================
 // MASTER CURSOR DRAG
 // ========================================
@@ -4011,18 +4919,6 @@ masterCursor.addEventListener(
       );
 
     }
-
-  }
-);
-
-
-masterTimelineInner.addEventListener(
-  "pointerdown",
-  event => {
-
-    seekFromMasterTimeline(
-      event
-    );
 
   }
 );
@@ -4631,6 +5527,8 @@ function changeZoom(
 
   drawMasterTimeline();
 
+  updateSelectionDisplay();
+
 
   const left =
     Math.max(
@@ -4737,7 +5635,12 @@ function resetTransport() {
 
   syncScrollTo(0);
 
+  updateSelectionButtons();
+
 }
+
+
+updateSelectionButtons();
 
 
 </script>
@@ -4751,11 +5654,13 @@ function resetTransport() {
 ======================================== -->
 
 <div id="service-console">
-Master-waveform не растягивается на всю песню.
-В верхнее меню добавлена кнопка Master для проигрывания записанного мастера.
-Таймер теперь показывает:
-current / total / remaining
-   | 1.7.0
+каждая запись Master сохраняется как отдельный фрагмент со своим абсолютным тайм-кодом. После Stop из всех фрагментов собирается полноценная Master-дорожка длиной во всю песню: 
+  до первого записанного участка — тишина, между раздельными записями — тишина, сами фрагменты лежат строго на своих местах. Поэтому при переключении на Master проигрывание теперь идёт по тому же сквозному тайм-коду, что Original/Vocals/Instrumental.
+Добавил выделение диапазона на нижней Timeline: протягиваешь мышью участок — он становится Selection. Это одно общее выделение по сквозному времени для всех дорожек.
+Для Original, Vocals и Instrumental добавлены:
+Save As...
+Save Selection
+   | 1.8.0
 </div>
 
 <div class="row" id="build-down">
