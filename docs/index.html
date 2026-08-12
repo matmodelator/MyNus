@@ -510,6 +510,51 @@
     }
 
 
+
+    .master-controls {
+      align-self: stretch;
+    }
+
+    .master-state {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #666;
+    }
+
+    .export-dialog {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,.35);
+    }
+
+    .export-dialog.open {
+      display: flex;
+    }
+
+    .export-dialog-card {
+      width: min(360px, calc(100vw - 32px));
+      padding: 20px;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 10px 40px rgba(0,0,0,.2);
+    }
+
+    .export-dialog-title {
+      margin-bottom: 14px;
+      font-weight: bold;
+    }
+
+    .export-format-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
     /* ========================================
        RESPONSIVE
     ======================================== */
@@ -632,10 +677,6 @@
 
       <button id="mixModeBtn">
         Mix
-      </button>
-
-      <button id="recordMasterBtn">
-        Record Master
       </button>
 
       <button id="startBtn">
@@ -867,8 +908,26 @@
 
     <div class="track">
 
-      <div class="static-track-title">
-        Master
+      <div class="track-controls master-controls">
+
+        <div class="track-title">
+          Master
+        </div>
+
+        <div class="track-buttons">
+          <button id="recordMasterBtn">Record</button>
+          <button id="stopMasterBtn" disabled>Stop</button>
+        </div>
+
+        <div class="track-buttons">
+          <button id="saveMasterBtn" disabled>Save</button>
+          <button id="saveAsMasterBtn" disabled>Save As...</button>
+        </div>
+
+        <div id="masterState" class="master-state">
+          Empty
+        </div>
+
       </div>
 
       <div
@@ -932,6 +991,33 @@
 </div>
 
 
+
+<!-- ========================================
+     MASTER EXPORT DIALOG
+======================================== -->
+
+<div id="masterExportDialog" class="export-dialog">
+  <div class="export-dialog-card">
+
+    <div class="export-dialog-title">
+      Save Master As
+    </div>
+
+    <div class="export-format-grid">
+      <button data-master-format="wav">WAV</button>
+      <button data-master-format="mp3">MP3</button>
+      <button data-master-format="flac">FLAC</button>
+      <button data-master-format="m4a">M4A</button>
+    </div>
+
+    <button id="cancelMasterExportBtn">
+      Cancel
+    </button>
+
+  </div>
+</div>
+
+
 <!-- ========================================
      HIDDEN AUDIO SOURCES
 ======================================== -->
@@ -983,6 +1069,24 @@ const mixModeBtn =
 
 const recordMasterBtn =
   document.getElementById("recordMasterBtn");
+
+const stopMasterBtn =
+  document.getElementById("stopMasterBtn");
+
+const saveMasterBtn =
+  document.getElementById("saveMasterBtn");
+
+const saveAsMasterBtn =
+  document.getElementById("saveAsMasterBtn");
+
+const masterState =
+  document.getElementById("masterState");
+
+const masterExportDialog =
+  document.getElementById("masterExportDialog");
+
+const cancelMasterExportBtn =
+  document.getElementById("cancelMasterExportBtn");
 
 const startBtn =
   document.getElementById("startBtn");
@@ -1171,10 +1275,17 @@ let vocalsSourceNode = null;
 let minusSourceNode = null;
 let vocalsGainNode = null;
 let minusGainNode = null;
+let masterAnalyserNode = null;
 let masterRecordDestination = null;
 let masterRecorder = null;
 let masterRecordChunks = [];
 let masterRecording = false;
+
+let masterBlob = null;
+let savedMasterBlob = null;
+let masterRecordStartTime = 0;
+let masterRecordAnimation = null;
+let masterLivePeaks = [];
 
 
 // ========================================
@@ -1262,6 +1373,9 @@ splitBtn.addEventListener(
 
     status.textContent =
       "Separating...";
+
+
+    resetMaster();
 
 
     try {
@@ -1384,9 +1498,7 @@ splitBtn.addEventListener(
 
       resetTransport();
 
-      buildMasterWaveform();
-
-      drawAllWaveforms();
+          drawAllWaveforms();
 
       drawMasterTimeline();
 
@@ -1655,127 +1767,77 @@ async function loadWaveforms(
 // MASTER WAVEFORM
 // ========================================
 
-function buildMasterWaveform() {
+function clearMasterCanvas() {
 
-  if (
-    !waveformData.vocals
-    ||
-    !waveformData.minus
-  ) {
+  const canvas =
+    canvases.master;
 
-    return;
+  const timeline =
+    timelines.master;
 
-  }
+  const width =
+    getTimelineWidth();
 
+  const height =
+    90;
 
-  const vocals =
-    waveformData.vocals;
+  timeline.style.width =
+    width + "px";
 
+  canvas.width =
+    width;
 
-  const minus =
-    waveformData.minus;
+  canvas.height =
+    height;
 
+  canvas.style.width =
+    width + "px";
 
-  const length =
-    Math.min(
-      vocals.length,
-      minus.length
+  canvas.style.height =
+    height + "px";
+
+  canvas
+    .getContext("2d")
+    .clearRect(
+      0,
+      0,
+      width,
+      height
     );
 
-
-  const sampleRate =
-    vocals.sampleRate;
+}
 
 
-  const audioContext =
-    new AudioContext();
-
-
-  const masterBuffer =
-    audioContext.createBuffer(
-      1,
-      length,
-      sampleRate
-    );
-
-
-  const output =
-    masterBuffer.getChannelData(0);
-
-
-  const vocalsData =
-    vocals.getChannelData(0);
-
-
-  const minusData =
-    minus.getChannelData(0);
-
-
-  const anySolo =
-    vocalsSolo
-    ||
-    minusSolo;
-
-
-  const vocalsGain =
-    (
-      !vocalsMuted
-      &&
-      (
-        !anySolo
-        ||
-        vocalsSolo
-      )
-    )
-    ?
-    Number(
-      vocalsVolume.value
-    ) / 100
-    :
-    0;
-
-
-  const minusGain =
-    (
-      !minusMuted
-      &&
-      (
-        !anySolo
-        ||
-        minusSolo
-      )
-    )
-    ?
-    Number(
-      minusVolume.value
-    ) / 100
-    :
-    0;
-
-
-  for (
-    let i = 0;
-    i < length;
-    i++
-  ) {
-
-    output[i] =
-      vocalsData[i]
-      * vocalsGain
-
-      +
-
-      minusData[i]
-      * minusGain;
-
-  }
-
+function resetMaster() {
 
   waveformData.master =
-    masterBuffer;
+    null;
 
+  masterBlob =
+    null;
 
-  audioContext.close();
+  savedMasterBlob =
+    null;
+
+  masterLivePeaks =
+    [];
+
+  clearMasterCanvas();
+
+  masterState.textContent =
+    "Empty";
+
+  recordMasterBtn.disabled =
+    false;
+
+  stopMasterBtn.disabled =
+    true;
+
+  saveMasterBtn.disabled =
+    true;
+
+  saveAsMasterBtn.disabled =
+    true;
 
 }
 
@@ -1828,6 +1890,14 @@ function drawWaveform(
 ) {
 
   if (!audioBuffer) {
+
+    if (
+      canvas === canvases.master
+    ) {
+
+      clearMasterCanvas();
+
+    }
 
     return;
 
@@ -2619,16 +2689,6 @@ function applyMix() {
   }
 
 
-  buildMasterWaveform();
-
-
-  drawWaveform(
-    canvases.master,
-    timelines.master,
-    waveformData.master
-  );
-
-
   updatePlayheads();
 
 }
@@ -2644,10 +2704,8 @@ function ensureMixAudioGraph() {
     return;
   }
 
-
   mixAudioContext =
     new AudioContext();
-
 
   vocalsSourceNode =
     mixAudioContext
@@ -2655,60 +2713,62 @@ function ensureMixAudioGraph() {
         vocalsAudio
       );
 
-
   minusSourceNode =
     mixAudioContext
       .createMediaElementSource(
         minusAudio
       );
 
-
   vocalsGainNode =
     mixAudioContext.createGain();
-
 
   minusGainNode =
     mixAudioContext.createGain();
 
+  masterAnalyserNode =
+    mixAudioContext.createAnalyser();
+
+  masterAnalyserNode.fftSize =
+    2048;
 
   masterRecordDestination =
     mixAudioContext
       .createMediaStreamDestination();
 
-
   vocalsSourceNode.connect(
     vocalsGainNode
   );
-
 
   minusSourceNode.connect(
     minusGainNode
   );
 
-
   vocalsGainNode.connect(
     mixAudioContext.destination
   );
-
 
   minusGainNode.connect(
     mixAudioContext.destination
   );
 
+  vocalsGainNode.connect(
+    masterAnalyserNode
+  );
+
+  minusGainNode.connect(
+    masterAnalyserNode
+  );
 
   vocalsGainNode.connect(
     masterRecordDestination
   );
 
-
   minusGainNode.connect(
     masterRecordDestination
   );
-
 
   vocalsAudio.volume = 1;
   minusAudio.volume = 1;
-
 
   applyMix();
 
@@ -2721,187 +2781,133 @@ function ensureMixAudioGraph() {
 
 recordMasterBtn.addEventListener(
   "click",
-  async () => {
+  startMasterRecording
+);
 
-    if (masterRecording) {
+stopMasterBtn.addEventListener(
+  "click",
+  stopMasterRecording
+);
 
-      stopMasterRecording();
 
-      return;
+async function startMasterRecording() {
 
-    }
+  if (masterRecording) {
+    return;
+  }
 
+  activateMixMode();
 
-    activateMixMode();
+  ensureMixAudioGraph();
 
-    ensureMixAudioGraph();
+  if (
+    mixAudioContext.state === "suspended"
+  ) {
 
-
-    if (
-      mixAudioContext.state === "suspended"
-    ) {
-
-      await mixAudioContext.resume();
-
-    }
-
-
-    const mimeTypes = [
-
-      "audio/webm;codecs=opus",
-
-      "audio/webm",
-
-      "audio/ogg;codecs=opus"
-
-    ];
-
-
-    const mimeType =
-      mimeTypes.find(
-        type =>
-          MediaRecorder
-            .isTypeSupported(type)
-      )
-      || "";
-
-
-    masterRecordChunks =
-      [];
-
-
-    masterRecorder =
-      mimeType
-
-      ? new MediaRecorder(
-          masterRecordDestination.stream,
-          {
-            mimeType
-          }
-        )
-
-      : new MediaRecorder(
-          masterRecordDestination.stream
-        );
-
-
-    masterRecorder.addEventListener(
-      "dataavailable",
-      event => {
-
-        if (
-          event.data
-          &&
-          event.data.size > 0
-        ) {
-
-          masterRecordChunks.push(
-            event.data
-          );
-
-        }
-
-      }
-    );
-
-
-    masterRecorder.addEventListener(
-      "stop",
-      () => {
-
-        const type =
-          masterRecorder.mimeType
-          || "audio/webm";
-
-
-        const blob =
-          new Blob(
-            masterRecordChunks,
-            {
-              type
-            }
-          );
-
-
-        const url =
-          URL.createObjectURL(
-            blob
-          );
-
-
-        const link =
-          document.createElement(
-            "a"
-          );
-
-
-        link.href =
-          url;
-
-
-        link.download =
-          type.includes("ogg")
-          ? "master.ogg"
-          : "master.webm";
-
-
-        document.body.appendChild(
-          link
-        );
-
-
-        link.click();
-
-
-        link.remove();
-
-
-        setTimeout(
-          () =>
-            URL.revokeObjectURL(
-              url
-            ),
-          1000
-        );
-
-
-        status.textContent =
-          "Master saved";
-
-      }
-    );
-
-
-    masterRecorder.start(
-      250
-    );
-
-
-    masterRecording =
-      true;
-
-
-    recordMasterBtn.classList.add(
-      "active"
-    );
-
-
-    recordMasterBtn.textContent =
-      "Stop Recording";
-
-
-    status.textContent =
-      "Recording Master...";
-
-
-    if (!isPlaying) {
-
-      playCurrentMode();
-
-    }
+    await mixAudioContext.resume();
 
   }
-);
+
+  waveformData.master =
+    null;
+
+  masterBlob =
+    null;
+
+  savedMasterBlob =
+    null;
+
+  masterLivePeaks =
+    [];
+
+  clearMasterCanvas();
+
+  const mimeTypes = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/ogg;codecs=opus"
+  ];
+
+  const mimeType =
+    mimeTypes.find(
+      type =>
+        MediaRecorder
+          .isTypeSupported(type)
+    )
+    || "";
+
+  masterRecordChunks =
+    [];
+
+  masterRecorder =
+    mimeType
+    ? new MediaRecorder(
+        masterRecordDestination.stream,
+        { mimeType }
+      )
+    : new MediaRecorder(
+        masterRecordDestination.stream
+      );
+
+  masterRecorder.addEventListener(
+    "dataavailable",
+    event => {
+
+      if (
+        event.data
+        &&
+        event.data.size > 0
+      ) {
+
+        masterRecordChunks.push(
+          event.data
+        );
+
+      }
+
+    }
+  );
+
+  masterRecorder.addEventListener(
+    "stop",
+    finishMasterRecording,
+    { once: true }
+  );
+
+  masterRecorder.start(
+    250
+  );
+
+  masterRecording =
+    true;
+
+  masterRecordStartTime =
+    performance.now();
+
+  recordMasterBtn.disabled =
+    true;
+
+  stopMasterBtn.disabled =
+    false;
+
+  saveMasterBtn.disabled =
+    true;
+
+  saveAsMasterBtn.disabled =
+    true;
+
+  masterState.textContent =
+    "Recording...";
+
+  startMasterWaveformCapture();
+
+  if (!isPlaying) {
+
+    playCurrentMode();
+
+  }
+
+}
 
 
 function stopMasterRecording() {
@@ -2916,21 +2922,535 @@ function stopMasterRecording() {
 
   }
 
-
   masterRecorder.stop();
-
 
   masterRecording =
     false;
 
+  stopMasterWaveformCapture();
 
-  recordMasterBtn.classList.remove(
-    "active"
+  recordMasterBtn.disabled =
+    false;
+
+  stopMasterBtn.disabled =
+    true;
+
+  masterState.textContent =
+    "Processing recording...";
+
+}
+
+
+async function finishMasterRecording() {
+
+  const type =
+    masterRecorder.mimeType
+    || "audio/webm";
+
+  masterBlob =
+    new Blob(
+      masterRecordChunks,
+      { type }
+    );
+
+  try {
+
+    const arrayBuffer =
+      await masterBlob.arrayBuffer();
+
+    const decodeContext =
+      new AudioContext();
+
+    waveformData.master =
+      await decodeContext
+        .decodeAudioData(
+          arrayBuffer.slice(0)
+        );
+
+    await decodeContext.close();
+
+    drawWaveform(
+      canvases.master,
+      timelines.master,
+      waveformData.master
+    );
+
+  }
+
+  catch (error) {
+
+    console.error(
+      "Master waveform decode error:",
+      error
+    );
+
+  }
+
+  masterState.textContent =
+    "Recorded — not saved";
+
+  saveMasterBtn.disabled =
+    false;
+
+  saveAsMasterBtn.disabled =
+    false;
+
+  status.textContent =
+    "Master recording complete";
+
+}
+
+
+// ========================================
+// LIVE MASTER WAVEFORM
+// ========================================
+
+function startMasterWaveformCapture() {
+
+  stopMasterWaveformCapture();
+
+  const samples =
+    new Float32Array(
+      masterAnalyserNode.fftSize
+    );
+
+  const capture =
+    () => {
+
+      if (!masterRecording) {
+        return;
+      }
+
+      masterAnalyserNode
+        .getFloatTimeDomainData(
+          samples
+        );
+
+      let peak =
+        0;
+
+      for (
+        let i = 0;
+        i < samples.length;
+        i++
+      ) {
+
+        peak =
+          Math.max(
+            peak,
+            Math.abs(
+              samples[i]
+            )
+          );
+
+      }
+
+      masterLivePeaks.push(
+        Math.min(
+          1,
+          peak
+        )
+      );
+
+      drawLiveMasterWaveform();
+
+      masterRecordAnimation =
+        requestAnimationFrame(
+          capture
+        );
+
+    };
+
+  capture();
+
+}
+
+
+function stopMasterWaveformCapture() {
+
+  if (masterRecordAnimation) {
+
+    cancelAnimationFrame(
+      masterRecordAnimation
+    );
+
+    masterRecordAnimation =
+      null;
+
+  }
+
+}
+
+
+function drawLiveMasterWaveform() {
+
+  const canvas =
+    canvases.master;
+
+  const timeline =
+    timelines.master;
+
+  const width =
+    getTimelineWidth();
+
+  const height =
+    90;
+
+  timeline.style.width =
+    width + "px";
+
+  canvas.width =
+    width;
+
+  canvas.height =
+    height;
+
+  canvas.style.width =
+    width + "px";
+
+  canvas.style.height =
+    height + "px";
+
+  const context =
+    canvas.getContext("2d");
+
+  context.clearRect(
+    0,
+    0,
+    width,
+    height
+  );
+
+  const elapsed =
+    Math.max(
+      0,
+      (
+        performance.now()
+        - masterRecordStartTime
+      ) / 1000
+    );
+
+  const recordedWidth =
+    Math.min(
+      width,
+      elapsed
+      * pixelsPerSecond
+    );
+
+  if (
+    recordedWidth <= 0
+    ||
+    masterLivePeaks.length === 0
+  ) {
+
+    return;
+
+  }
+
+  const middle =
+    height / 2;
+
+  context.beginPath();
+
+  for (
+    let x = 0;
+    x < recordedWidth;
+    x++
+  ) {
+
+    const index =
+      Math.min(
+        masterLivePeaks.length - 1,
+        Math.floor(
+          x
+          / recordedWidth
+          * masterLivePeaks.length
+        )
+      );
+
+    const peak =
+      masterLivePeaks[index];
+
+    context.moveTo(
+      x,
+      middle
+      - peak * middle
+    );
+
+    context.lineTo(
+      x,
+      middle
+      + peak * middle
+    );
+
+  }
+
+  context.strokeStyle =
+    "#333";
+
+  context.lineWidth =
+    1;
+
+  context.stroke();
+
+}
+
+
+// ========================================
+// SAVE MASTER IN SESSION
+// ========================================
+
+saveMasterBtn.addEventListener(
+  "click",
+  () => {
+
+    if (!masterBlob) {
+
+      status.textContent =
+        "No Master recording";
+
+      return;
+
+    }
+
+    savedMasterBlob =
+      masterBlob;
+
+    masterState.textContent =
+      "Saved in session";
+
+    status.textContent =
+      "Master saved in session";
+
+  }
+);
+
+
+// ========================================
+// SAVE MASTER AS
+// ========================================
+
+saveAsMasterBtn.addEventListener(
+  "click",
+  () => {
+
+    if (
+      !savedMasterBlob
+      &&
+      !masterBlob
+    ) {
+
+      status.textContent =
+        "No Master recording";
+
+      return;
+
+    }
+
+    masterExportDialog
+      .classList.add(
+        "open"
+      );
+
+  }
+);
+
+cancelMasterExportBtn.addEventListener(
+  "click",
+  () => {
+
+    masterExportDialog
+      .classList.remove(
+        "open"
+      );
+
+  }
+);
+
+masterExportDialog.addEventListener(
+  "click",
+  event => {
+
+    if (
+      event.target ===
+      masterExportDialog
+    ) {
+
+      masterExportDialog
+        .classList.remove(
+          "open"
+        );
+
+    }
+
+  }
+);
+
+document
+  .querySelectorAll(
+    "[data-master-format]"
+  )
+  .forEach(
+    button => {
+
+      button.addEventListener(
+        "click",
+        async () => {
+
+          const format =
+            button.dataset
+              .masterFormat;
+
+          masterExportDialog
+            .classList.remove(
+              "open"
+            );
+
+          await exportMaster(
+            format
+          );
+
+        }
+      );
+
+    }
   );
 
 
-  recordMasterBtn.textContent =
-    "Record Master";
+async function exportMaster(
+  format
+) {
+
+  const blob =
+    savedMasterBlob
+    || masterBlob;
+
+  if (!blob) {
+
+    status.textContent =
+      "No Master recording";
+
+    return;
+
+  }
+
+  const formData =
+    new FormData();
+
+  formData.append(
+    "master",
+    blob,
+    "master.webm"
+  );
+
+  formData.append(
+    "format",
+    format
+  );
+
+  saveAsMasterBtn.disabled =
+    true;
+
+  status.textContent =
+    "Exporting Master as "
+    + format.toUpperCase()
+    + "...";
+
+  try {
+
+    const response =
+      await fetch(
+        "/export-master",
+        {
+          method: "POST",
+          body: formData
+        }
+      );
+
+    if (!response.ok) {
+
+      let message =
+        "Master export failed";
+
+      try {
+
+        const data =
+          await response.json();
+
+        message =
+          data.error
+          || message;
+
+      }
+
+      catch {}
+
+      throw new Error(
+        message
+      );
+
+    }
+
+    const exportBlob =
+      await response.blob();
+
+    const url =
+      URL.createObjectURL(
+        exportBlob
+      );
+
+    const link =
+      document.createElement(
+        "a"
+      );
+
+    link.href =
+      url;
+
+    link.download =
+      "master."
+      + format;
+
+    document.body.appendChild(
+      link
+    );
+
+    link.click();
+
+    link.remove();
+
+    setTimeout(
+      () =>
+        URL.revokeObjectURL(
+          url
+        ),
+      1000
+    );
+
+    status.textContent =
+      "Master exported as "
+      + format.toUpperCase();
+
+  }
+
+  catch (error) {
+
+    console.error(
+      error
+    );
+
+    status.textContent =
+      "Export error: "
+      + error.message;
+
+  }
+
+  finally {
+
+    saveAsMasterBtn.disabled =
+      false;
+
+  }
 
 }
 
@@ -3835,8 +4355,14 @@ function resetTransport() {
 ======================================== -->
 
 <div id="service-console">
-Proccesing..
-   | 1.5.0
+До записи waveform пустой.
+Record начинает писать текущий Mix с учётом Volume / Mute / Solo.
+Волна Master растёт прямо во время записи.
+Stop завершает запись, но ничего автоматически не скачивает.
+Save сохраняет Master внутри текущей сессии.
+Save As... предлагает только:
+WAV, MP3, FLAC, M4A.
+   | 1.6.0
 </div>
 
 <div class="row" id="build-down">
