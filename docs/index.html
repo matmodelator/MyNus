@@ -679,6 +679,10 @@
         Mix
       </button>
 
+      <button id="masterModeBtn">
+        Master
+      </button>
+
       <button id="startBtn">
         |&lt;
       </button>
@@ -699,7 +703,7 @@
         id="timeDisplay"
         class="time-display"
       >
-        00:00.00 / 00:00.00
+        00:00.00 / 00:00.00 / -00:00.00
       </div>
 
     </div>
@@ -1025,6 +1029,7 @@
 <audio id="originalAudio"></audio>
 <audio id="vocalsAudio"></audio>
 <audio id="minusAudio"></audio>
+<audio id="masterAudio"></audio>
 
 
 <script>
@@ -1066,6 +1071,9 @@ const originalModeBtn =
 
 const mixModeBtn =
   document.getElementById("mixModeBtn");
+
+const masterModeBtn =
+  document.getElementById("masterModeBtn");
 
 const recordMasterBtn =
   document.getElementById("recordMasterBtn");
@@ -1111,6 +1119,9 @@ const vocalsAudio =
 
 const minusAudio =
   document.getElementById("minusAudio");
+
+const masterAudio =
+  document.getElementById("masterAudio");
 
 const vocalsMuteBtn =
   document.getElementById("vocalsMuteBtn");
@@ -1283,9 +1294,12 @@ let masterRecording = false;
 
 let masterBlob = null;
 let savedMasterBlob = null;
+let masterObjectURL = null;
 let masterRecordStartTime = 0;
+let masterRecordTimelineStart = 0;
 let masterRecordAnimation = null;
 let masterLivePeaks = [];
+let masterDuration = 0;
 
 
 // ========================================
@@ -1869,11 +1883,19 @@ function drawAllWaveforms() {
   );
 
 
-  drawWaveform(
-    canvases.master,
-    timelines.master,
+  if (
     waveformData.master
-  );
+  ) {
+
+    drawRecordedMasterWaveform();
+
+  }
+
+  else {
+
+    clearMasterCanvas();
+
+  }
 
 
   updatePlayheads();
@@ -2234,6 +2256,14 @@ function playCurrentMode() {
 
   }
 
+  else if (
+    mode === "master"
+  ) {
+
+    masterAudio.play();
+
+  }
+
   else {
 
     ensureMixAudioGraph();
@@ -2275,6 +2305,8 @@ function pauseAll() {
   vocalsAudio.pause();
 
   minusAudio.pause();
+
+  masterAudio.pause();
 
 
   isPlaying =
@@ -2389,6 +2421,27 @@ mixModeBtn.addEventListener(
 );
 
 
+masterModeBtn.addEventListener(
+  "click",
+  () => {
+
+    if (!masterBlob) {
+
+      status.textContent =
+        "Master is empty";
+
+      return;
+
+    }
+
+    switchMode(
+      "master"
+    );
+
+  }
+);
+
+
 function switchMode(
   newMode
 ) {
@@ -2416,6 +2469,8 @@ function switchMode(
 
   minusAudio.pause();
 
+  masterAudio.pause();
+
 
   mode =
     newMode;
@@ -2433,6 +2488,12 @@ function switchMode(
   );
 
 
+  masterModeBtn.classList.toggle(
+    "active",
+    mode === "master"
+  );
+
+
   syncAllTo(
     time
   );
@@ -2447,6 +2508,14 @@ function switchMode(
     ) {
 
       originalAudio.play();
+
+    }
+
+    else if (
+      mode === "master"
+    ) {
+
+      masterAudio.play();
 
     }
 
@@ -2884,6 +2953,9 @@ async function startMasterRecording() {
   masterRecordStartTime =
     performance.now();
 
+  masterRecordTimelineStart =
+    getCurrentTime();
+
   recordMasterBtn.disabled =
     true;
 
@@ -2953,6 +3025,35 @@ async function finishMasterRecording() {
       { type }
     );
 
+
+  if (masterObjectURL) {
+
+    URL.revokeObjectURL(
+      masterObjectURL
+    );
+
+  }
+
+
+  masterObjectURL =
+    URL.createObjectURL(
+      masterBlob
+    );
+
+
+  masterAudio.src =
+    masterObjectURL;
+
+
+  await waitForMetadata(
+    masterAudio
+  );
+
+
+  masterDuration =
+    masterAudio.duration;
+
+
   try {
 
     const arrayBuffer =
@@ -2969,11 +3070,7 @@ async function finishMasterRecording() {
 
     await decodeContext.close();
 
-    drawWaveform(
-      canvases.master,
-      timelines.master,
-      waveformData.master
-    );
+    drawRecordedMasterWaveform();
 
   }
 
@@ -2997,6 +3094,192 @@ async function finishMasterRecording() {
 
   status.textContent =
     "Master recording complete";
+
+}
+
+
+function drawRecordedMasterWaveform() {
+
+  const audioBuffer =
+    waveformData.master;
+
+
+  if (!audioBuffer) {
+
+    clearMasterCanvas();
+
+    return;
+
+  }
+
+
+  const canvas =
+    canvases.master;
+
+
+  const timeline =
+    timelines.master;
+
+
+  const width =
+    getTimelineWidth();
+
+
+  const height =
+    90;
+
+
+  timeline.style.width =
+    width + "px";
+
+
+  canvas.width =
+    width;
+
+
+  canvas.height =
+    height;
+
+
+  canvas.style.width =
+    width + "px";
+
+
+  canvas.style.height =
+    height + "px";
+
+
+  const context =
+    canvas.getContext("2d");
+
+
+  context.clearRect(
+    0,
+    0,
+    width,
+    height
+  );
+
+
+  const samples =
+    audioBuffer.getChannelData(0);
+
+
+  const recordWidth =
+    Math.max(
+      1,
+      Math.ceil(
+        audioBuffer.duration
+        * pixelsPerSecond
+      )
+    );
+
+
+  const startX =
+    masterRecordTimelineStart
+    * pixelsPerSecond;
+
+
+  const step =
+    Math.max(
+      1,
+      Math.floor(
+        samples.length
+        / recordWidth
+      )
+    );
+
+
+  const middle =
+    height / 2;
+
+
+  context.beginPath();
+
+
+  for (
+    let x = 0;
+    x < recordWidth;
+    x++
+  ) {
+
+    const drawX =
+      startX + x;
+
+
+    if (drawX >= width) {
+      break;
+    }
+
+
+    const sampleStart =
+      x * step;
+
+
+    let min =
+      1;
+
+
+    let max =
+      -1;
+
+
+    for (
+      let i = 0;
+      i < step;
+      i++
+    ) {
+
+      const sample =
+        samples[
+          sampleStart + i
+        ];
+
+
+      if (
+        sample === undefined
+      ) {
+
+        break;
+
+      }
+
+
+      if (sample < min) {
+        min = sample;
+      }
+
+
+      if (sample > max) {
+        max = sample;
+      }
+
+    }
+
+
+    context.moveTo(
+      drawX,
+      middle + min * middle
+    );
+
+
+    context.lineTo(
+      drawX,
+      middle + max * middle
+    );
+
+  }
+
+
+  context.strokeStyle =
+    "#333";
+
+
+  context.lineWidth =
+    1;
+
+
+  context.stroke();
 
 }
 
@@ -3087,32 +3370,42 @@ function drawLiveMasterWaveform() {
   const canvas =
     canvases.master;
 
+
   const timeline =
     timelines.master;
+
 
   const width =
     getTimelineWidth();
 
+
   const height =
     90;
+
 
   timeline.style.width =
     width + "px";
 
+
   canvas.width =
     width;
+
 
   canvas.height =
     height;
 
+
   canvas.style.width =
     width + "px";
+
 
   canvas.style.height =
     height + "px";
 
+
   const context =
     canvas.getContext("2d");
+
 
   context.clearRect(
     0,
@@ -3120,6 +3413,16 @@ function drawLiveMasterWaveform() {
     width,
     height
   );
+
+
+  if (
+    masterLivePeaks.length === 0
+  ) {
+
+    return;
+
+  }
+
 
   const elapsed =
     Math.max(
@@ -3130,27 +3433,41 @@ function drawLiveMasterWaveform() {
       ) / 1000
     );
 
-  const recordedWidth =
+
+  const startX =
+    masterRecordTimelineStart
+    * pixelsPerSecond;
+
+
+  const endX =
     Math.min(
       width,
-      elapsed
+      (
+        masterRecordTimelineStart
+        + elapsed
+      )
       * pixelsPerSecond
     );
 
-  if (
-    recordedWidth <= 0
-    ||
-    masterLivePeaks.length === 0
-  ) {
 
+  const recordedWidth =
+    Math.max(
+      0,
+      endX - startX
+    );
+
+
+  if (recordedWidth <= 0) {
     return;
-
   }
+
 
   const middle =
     height / 2;
 
+
   context.beginPath();
+
 
   for (
     let x = 0;
@@ -3168,32 +3485,43 @@ function drawLiveMasterWaveform() {
         )
       );
 
+
     const peak =
       masterLivePeaks[index];
 
+
+    const drawX =
+      startX + x;
+
+
     context.moveTo(
-      x,
+      drawX,
       middle
       - peak * middle
     );
 
+
     context.lineTo(
-      x,
+      drawX,
       middle
       + peak * middle
     );
 
   }
 
+
   context.strokeStyle =
     "#333";
+
 
   context.lineWidth =
     1;
 
+
   context.stroke();
 
 }
+
 
 
 // ========================================
@@ -3474,6 +3802,19 @@ function getCurrentTime() {
   }
 
 
+  if (
+    mode === "master"
+  ) {
+
+    return (
+      masterAudio.currentTime
+      ||
+      0
+    );
+
+  }
+
+
   return (
     minusAudio.currentTime
     ||
@@ -3507,6 +3848,26 @@ function syncAllTo(
 
   minusAudio.currentTime =
     safeTime;
+
+
+  if (
+    masterBlob
+    &&
+    Number.isFinite(
+      masterAudio.duration
+    )
+  ) {
+
+    masterAudio.currentTime =
+      Math.max(
+        0,
+        Math.min(
+          safeTime,
+          masterAudio.duration || 0
+        )
+      );
+
+  }
 
 }
 
@@ -3865,16 +4226,33 @@ function formatShortTime(
 
 function updateTimeDisplay() {
 
+  const current =
+    getCurrentTime();
+
+
+  const remaining =
+    Math.max(
+      0,
+      duration - current
+    );
+
+
   timeDisplay.textContent =
 
     formatTime(
-      getCurrentTime()
+      current
     )
 
     + " / "
 
     + formatTime(
       duration
+    )
+
+    + " / -"
+
+    + formatTime(
+      remaining
     );
 
 }
@@ -3913,8 +4291,21 @@ function startAnimation() {
 
 
       if (
-        getCurrentTime()
-        >= duration
+        (
+          mode === "master"
+          &&
+          masterDuration > 0
+          &&
+          getCurrentTime()
+          >= masterDuration
+        )
+        ||
+        (
+          mode !== "master"
+          &&
+          getCurrentTime()
+          >= duration
+        )
       ) {
 
         pauseAll();
@@ -4282,6 +4673,11 @@ function resetTransport() {
   );
 
 
+  masterModeBtn.classList.remove(
+    "active"
+  );
+
+
   vocalsMuted =
     false;
 
@@ -4355,14 +4751,11 @@ function resetTransport() {
 ======================================== -->
 
 <div id="service-console">
-До записи waveform пустой.
-Record начинает писать текущий Mix с учётом Volume / Mute / Solo.
-Волна Master растёт прямо во время записи.
-Stop завершает запись, но ничего автоматически не скачивает.
-Save сохраняет Master внутри текущей сессии.
-Save As... предлагает только:
-WAV, MP3, FLAC, M4A.
-   | 1.6.0
+Master-waveform не растягивается на всю песню.
+В верхнее меню добавлена кнопка Master для проигрывания записанного мастера.
+Таймер теперь показывает:
+current / total / remaining
+   | 1.7.0
 </div>
 
 <div class="row" id="build-down">
