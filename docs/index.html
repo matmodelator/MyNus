@@ -1478,9 +1478,6 @@ splitBtn.addEventListener(
       "Separating...";
 
 
-    resetMaster();
-
-
     try {
 
       if (originalFileURL) {
@@ -1551,6 +1548,9 @@ splitBtn.addEventListener(
 
       const jobId =
         startData.job_id;
+
+
+      resetMaster();
 
 
       const data =
@@ -1928,24 +1928,82 @@ function resetMaster() {
   masterLivePeaks =
     [];
 
-  drawMasterCompositeWaveform();
+
+  masterSegments =
+    [];
+
+
+  waveformData.master =
+    null;
+
+
+  masterBlob =
+    null;
+
+
+  savedMasterBlob =
+    null;
+
+
+  masterDuration =
+    0;
+
+
+  if (masterObjectURL) {
+
+    URL.revokeObjectURL(
+      masterObjectURL
+    );
+
+
+    masterObjectURL =
+      null;
+
+  }
+
+
+  masterAudio.pause();
+
+
+  masterAudio.removeAttribute(
+    "src"
+  );
+
+
+  masterAudio.load();
+
+
+  clearMasterCanvas();
+
+
+  clearSelection();
+
 
   masterState.textContent =
     "Empty";
 
+
   recordMasterBtn.disabled =
     false;
+
 
   stopMasterBtn.disabled =
     true;
 
+
   saveMasterBtn.disabled =
     true;
+
 
   saveAsMasterBtn.disabled =
     true;
 
+
+  saveMasterSelectionBtn.disabled =
+    true;
+
 }
+
 
 
 // ========================================
@@ -5654,13 +5712,8 @@ updateSelectionButtons();
 ======================================== -->
 
 <div id="service-console">
-каждая запись Master сохраняется как отдельный фрагмент со своим абсолютным тайм-кодом. После Stop из всех фрагментов собирается полноценная Master-дорожка длиной во всю песню: 
-  до первого записанного участка — тишина, между раздельными записями — тишина, сами фрагменты лежат строго на своих местах. Поэтому при переключении на Master проигрывание теперь идёт по тому же сквозному тайм-коду, что Original/Vocals/Instrumental.
-Добавил выделение диапазона на нижней Timeline: протягиваешь мышью участок — он становится Selection. Это одно общее выделение по сквозному времени для всех дорожек.
-Для Original, Vocals и Instrumental добавлены:
-Save As...
-Save Selection
-   | 1.8.0
+fix separation
+   | 1.8.1
 </div>
 
 <div class="row" id="build-down">
