@@ -1,7 +1,6 @@
 # ========================================
-# Processing типо 1.1.0.
+# Version: WAV/MP3/FLAC/M4A конвертируются сервером через FFmpeg | 1.2.0
 # ========================================
-
 
 
 # ========================================
@@ -15,7 +14,13 @@ import subprocess
 import threading
 import uuid
 
-from flask import Flask, request, jsonify, send_from_directory
+from flask import (
+    Flask,
+    request,
+    jsonify,
+    send_from_directory,
+    send_file
+)
 from werkzeug.utils import secure_filename
 
 
@@ -29,9 +34,11 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 RESULT_DIR = os.path.join(BASE_DIR, "results")
+EXPORT_DIR = os.path.join(BASE_DIR, "exports")
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(RESULT_DIR, exist_ok=True)
+os.makedirs(EXPORT_DIR, exist_ok=True)
 
 
 # ========================================
@@ -196,18 +203,10 @@ def run_demucs(
 
             print(line, end="")
 
-
-            # Demucs / tqdm outputs values such as:
-            #
-            # 23%
-            # 51%
-            # 100%
-
             matches = re.findall(
                 r"(\d{1,3})%",
                 line
             )
-
 
             if matches:
 
@@ -222,7 +221,6 @@ def run_demucs(
                         percent
                     )
                 )
-
 
                 jobs[job_id]["progress"] = (
                     percent
@@ -346,11 +344,9 @@ def run_demucs(
 
         print(error)
 
-
         jobs[job_id]["status"] = (
             "error"
         )
-
 
         jobs[job_id]["error"] = str(
             error
@@ -398,6 +394,185 @@ def result_file(
         folder,
         filename
     )
+
+
+# ========================================
+# MASTER EXPORT
+# ========================================
+
+@app.route(
+    "/export-master",
+    methods=["POST"]
+)
+def export_master():
+
+    if "master" not in request.files:
+
+        return jsonify({
+            "error": "Master recording not received"
+        }), 400
+
+
+    export_format = (
+        request.form
+        .get("format", "")
+        .lower()
+    )
+
+
+    allowed_formats = {
+        "wav",
+        "mp3",
+        "flac",
+        "m4a"
+    }
+
+
+    if export_format not in allowed_formats:
+
+        return jsonify({
+            "error": "Unsupported export format"
+        }), 400
+
+
+    master = request.files["master"]
+
+
+    export_id = str(
+        uuid.uuid4()
+    )
+
+
+    export_job_dir = os.path.join(
+        EXPORT_DIR,
+        export_id
+    )
+
+
+    os.makedirs(
+        export_job_dir,
+        exist_ok=True
+    )
+
+
+    input_path = os.path.join(
+        export_job_dir,
+        "master-input.webm"
+    )
+
+
+    output_path = os.path.join(
+        export_job_dir,
+        "master." + export_format
+    )
+
+
+    master.save(
+        input_path
+    )
+
+
+    command = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        input_path
+    ]
+
+
+    if export_format == "wav":
+
+        command += [
+            "-c:a",
+            "pcm_s24le"
+        ]
+
+
+    elif export_format == "mp3":
+
+        command += [
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "320k"
+        ]
+
+
+    elif export_format == "flac":
+
+        command += [
+            "-c:a",
+            "flac"
+        ]
+
+
+    elif export_format == "m4a":
+
+        command += [
+            "-c:a",
+            "aac",
+            "-b:a",
+            "256k"
+        ]
+
+
+    command.append(
+        output_path
+    )
+
+
+    try:
+
+        process = subprocess.run(
+
+            command,
+
+            capture_output=True,
+
+            text=True
+        )
+
+
+        if process.returncode != 0:
+
+            print(process.stdout)
+            print(process.stderr)
+
+            return jsonify({
+                "error": "FFmpeg export failed",
+                "details": process.stderr
+            }), 500
+
+
+        return send_file(
+
+            output_path,
+
+            as_attachment=True,
+
+            download_name=(
+                "master."
+                + export_format
+            )
+
+        )
+
+
+    except FileNotFoundError:
+
+        return jsonify({
+            "error":
+                "FFmpeg not found. Add FFmpeg to PATH."
+        }), 500
+
+
+    except Exception as error:
+
+        print(error)
+
+        return jsonify({
+            "error": str(error)
+        }), 500
 
 
 # ========================================
