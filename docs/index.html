@@ -210,6 +210,8 @@
       position: sticky;
       top: 12px;
 
+      margin-top: 96px;
+
       padding: 12px;
 
       background: #f5f5f5;
@@ -695,6 +697,7 @@
 
       .fx-panel {
         position: static;
+        margin-top: 0;
       }
 
     }
@@ -1206,10 +1209,14 @@
         <div class="fx-target-row">
 
           <button
-            id="fxTargetMixBtn"
+            id="fxTargetVocalsBtn"
             class="active"
           >
-            Mix
+            Vocals
+          </button>
+
+          <button id="fxTargetMinusBtn">
+            Instrumental
           </button>
 
           <button id="fxTargetMasterBtn">
@@ -1604,8 +1611,11 @@ const masterState =
   document.getElementById("masterState");
 
 
-const fxTargetMixBtn =
-  document.getElementById("fxTargetMixBtn");
+const fxTargetVocalsBtn =
+  document.getElementById("fxTargetVocalsBtn");
+
+const fxTargetMinusBtn =
+  document.getElementById("fxTargetMinusBtn");
 
 const fxTargetMasterBtn =
   document.getElementById("fxTargetMasterBtn");
@@ -1924,82 +1934,76 @@ let currentMinusURL = null;
 
 
 let fxTarget =
-  "mix";
+  "vocals";
 
 const fxSettings = {
 
-  mix: {
-    eqLow: 0,
-    eqLowMid: 0,
-    eqMid: 0,
-    eqHighMid: 0,
-    eqHigh: 0,
-    compressorOn: true,
-    compressorThreshold: -18,
-    compressorRatio: 4,
-    reverbOn: false,
-    reverbAmount: 20,
-    delayOn: false,
-    delayTime: 220,
-    delayFeedback: 25,
-    limiterOn: true,
-    limiterCeiling: -0.5,
-    outputGain: 0
+  vocals: {
+    eqLow: 0, eqLowMid: 0, eqMid: 0, eqHighMid: 0, eqHigh: 0,
+    compressorOn: true, compressorThreshold: -18, compressorRatio: 4,
+    reverbOn: false, reverbAmount: 20,
+    delayOn: false, delayTime: 220, delayFeedback: 25,
+    limiterOn: true, limiterCeiling: -0.5, outputGain: 0
+  },
+
+  minus: {
+    eqLow: 0, eqLowMid: 0, eqMid: 0, eqHighMid: 0, eqHigh: 0,
+    compressorOn: true, compressorThreshold: -18, compressorRatio: 4,
+    reverbOn: false, reverbAmount: 20,
+    delayOn: false, delayTime: 220, delayFeedback: 25,
+    limiterOn: true, limiterCeiling: -0.5, outputGain: 0
   },
 
   master: {
-    eqLow: 0,
-    eqLowMid: 0,
-    eqMid: 0,
-    eqHighMid: 0,
-    eqHigh: 0,
-    compressorOn: true,
-    compressorThreshold: -18,
-    compressorRatio: 4,
-    reverbOn: false,
-    reverbAmount: 20,
-    delayOn: false,
-    delayTime: 220,
-    delayFeedback: 25,
-    limiterOn: true,
-    limiterCeiling: -0.5,
-    outputGain: 0
+    eqLow: 0, eqLowMid: 0, eqMid: 0, eqHighMid: 0, eqHigh: 0,
+    compressorOn: true, compressorThreshold: -18, compressorRatio: 4,
+    reverbOn: false, reverbAmount: 20,
+    delayOn: false, delayTime: 220, delayFeedback: 25,
+    limiterOn: true, limiterCeiling: -0.5, outputGain: 0
   }
 
 };
 
-let mixFxInput = null;
+let vocalsFxInput = null;
+let minusFxInput = null;
 let masterFxInput = null;
 
-let mixEqNodes = [];
+let vocalsEqNodes = [];
+let minusEqNodes = [];
 let masterEqNodes = [];
 
-let mixCompressorNode = null;
+let vocalsCompressorNode = null;
+let minusCompressorNode = null;
 let masterCompressorNode = null;
 
-let mixReverbNode = null;
-let masterReverbNode = null;
-
-let mixReverbDryGain = null;
-let mixReverbWetGain = null;
+let vocalsReverbDryGain = null;
+let vocalsReverbWetGain = null;
+let minusReverbDryGain = null;
+let minusReverbWetGain = null;
 let masterReverbDryGain = null;
 let masterReverbWetGain = null;
 
-let mixDelayNode = null;
+let vocalsDelayNode = null;
+let minusDelayNode = null;
 let masterDelayNode = null;
 
-let mixDelayFeedbackGain = null;
+let vocalsDelayFeedbackGain = null;
+let minusDelayFeedbackGain = null;
 let masterDelayFeedbackGain = null;
 
-let mixDelayDryGain = null;
-let mixDelayWetGain = null;
+let vocalsDelayDryGain = null;
+let vocalsDelayWetGain = null;
+let minusDelayDryGain = null;
+let minusDelayWetGain = null;
 let masterDelayDryGain = null;
 let masterDelayWetGain = null;
 
-let mixLimiterNode = null;
+let vocalsLimiterNode = null;
+let minusLimiterNode = null;
 let masterLimiterNode = null;
 
-let mixFxOutputGainNode = null;
+let vocalsFxOutputGainNode = null;
+let minusFxOutputGainNode = null;
 let masterFxOutputGainNode = null;
 
 let masterSourceNode = null;
@@ -3033,6 +3037,9 @@ function playCurrentMode() {
 
     applyMix();
 
+    applyFxSettings("vocals");
+    applyFxSettings("minus");
+
     vocalsAudio.play();
 
     minusAudio.play();
@@ -3303,6 +3310,9 @@ function switchMode(
 
       applyMix();
 
+      applyFxSettings("vocals");
+      applyFxSettings("minus");
+
       vocalsAudio.play();
 
       minusAudio.play();
@@ -3541,12 +3551,24 @@ function applyMix() {
 // EQ / EFFECTS PANEL
 // ========================================
 
-fxTargetMixBtn.addEventListener(
+fxTargetVocalsBtn.addEventListener(
   "click",
   () => {
 
     setFxTarget(
-      "mix"
+      "vocals"
+    );
+
+  }
+);
+
+
+fxTargetMinusBtn.addEventListener(
+  "click",
+  () => {
+
+    setFxTarget(
+      "minus"
     );
 
   }
@@ -3573,10 +3595,17 @@ function setFxTarget(
     target;
 
 
-  fxTargetMixBtn
+  fxTargetVocalsBtn
     .classList.toggle(
       "active",
-      target === "mix"
+      target === "vocals"
+    );
+
+
+  fxTargetMinusBtn
+    .classList.toggle(
+      "active",
+      target === "minus"
     );
 
 
@@ -4005,92 +4034,79 @@ function ensureMixAudioGraph() {
     return;
   }
 
-
   mixAudioContext =
     new AudioContext();
 
-
   vocalsSourceNode =
-    mixAudioContext
-      .createMediaElementSource(
-        vocalsAudio
-      );
-
+    mixAudioContext.createMediaElementSource(
+      vocalsAudio
+    );
 
   minusSourceNode =
-    mixAudioContext
-      .createMediaElementSource(
-        minusAudio
-      );
-
+    mixAudioContext.createMediaElementSource(
+      minusAudio
+    );
 
   masterSourceNode =
-    mixAudioContext
-      .createMediaElementSource(
-        masterAudio
-      );
-
+    mixAudioContext.createMediaElementSource(
+      masterAudio
+    );
 
   vocalsGainNode =
     mixAudioContext.createGain();
 
-
   minusGainNode =
     mixAudioContext.createGain();
-
 
   masterAnalyserNode =
     mixAudioContext.createAnalyser();
 
-
   masterAnalyserNode.fftSize =
     2048;
 
-
   masterRecordDestination =
-    mixAudioContext
-      .createMediaStreamDestination();
+    mixAudioContext.createMediaStreamDestination();
 
-
-  mixFxInput =
+  vocalsFxInput =
     mixAudioContext.createGain();
 
+  minusFxInput =
+    mixAudioContext.createGain();
 
   masterFxInput =
     mixAudioContext.createGain();
-
 
   vocalsSourceNode.connect(
     vocalsGainNode
   );
 
-
   minusSourceNode.connect(
     minusGainNode
   );
 
-
   vocalsGainNode.connect(
-    mixFxInput
+    vocalsFxInput
   );
-
 
   minusGainNode.connect(
-    mixFxInput
+    minusFxInput
   );
-
 
   masterSourceNode.connect(
     masterFxInput
   );
 
-
-  const mixChain =
+  const vocalsChain =
     createFxChain(
-      mixFxInput,
-      "mix"
+      vocalsFxInput,
+      "vocals"
     );
 
+  const minusChain =
+    createFxChain(
+      minusFxInput,
+      "minus"
+    );
 
   const masterChain =
     createFxChain(
@@ -4098,41 +4114,43 @@ function ensureMixAudioGraph() {
       "master"
     );
 
-
-  mixChain.output.connect(
+  vocalsChain.output.connect(
     mixAudioContext.destination
   );
 
+  minusChain.output.connect(
+    mixAudioContext.destination
+  );
 
   masterChain.output.connect(
     mixAudioContext.destination
   );
 
-
-  mixChain.output.connect(
+  vocalsChain.output.connect(
     masterAnalyserNode
   );
 
+  minusChain.output.connect(
+    masterAnalyserNode
+  );
 
-  mixChain.output.connect(
+  vocalsChain.output.connect(
     masterRecordDestination
   );
 
+  minusChain.output.connect(
+    masterRecordDestination
+  );
 
   vocalsAudio.volume = 1;
   minusAudio.volume = 1;
   masterAudio.volume = 1;
 
-
   applyMix();
 
-  applyFxSettings(
-    "mix"
-  );
-
-  applyFxSettings(
-    "master"
-  );
+  applyFxSettings("vocals");
+  applyFxSettings("minus");
+  applyFxSettings("master");
 
 }
 
@@ -4142,76 +4160,40 @@ function createFxChain(
   target
 ) {
 
-  const eqDefinitions = [
-
-    {
-      type: "lowshelf",
-      frequency: 80
-    },
-
-    {
-      type: "peaking",
-      frequency: 250,
-      Q: 1
-    },
-
-    {
-      type: "peaking",
-      frequency: 1000,
-      Q: 1
-    },
-
-    {
-      type: "peaking",
-      frequency: 4000,
-      Q: 1
-    },
-
-    {
-      type: "highshelf",
-      frequency: 12000
-    }
-
+  const definitions = [
+    ["lowshelf", 80, 0],
+    ["peaking", 250, 1],
+    ["peaking", 1000, 1],
+    ["peaking", 4000, 1],
+    ["highshelf", 12000, 0]
   ];
 
-
   const eqNodes =
-    eqDefinitions.map(
-      definition => {
+    definitions.map(
+      item => {
 
-        const filter =
-          mixAudioContext
-            .createBiquadFilter();
+        const node =
+          mixAudioContext.createBiquadFilter();
 
+        node.type =
+          item[0];
 
-        filter.type =
-          definition.type;
+        node.frequency.value =
+          item[1];
 
-
-        filter.frequency.value =
-          definition.frequency;
-
-
-        if (
-          definition.Q !== undefined
-        ) {
-
-          filter.Q.value =
-            definition.Q;
-
+        if (item[2]) {
+          node.Q.value =
+            item[2];
         }
 
-
-        return filter;
+        return node;
 
       }
     );
 
-
   inputNode.connect(
     eqNodes[0]
   );
-
 
   for (
     let i = 0;
@@ -4225,11 +4207,8 @@ function createFxChain(
 
   }
 
-
   const compressor =
-    mixAudioContext
-      .createDynamicsCompressor();
-
+    mixAudioContext.createDynamicsCompressor();
 
   eqNodes[
     eqNodes.length - 1
@@ -4237,23 +4216,11 @@ function createFxChain(
     compressor
   );
 
-
-  const reverbInput =
-    mixAudioContext.createGain();
-
-
-  compressor.connect(
-    reverbInput
-  );
-
-
   const reverbDry =
     mixAudioContext.createGain();
 
-
   const convolver =
     mixAudioContext.createConvolver();
-
 
   convolver.buffer =
     createImpulseResponse(
@@ -4262,213 +4229,144 @@ function createFxChain(
       2.5
     );
 
-
   const reverbWet =
     mixAudioContext.createGain();
 
+  const reverbSum =
+    mixAudioContext.createGain();
 
-  reverbInput.connect(
+  compressor.connect(
     reverbDry
   );
 
-
-  reverbInput.connect(
+  compressor.connect(
     convolver
   );
-
 
   convolver.connect(
     reverbWet
   );
 
-
-  const reverbSum =
-    mixAudioContext.createGain();
-
-
   reverbDry.connect(
     reverbSum
   );
-
 
   reverbWet.connect(
     reverbSum
   );
 
-
-  const delayInput =
-    mixAudioContext.createGain();
-
-
-  reverbSum.connect(
-    delayInput
-  );
-
-
   const delayDry =
     mixAudioContext.createGain();
-
 
   const delay =
     mixAudioContext.createDelay(
       2
     );
 
-
   const delayFeedback =
     mixAudioContext.createGain();
-
 
   const delayWet =
     mixAudioContext.createGain();
 
+  const delaySum =
+    mixAudioContext.createGain();
 
-  delayInput.connect(
+  reverbSum.connect(
     delayDry
   );
 
-
-  delayInput.connect(
+  reverbSum.connect(
     delay
   );
-
 
   delay.connect(
     delayFeedback
   );
 
-
   delayFeedback.connect(
     delay
   );
-
 
   delay.connect(
     delayWet
   );
 
-
-  const delaySum =
-    mixAudioContext.createGain();
-
-
   delayDry.connect(
     delaySum
   );
-
 
   delayWet.connect(
     delaySum
   );
 
-
   const limiter =
-    mixAudioContext
-      .createDynamicsCompressor();
-
+    mixAudioContext.createDynamicsCompressor();
 
   limiter.ratio.value =
     20;
 
-
   limiter.attack.value =
     0.003;
 
-
   limiter.release.value =
     0.05;
-
 
   delaySum.connect(
     limiter
   );
 
-
   const outputGain =
     mixAudioContext.createGain();
-
 
   limiter.connect(
     outputGain
   );
 
+  if (target === "vocals") {
 
-  if (
-    target === "mix"
-  ) {
+    vocalsEqNodes = eqNodes;
+    vocalsCompressorNode = compressor;
+    vocalsReverbDryGain = reverbDry;
+    vocalsReverbWetGain = reverbWet;
+    vocalsDelayNode = delay;
+    vocalsDelayFeedbackGain = delayFeedback;
+    vocalsDelayDryGain = delayDry;
+    vocalsDelayWetGain = delayWet;
+    vocalsLimiterNode = limiter;
+    vocalsFxOutputGainNode = outputGain;
 
-    mixEqNodes =
-      eqNodes;
+  }
 
-    mixCompressorNode =
-      compressor;
+  else if (target === "minus") {
 
-    mixReverbNode =
-      convolver;
-
-    mixReverbDryGain =
-      reverbDry;
-
-    mixReverbWetGain =
-      reverbWet;
-
-    mixDelayNode =
-      delay;
-
-    mixDelayFeedbackGain =
-      delayFeedback;
-
-    mixDelayDryGain =
-      delayDry;
-
-    mixDelayWetGain =
-      delayWet;
-
-    mixLimiterNode =
-      limiter;
-
-    mixFxOutputGainNode =
-      outputGain;
+    minusEqNodes = eqNodes;
+    minusCompressorNode = compressor;
+    minusReverbDryGain = reverbDry;
+    minusReverbWetGain = reverbWet;
+    minusDelayNode = delay;
+    minusDelayFeedbackGain = delayFeedback;
+    minusDelayDryGain = delayDry;
+    minusDelayWetGain = delayWet;
+    minusLimiterNode = limiter;
+    minusFxOutputGainNode = outputGain;
 
   }
 
   else {
 
-    masterEqNodes =
-      eqNodes;
-
-    masterCompressorNode =
-      compressor;
-
-    masterReverbNode =
-      convolver;
-
-    masterReverbDryGain =
-      reverbDry;
-
-    masterReverbWetGain =
-      reverbWet;
-
-    masterDelayNode =
-      delay;
-
-    masterDelayFeedbackGain =
-      delayFeedback;
-
-    masterDelayDryGain =
-      delayDry;
-
-    masterDelayWetGain =
-      delayWet;
-
-    masterLimiterNode =
-      limiter;
-
-    masterFxOutputGainNode =
-      outputGain;
+    masterEqNodes = eqNodes;
+    masterCompressorNode = compressor;
+    masterReverbDryGain = reverbDry;
+    masterReverbWetGain = reverbWet;
+    masterDelayNode = delay;
+    masterDelayFeedbackGain = delayFeedback;
+    masterDelayDryGain = delayDry;
+    masterDelayWetGain = delayWet;
+    masterLimiterNode = limiter;
+    masterFxOutputGainNode = outputGain;
 
   }
-
 
   return {
     output:
@@ -4487,13 +4385,11 @@ function createImpulseResponse(
   const sampleRate =
     audioContext.sampleRate;
 
-
   const length =
     Math.floor(
       sampleRate
       * seconds
     );
-
 
   const impulse =
     audioContext.createBuffer(
@@ -4501,7 +4397,6 @@ function createImpulseResponse(
       length,
       sampleRate
     );
-
 
   for (
     let channel = 0;
@@ -4513,7 +4408,6 @@ function createImpulseResponse(
       impulse.getChannelData(
         channel
       );
-
 
     for (
       let i = 0;
@@ -4538,7 +4432,6 @@ function createImpulseResponse(
 
   }
 
-
   return impulse;
 
 }
@@ -4560,57 +4453,51 @@ function getFxNodes(
   target
 ) {
 
-  if (
-    target === "mix"
-  ) {
+  if (target === "vocals") {
 
     return {
-      eq:
-        mixEqNodes,
-      compressor:
-        mixCompressorNode,
-      reverbDry:
-        mixReverbDryGain,
-      reverbWet:
-        mixReverbWetGain,
-      delay:
-        mixDelayNode,
-      delayFeedback:
-        mixDelayFeedbackGain,
-      delayDry:
-        mixDelayDryGain,
-      delayWet:
-        mixDelayWetGain,
-      limiter:
-        mixLimiterNode,
-      output:
-        mixFxOutputGainNode
+      eq: vocalsEqNodes,
+      compressor: vocalsCompressorNode,
+      reverbDry: vocalsReverbDryGain,
+      reverbWet: vocalsReverbWetGain,
+      delay: vocalsDelayNode,
+      delayFeedback: vocalsDelayFeedbackGain,
+      delayDry: vocalsDelayDryGain,
+      delayWet: vocalsDelayWetGain,
+      limiter: vocalsLimiterNode,
+      output: vocalsFxOutputGainNode
     };
 
   }
 
+  if (target === "minus") {
+
+    return {
+      eq: minusEqNodes,
+      compressor: minusCompressorNode,
+      reverbDry: minusReverbDryGain,
+      reverbWet: minusReverbWetGain,
+      delay: minusDelayNode,
+      delayFeedback: minusDelayFeedbackGain,
+      delayDry: minusDelayDryGain,
+      delayWet: minusDelayWetGain,
+      limiter: minusLimiterNode,
+      output: minusFxOutputGainNode
+    };
+
+  }
 
   return {
-    eq:
-      masterEqNodes,
-    compressor:
-      masterCompressorNode,
-    reverbDry:
-      masterReverbDryGain,
-    reverbWet:
-      masterReverbWetGain,
-    delay:
-      masterDelayNode,
-    delayFeedback:
-      masterDelayFeedbackGain,
-    delayDry:
-      masterDelayDryGain,
-    delayWet:
-      masterDelayWetGain,
-    limiter:
-      masterLimiterNode,
-    output:
-      masterFxOutputGainNode
+    eq: masterEqNodes,
+    compressor: masterCompressorNode,
+    reverbDry: masterReverbDryGain,
+    reverbWet: masterReverbWetGain,
+    delay: masterDelayNode,
+    delayFeedback: masterDelayFeedbackGain,
+    delayDry: masterDelayDryGain,
+    delayWet: masterDelayWetGain,
+    limiter: masterLimiterNode,
+    output: masterFxOutputGainNode
   };
 
 }
@@ -4624,27 +4511,21 @@ function applyFxSettings(
     return;
   }
 
-
   const settings =
     fxSettings[target];
-
 
   const nodes =
     getFxNodes(
       target
     );
 
-
   if (
     !nodes.eq
     ||
     nodes.eq.length === 0
   ) {
-
     return;
-
   }
-
 
   const eqValues = [
     settings.eqLow,
@@ -4653,7 +4534,6 @@ function applyFxSettings(
     settings.eqHighMid,
     settings.eqHigh
   ];
-
 
   nodes.eq.forEach(
     (
@@ -4667,66 +4547,54 @@ function applyFxSettings(
     }
   );
 
-
   nodes.compressor.threshold.value =
     settings.compressorOn
     ? settings.compressorThreshold
     : 0;
-
 
   nodes.compressor.ratio.value =
     settings.compressorOn
     ? settings.compressorRatio
     : 1;
 
-
   const reverbMix =
     settings.reverbOn
     ? settings.reverbAmount / 100
     : 0;
 
-
   nodes.reverbDry.gain.value =
     1;
 
-
   nodes.reverbWet.gain.value =
     reverbMix;
-
 
   nodes.delay.delayTime.value =
     settings.delayOn
     ? settings.delayTime / 1000
     : 0;
 
-
   nodes.delayFeedback.gain.value =
     settings.delayOn
     ? settings.delayFeedback / 100
     : 0;
 
-
   nodes.delayDry.gain.value =
     1;
-
 
   nodes.delayWet.gain.value =
     settings.delayOn
     ? 0.65
     : 0;
 
-
   nodes.limiter.threshold.value =
     settings.limiterOn
     ? settings.limiterCeiling
     : 0;
 
-
   nodes.limiter.ratio.value =
     settings.limiterOn
     ? 20
     : 1;
-
 
   nodes.output.gain.value =
     dbToGain(
@@ -4734,7 +4602,6 @@ function applyFxSettings(
     );
 
 }
-
 
 
 // ========================================
@@ -7627,8 +7494,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-блок EQ / Effects для Mix и Master
-   | 1.10.0
+три шины эффектов
+   | 1.10.1
 </div>
 
 <div class="row" id="build-down">
