@@ -993,14 +993,13 @@
         </div>
 
         <div class="track-buttons">
-          <button id="saveMasterBtn" disabled>Save</button>
           <button id="saveAsMasterBtn" disabled>Save As...</button>
+          <button id="saveMasterSelectionBtn" disabled>Save Selection</button>
         </div>
 
-        <div class="track-save-row">
-          <button id="saveMasterSelectionBtn" disabled>
-            Save Selection
-          </button>
+        <div class="track-buttons">
+          <button id="undoMasterBtn" disabled>Undo</button>
+          <button id="redoMasterBtn" disabled>Redo</button>
         </div>
 
         <div id="masterState" class="master-state">
@@ -1169,11 +1168,14 @@ const recordMasterBtn =
 const stopMasterBtn =
   document.getElementById("stopMasterBtn");
 
-const saveMasterBtn =
-  document.getElementById("saveMasterBtn");
-
 const saveAsMasterBtn =
   document.getElementById("saveAsMasterBtn");
+
+const undoMasterBtn =
+  document.getElementById("undoMasterBtn");
+
+const redoMasterBtn =
+  document.getElementById("redoMasterBtn");
 
 const saveMasterSelectionBtn =
   document.getElementById("saveMasterSelectionBtn");
@@ -1397,6 +1399,23 @@ let masterRecordTimelineStart = 0;
 let masterRecordAnimation = null;
 let masterLivePeaks = [];
 let masterDuration = 0;
+
+let masterSegments = [];
+let masterUndoStack = [];
+let masterRedoStack = [];
+
+let selectionStart = null;
+let selectionEnd = null;
+let selectionDragging = false;
+let selectionPointerStartX = 0;
+let selectionMoved = false;
+
+let exportTargetTrack = "master";
+let exportTargetScope = "full";
+
+let currentOriginalFile = null;
+let currentVocalsURL = null;
+let currentMinusURL = null;
 
 
 // ========================================
@@ -1941,6 +1960,14 @@ function resetMaster() {
     [];
 
 
+  masterUndoStack =
+    [];
+
+
+  masterRedoStack =
+    [];
+
+
   waveformData.master =
     null;
 
@@ -1999,16 +2026,15 @@ function resetMaster() {
     true;
 
 
-  saveMasterBtn.disabled =
-    true;
-
-
   saveAsMasterBtn.disabled =
     true;
 
 
   saveMasterSelectionBtn.disabled =
     true;
+
+
+  updateMasterHistoryButtons();
 
 }
 
@@ -3107,10 +3133,6 @@ async function startMasterRecording() {
 
   stopMasterBtn.disabled =
     false;
-
-  saveMasterBtn.disabled =
-    true;
-
   saveAsMasterBtn.disabled =
     true;
 
@@ -3193,12 +3215,26 @@ async function finishMasterRecording() {
     await decodeContext.close();
 
 
+    masterUndoStack.push(
+      cloneMasterSegments(
+        masterSegments
+      )
+    );
+
+
+    masterRedoStack =
+      [];
+
+
     masterSegments.push({
       start:
         masterRecordTimelineStart,
       buffer:
         segmentBuffer
     });
+
+
+    updateMasterHistoryButtons();
 
 
     await rebuildMasterTrack();
@@ -3231,12 +3267,6 @@ async function finishMasterRecording() {
 
   masterState.textContent =
     "Recorded — not saved";
-
-
-  saveMasterBtn.disabled =
-    false;
-
-
   saveAsMasterBtn.disabled =
     false;
 
@@ -3980,33 +4010,187 @@ function drawLiveMasterWaveform() {
 
 
 // ========================================
-// SAVE MASTER IN SESSION
+// MASTER UNDO / REDO
 // ========================================
 
-saveMasterBtn.addEventListener(
+function cloneMasterSegments(
+  segments
+) {
+
+  return segments.map(
+    segment => ({
+      start:
+        segment.start,
+      buffer:
+        segment.buffer
+    })
+  );
+
+}
+
+
+function updateMasterHistoryButtons() {
+
+  undoMasterBtn.disabled =
+    masterUndoStack.length === 0;
+
+
+  redoMasterBtn.disabled =
+    masterRedoStack.length === 0;
+
+}
+
+
+undoMasterBtn.addEventListener(
   "click",
-  () => {
+  async () => {
 
-    if (!masterBlob) {
-
-      status.textContent =
-        "No Master recording";
+    if (
+      masterUndoStack.length === 0
+    ) {
 
       return;
 
     }
 
-    savedMasterBlob =
-      masterBlob;
 
-    masterState.textContent =
-      "Saved in session";
+    masterRedoStack.push(
+      cloneMasterSegments(
+        masterSegments
+      )
+    );
 
-    status.textContent =
-      "Master saved in session";
+
+    masterSegments =
+      masterUndoStack.pop();
+
+
+    await restoreMasterFromSegments();
+
+
+    updateMasterHistoryButtons();
 
   }
 );
+
+
+redoMasterBtn.addEventListener(
+  "click",
+  async () => {
+
+    if (
+      masterRedoStack.length === 0
+    ) {
+
+      return;
+
+    }
+
+
+    masterUndoStack.push(
+      cloneMasterSegments(
+        masterSegments
+      )
+    );
+
+
+    masterSegments =
+      masterRedoStack.pop();
+
+
+    await restoreMasterFromSegments();
+
+
+    updateMasterHistoryButtons();
+
+  }
+);
+
+
+async function restoreMasterFromSegments() {
+
+  if (
+    masterSegments.length === 0
+  ) {
+
+    waveformData.master =
+      null;
+
+
+    masterBlob =
+      null;
+
+
+    savedMasterBlob =
+      null;
+
+
+    masterDuration =
+      0;
+
+
+    if (masterObjectURL) {
+
+      URL.revokeObjectURL(
+        masterObjectURL
+      );
+
+
+      masterObjectURL =
+        null;
+
+    }
+
+
+    masterAudio.pause();
+
+
+    masterAudio.removeAttribute(
+      "src"
+    );
+
+
+    masterAudio.load();
+
+
+    clearMasterCanvas();
+
+
+    masterState.textContent =
+      "Empty";
+
+
+    saveAsMasterBtn.disabled =
+      true;
+
+
+    saveMasterSelectionBtn.disabled =
+      true;
+
+
+    return;
+
+  }
+
+
+  await rebuildMasterTrack();
+
+
+  drawMasterCompositeWaveform();
+
+
+  masterState.textContent =
+    "Recorded";
+
+
+  saveAsMasterBtn.disabled =
+    false;
+
+
+  saveMasterSelectionBtn.disabled =
+    !hasSelection();
+
+}
 
 
 // ========================================
@@ -5708,6 +5892,8 @@ function resetTransport() {
 
 updateSelectionButtons();
 
+updateMasterHistoryButtons();
+
 
 </script>
 
@@ -5720,8 +5906,11 @@ updateSelectionButtons();
 ======================================== -->
 
 <div id="service-console">
-fix after separation
-   | 1.8.2
+Save полностью убран.
+Undo отменяет последнюю записанную операцию Master и перестраивает сам Master + waveform.
+Redo возвращает отменённую запись.
+исправлены потерянные объявления masterSegments, selection-state и export-state, из-за которых 1.8.2 мог дальше падать уже при работе с Master.
+   | 1.9.0
 </div>
 
 <div class="row" id="build-down">
