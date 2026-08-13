@@ -207,19 +207,11 @@
     }
 
     .fx-panel {
-      position: relative;
-      min-height: 100%;
-    }
+      position: sticky;
+      top: 12px;
 
-    .fx-eq-block,
-    .fx-lower-block {
-      position: absolute;
-      left: 0;
-      right: 0;
-    }
+      margin-top: 96px;
 
-    .fx-eq-card,
-    .fx-effects-card {
       padding: 12px;
 
       background: #f5f5f5;
@@ -233,23 +225,21 @@
       font-weight: bold;
     }
 
-    .fx-lower-block {
-      display: grid;
-      grid-template-columns: 110px minmax(0, 1fr);
-      gap: 10px;
-      align-items: start;
+    .fx-target-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
     }
 
-    .fx-target-column {
-      position: relative;
-      min-height: 100%;
+    .fx-target-row button {
+      flex: 1;
     }
 
-    .fx-target-column button {
-      position: absolute;
-      left: 0;
-      width: 100%;
-      min-height: 36px;
+    .fx-section {
+      margin-top: 12px;
+      padding-top: 12px;
+
+      border-top: 1px solid #ddd;
     }
 
     .fx-section-title {
@@ -400,42 +390,6 @@
       margin-bottom: 10px;
 
       font-weight: bold;
-    }
-
-
-    .track-title-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 10px;
-    }
-
-    .track-title-row .track-title {
-      margin-bottom: 0;
-    }
-
-    .speaker-btn {
-      width: 30px;
-      min-width: 30px;
-      height: 30px;
-      padding: 0;
-
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-
-      border-radius: 6px;
-
-      background: #bbb;
-      color: #222;
-
-      font-size: 16px;
-      line-height: 1;
-    }
-
-    .speaker-btn.active {
-      background: #222;
-      color: #fff;
     }
 
     .track-buttons {
@@ -743,29 +697,7 @@
 
       .fx-panel {
         position: static;
-        min-height: 0;
-      }
-
-      .fx-eq-block,
-      .fx-lower-block {
-        position: static;
-      }
-
-      .fx-lower-block {
-        grid-template-columns: 1fr;
-      }
-
-      .fx-target-column {
-        display: flex;
-        gap: 6px;
-        min-height: 0;
-        margin-bottom: 10px;
-      }
-
-      .fx-target-column button {
-        position: static;
-        flex: 1;
-        width: auto;
+        margin-top: 0;
       }
 
     }
@@ -888,7 +820,23 @@
     ======================================== -->
 
     <div class="transport">
-<button id="startBtn">
+
+      <button
+        id="originalModeBtn"
+        class="active"
+      >
+        Original
+      </button>
+
+      <button id="mixModeBtn">
+        Mix
+      </button>
+
+      <button id="masterModeBtn">
+        Master
+      </button>
+
+      <button id="startBtn">
         |&lt;
       </button>
 
@@ -941,13 +889,12 @@
          ORIGINAL TRACK
     ======================================== -->
 
-    <div class="track" id="originalTrackRow">
+    <div class="track">
 
       <div class="track-controls">
 
-        <div class="track-title-row">
-          <button id="originalSpeakerBtn" class="speaker-btn active" title="Play Original">🔊</button>
-          <div class="track-title">Original</div>
+        <div class="track-title">
+          Original
         </div>
 
         <div class="track-save-row">
@@ -989,13 +936,12 @@
          VOCALS TRACK
     ======================================== -->
 
-    <div class="track" id="vocalsTrackRow">
+    <div class="track">
 
       <div class="track-controls">
 
-        <div class="track-title-row">
-          <button id="vocalsSpeakerBtn" class="speaker-btn" title="Play Vocals">🔊</button>
-          <div class="track-title">Vocals</div>
+        <div class="track-title">
+          Vocals
         </div>
 
         <div class="track-buttons">
@@ -1069,13 +1015,12 @@
          INSTRUMENTAL TRACK
     ======================================== -->
 
-    <div class="track" id="minusTrackRow">
+    <div class="track">
 
       <div class="track-controls">
 
-        <div class="track-title-row">
-          <button id="minusSpeakerBtn" class="speaker-btn" title="Play Instrumental">🔊</button>
-          <div class="track-title">Instrumental</div>
+        <div class="track-title">
+          Instrumental
         </div>
 
         <div class="track-buttons">
@@ -1149,13 +1094,12 @@
          MASTER TRACK
     ======================================== -->
 
-    <div class="track" id="masterTrackRow">
+    <div class="track">
 
       <div class="track-controls master-controls">
 
-        <div class="track-title-row">
-          <button id="masterSpeakerBtn" class="speaker-btn" title="Play Master">🔊</button>
-          <div class="track-title">Master</div>
+        <div class="track-title">
+          Master
         </div>
 
         <div class="track-buttons">
@@ -1256,24 +1200,39 @@
            MIX / MASTER EQ AND EFFECTS
       ======================================== -->
 
-      <aside class="fx-panel" id="fxPanel">
+      <aside class="fx-panel">
 
-        <!-- ========================================
-             EQ — ALIGNED WITH ORIGINAL ROW
-        ======================================== -->
+        <div class="fx-panel-title">
+          EQ / Effects
+        </div>
 
-        <div
-          class="fx-eq-block"
-          id="fxEqBlock"
-        >
+        <div class="fx-target-row">
 
-          <div class="fx-eq-card">
+          <button
+            id="fxTargetVocalsBtn"
+            class="active"
+          >
+            Vocals
+          </button>
 
-            <div class="fx-panel-title">
-              Equalizer
-            </div>
+          <button id="fxTargetMinusBtn">
+            Instrumental
+          </button>
 
-            <div class="eq-row">
+          <button id="fxTargetMasterBtn">
+            Master
+          </button>
+
+        </div>
+
+
+        <div class="fx-section">
+
+          <div class="fx-section-title">
+            Frequency
+          </div>
+
+          <div class="eq-row">
             <label>Low 80 Hz</label>
             <input
               id="eqLow"
@@ -1363,51 +1322,16 @@
             </span>
           </div>
 
-          </div>
-
         </div>
 
 
-        <!-- ========================================
-             BUS SWITCHES + EFFECTS
-             ALIGNED WITH VOCALS / INSTRUMENTAL / MASTER
-        ======================================== -->
+        <div class="fx-section">
 
-        <div
-          class="fx-lower-block"
-          id="fxLowerBlock"
-        >
-
-          <div
-            class="fx-target-column"
-            id="fxTargetColumn"
-          >
-
-            <button
-              id="fxTargetVocalsBtn"
-              class="active"
-            >
-              Vocals
-            </button>
-
-            <button id="fxTargetMinusBtn">
-              Instrumental
-            </button>
-
-            <button id="fxTargetMasterBtn">
-              Master
-            </button>
-
+          <div class="fx-section-title">
+            Effects
           </div>
 
-
-          <div class="fx-effects-card">
-
-            <div class="fx-panel-title">
-              Effects
-            </div>
-
-            <div class="fx-toggle-row">
+          <div class="fx-toggle-row">
             <span>Compressor</span>
             <button
               id="compressorToggleBtn"
@@ -1569,8 +1493,6 @@
             </span>
           </div>
 
-          </div>
-
         </div>
 
       </aside>
@@ -1652,17 +1574,14 @@ const progressPercent =
 const studio =
   document.getElementById("studio");
 
-const originalSpeakerBtn =
-  document.getElementById("originalSpeakerBtn");
+const originalModeBtn =
+  document.getElementById("originalModeBtn");
 
-const vocalsSpeakerBtn =
-  document.getElementById("vocalsSpeakerBtn");
+const mixModeBtn =
+  document.getElementById("mixModeBtn");
 
-const minusSpeakerBtn =
-  document.getElementById("minusSpeakerBtn");
-
-const masterSpeakerBtn =
-  document.getElementById("masterSpeakerBtn");
+const masterModeBtn =
+  document.getElementById("masterModeBtn");
 
 const recordMasterBtn =
   document.getElementById("recordMasterBtn");
@@ -1691,30 +1610,6 @@ const selectionInfo =
 const masterState =
   document.getElementById("masterState");
 
-
-const fxPanel =
-  document.getElementById("fxPanel");
-
-const fxEqBlock =
-  document.getElementById("fxEqBlock");
-
-const fxLowerBlock =
-  document.getElementById("fxLowerBlock");
-
-const fxTargetColumn =
-  document.getElementById("fxTargetColumn");
-
-const originalTrackRow =
-  document.getElementById("originalTrackRow");
-
-const vocalsTrackRow =
-  document.getElementById("vocalsTrackRow");
-
-const minusTrackRow =
-  document.getElementById("minusTrackRow");
-
-const masterTrackRow =
-  document.getElementById("masterTrackRow");
 
 const fxTargetVocalsBtn =
   document.getElementById("fxTargetVocalsBtn");
@@ -2343,14 +2238,6 @@ splitBtn.addEventListener(
 
       studio.style.display =
         "block";
-
-
-      requestAnimationFrame(
-        () =>
-          requestAnimationFrame(
-            alignFxPanelToTracks
-          )
-      );
 
 
       progressBar.style.width =
@@ -3118,45 +3005,25 @@ function playCurrentMode() {
   const time =
     getCurrentTime();
 
+
   syncAllTo(
     time
   );
 
-  if (mode === "original") {
+
+  if (
+    mode === "original"
+  ) {
 
     originalAudio.play();
 
   }
 
-  else if (mode === "vocals") {
+  else if (
+    mode === "master"
+  ) {
 
-    ensureMixAudioGraph();
-
-    if (mixAudioContext.state === "suspended") {
-      mixAudioContext.resume();
-    }
-
-    applyFxSettings(
-      "vocals"
-    );
-
-    vocalsAudio.play();
-
-  }
-
-  else if (mode === "minus") {
-
-    ensureMixAudioGraph();
-
-    if (mixAudioContext.state === "suspended") {
-      mixAudioContext.resume();
-    }
-
-    applyFxSettings(
-      "minus"
-    );
-
-    minusAudio.play();
+    masterAudio.play();
 
   }
 
@@ -3168,24 +3035,29 @@ function playCurrentMode() {
       mixAudioContext.resume();
     }
 
-    applyFxSettings(
-      "master"
-    );
+    applyMix();
 
-    masterAudio.play();
+    applyFxSettings("vocals");
+    applyFxSettings("minus");
+
+    vocalsAudio.play();
+
+    minusAudio.play();
 
   }
+
 
   isPlaying =
     true;
 
+
   playBtn.textContent =
     "Pause";
+
 
   startAnimation();
 
 }
-
 
 
 // ========================================
@@ -3288,103 +3160,175 @@ endBtn.addEventListener(
 
 
 // ========================================
-// TRACK PLAYBACK SELECTION
+// ORIGINAL / MIX
 // ========================================
 
-originalSpeakerBtn.addEventListener(
-  "click",
-  () => switchMode("original")
-);
-
-vocalsSpeakerBtn.addEventListener(
-  "click",
-  () => switchMode("vocals")
-);
-
-minusSpeakerBtn.addEventListener(
-  "click",
-  () => switchMode("minus")
-);
-
-masterSpeakerBtn.addEventListener(
+originalModeBtn.addEventListener(
   "click",
   () => {
 
-    if (!masterBlob) {
-      status.textContent =
-        "Master is empty";
-      return;
-    }
-
-    switchMode("master");
+    switchMode(
+      "original"
+    );
 
   }
 );
 
 
-function updateSpeakerButtons() {
+mixModeBtn.addEventListener(
+  "click",
+  () => {
 
-  originalSpeakerBtn.classList.toggle(
-    "active",
-    mode === "original"
-  );
+    switchMode(
+      "mix"
+    );
 
-  vocalsSpeakerBtn.classList.toggle(
-    "active",
-    mode === "vocals"
-  );
+  }
+);
 
-  minusSpeakerBtn.classList.toggle(
-    "active",
-    mode === "minus"
-  );
 
-  masterSpeakerBtn.classList.toggle(
-    "active",
-    mode === "master"
-  );
+masterModeBtn.addEventListener(
+  "click",
+  () => {
 
-}
+    if (!masterBlob) {
+
+      status.textContent =
+        "Master is empty";
+
+      return;
+
+    }
+
+    switchMode(
+      "master"
+    );
+
+  }
+);
 
 
 function switchMode(
   newMode
 ) {
 
-  if (mode === newMode) {
+  if (
+    mode === newMode
+  ) {
+
     return;
+
   }
+
 
   const time =
     getCurrentTime();
 
+
   const wasPlaying =
     isPlaying;
 
+
   originalAudio.pause();
+
   vocalsAudio.pause();
+
   minusAudio.pause();
+
   masterAudio.pause();
+
 
   mode =
     newMode;
+
+
+  originalModeBtn.classList.toggle(
+    "active",
+    mode === "original"
+  );
+
+
+  mixModeBtn.classList.toggle(
+    "active",
+    mode === "mix"
+  );
+
+
+  masterModeBtn.classList.toggle(
+    "active",
+    mode === "master"
+  );
+
 
   syncAllTo(
     time
   );
 
-  updateSpeakerButtons();
 
-  if (wasPlaying) {
-    playCurrentMode();
+  if (
+    wasPlaying
+  ) {
+
+    if (
+      mode === "original"
+    ) {
+
+      originalAudio.play();
+
+    }
+
+    else if (
+      mode === "master"
+    ) {
+
+      ensureMixAudioGraph();
+
+      if (
+        mixAudioContext.state ===
+        "suspended"
+      ) {
+
+        mixAudioContext.resume();
+
+      }
+
+      applyFxSettings(
+        "master"
+      );
+
+      masterAudio.play();
+
+    }
+
+    else {
+
+      ensureMixAudioGraph();
+
+      if (mixAudioContext.state === "suspended") {
+        mixAudioContext.resume();
+      }
+
+      applyMix();
+
+      applyFxSettings("vocals");
+      applyFxSettings("minus");
+
+      vocalsAudio.play();
+
+      minusAudio.play();
+
+    }
+
   }
 
+
   updatePlayheads();
+
   updateMasterCursor();
+
   updateTimeDisplay();
 
 }
-
 
 
 // ========================================
@@ -3393,10 +3337,17 @@ function switchMode(
 
 function activateMixMode() {
 
-  // Mute/Solo does not change the selected playback track.
+  if (
+    mode !== "mix"
+  ) {
+
+    switchMode(
+      "mix"
+    );
+
+  }
 
 }
-
 
 
 vocalsMuteBtn.addEventListener(
@@ -3594,134 +3545,6 @@ function applyMix() {
   updatePlayheads();
 
 }
-
-
-// ========================================
-// EXACT FX PANEL ALIGNMENT
-// ========================================
-
-function alignFxPanelToTracks() {
-
-  if (
-    !fxPanel
-    ||
-    !originalTrackRow
-    ||
-    !vocalsTrackRow
-    ||
-    !minusTrackRow
-    ||
-    !masterTrackRow
-  ) {
-    return;
-  }
-
-  if (window.innerWidth <= 1000) {
-
-    fxEqBlock.style.top =
-      "";
-
-    fxLowerBlock.style.top =
-      "";
-
-    fxTargetColumn.style.height =
-      "";
-
-    [
-      fxTargetVocalsBtn,
-      fxTargetMinusBtn,
-      fxTargetMasterBtn
-    ]
-    .forEach(
-      button => {
-        button.style.top = "";
-      }
-    );
-
-    return;
-
-  }
-
-  const panelRect =
-    fxPanel.getBoundingClientRect();
-
-  const originalRect =
-    originalTrackRow.getBoundingClientRect();
-
-  const vocalsRect =
-    vocalsTrackRow.getBoundingClientRect();
-
-  const minusRect =
-    minusTrackRow.getBoundingClientRect();
-
-  const masterRect =
-    masterTrackRow.getBoundingClientRect();
-
-  // Equalizer occupies the unused Original level.
-  fxEqBlock.style.top =
-    (
-      originalRect.top
-      - panelRect.top
-    )
-    + "px";
-
-  // Effects start exactly at the lower edge of the Vocals sequence.
-  const lowerTop =
-    vocalsRect.bottom
-    - panelRect.top;
-
-  fxLowerBlock.style.top =
-    lowerTop
-    + "px";
-
-  const buttonHeight =
-    36;
-
-  fxTargetColumn.style.height =
-    Math.max(
-      0,
-      masterRect.bottom
-      - vocalsRect.bottom
-    )
-    + "px";
-
-  // Each tab is placed at the lower edge of its own sequence row.
-  fxTargetVocalsBtn.style.top =
-    "0px";
-
-  fxTargetMinusBtn.style.top =
-    Math.max(
-      0,
-      minusRect.bottom
-      - vocalsRect.bottom
-      - buttonHeight
-    )
-    + "px";
-
-  fxTargetMasterBtn.style.top =
-    Math.max(
-      0,
-      masterRect.bottom
-      - vocalsRect.bottom
-      - buttonHeight
-    )
-    + "px";
-
-  fxPanel.style.minHeight =
-    (
-      masterRect.bottom
-      - panelRect.top
-    )
-    + "px";
-
-}
-
-
-
-window.addEventListener(
-  "resize",
-  alignFxPanelToTracks
-);
 
 
 // ========================================
@@ -6407,22 +6230,39 @@ async function exportTrack(
 
 function getCurrentTime() {
 
-  if (mode === "original") {
-    return originalAudio.currentTime || 0;
+  if (
+    mode === "original"
+  ) {
+
+    return (
+      originalAudio.currentTime
+      ||
+      0
+    );
+
   }
 
-  if (mode === "vocals") {
-    return vocalsAudio.currentTime || 0;
+
+  if (
+    mode === "master"
+  ) {
+
+    return (
+      masterAudio.currentTime
+      ||
+      0
+    );
+
   }
 
-  if (mode === "minus") {
-    return minusAudio.currentTime || 0;
-  }
 
-  return masterAudio.currentTime || 0;
+  return (
+    minusAudio.currentTime
+    ||
+    0
+  );
 
 }
-
 
 
 function syncAllTo(
@@ -7557,7 +7397,24 @@ function resetTransport() {
 
   mode =
     "original";
-vocalsMuted =
+
+
+  originalModeBtn.classList.add(
+    "active"
+  );
+
+
+  mixModeBtn.classList.remove(
+    "active"
+  );
+
+
+  masterModeBtn.classList.remove(
+    "active"
+  );
+
+
+  vocalsMuted =
     false;
 
 
@@ -7625,12 +7482,6 @@ updateSelectionButtons();
 
 updateMasterHistoryButtons();
 
-updateSpeakerButtons();
-
-requestAnimationFrame(
-  alignFxPanelToTracks
-);
-
 
 </script>
 
@@ -7643,8 +7494,8 @@ requestAnimationFrame(
 ======================================== -->
 
 <div id="service-console">
-Динамики
-   | 1.10.3
+три шины эффектов
+   | 1.10.1
 </div>
 
 <div class="row" id="build-down">
