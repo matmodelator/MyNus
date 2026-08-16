@@ -2401,6 +2401,7 @@ let savedMasterBlob = null;
 let masterObjectURL = null;
 let masterRecordStartTime = 0;
 let masterRecordTimelineStart = 0;
+let masterRecordTimelineEnd = 0;
 let masterRecordAnimation = null;
 let masterLivePeaks = [];
 let masterDuration = 0;
@@ -5277,37 +5278,63 @@ async function startMasterRecording() {
     return;
   }
 
+
   activateMixMode();
+
 
   ensureMixAudioGraph();
 
+
   if (
-    mixAudioContext.state === "suspended"
+    mixAudioContext.state ===
+    "suspended"
   ) {
 
     await mixAudioContext.resume();
 
   }
 
+
   waveformData.master =
     null;
+
 
   masterBlob =
     null;
 
+
   savedMasterBlob =
     null;
+
 
   masterLivePeaks =
     [];
 
+
   clearMasterCanvas();
+
+
+  // Fix the Master segment to the exact continuous audio timeline.
+  masterRecordTimelineStart =
+    getCurrentTime();
+
+
+  masterRecordTimelineEnd =
+    masterRecordTimelineStart;
+
+
+  // All six stems must begin from exactly the same time.
+  syncAllTo(
+    masterRecordTimelineStart
+  );
+
 
   const mimeTypes = [
     "audio/webm;codecs=opus",
     "audio/webm",
     "audio/ogg;codecs=opus"
   ];
+
 
   const mimeType =
     mimeTypes.find(
@@ -5317,8 +5344,10 @@ async function startMasterRecording() {
     )
     || "";
 
+
   masterRecordChunks =
     [];
+
 
   masterRecorder =
     mimeType
@@ -5329,6 +5358,7 @@ async function startMasterRecording() {
     : new MediaRecorder(
         masterRecordDestination.stream
       );
+
 
   masterRecorder.addEventListener(
     "dataavailable",
@@ -5349,43 +5379,62 @@ async function startMasterRecording() {
     }
   );
 
+
   masterRecorder.addEventListener(
     "stop",
     finishMasterRecording,
     { once: true }
   );
 
-  masterRecorder.start(
-    250
-  );
 
-  masterRecording =
-    true;
-
-  masterRecordStartTime =
-    performance.now();
-
-  masterRecordTimelineStart =
-    getCurrentTime();
-
-  recordMasterBtn.disabled =
-    true;
-
-  stopMasterBtn.disabled =
-    false;
-  saveAsMasterBtn.disabled =
-    true;
-
-  masterState.textContent =
-    "Recording...";
-
-  startMasterWaveformCapture();
-
+  // Start the audio first. Previously MediaRecorder was started first,
+  // which could put silence at the beginning of an overdub segment.
   if (!isPlaying) {
 
     playCurrentMode();
 
   }
+
+
+  // Re-read the actual shared audio position immediately before recording.
+  masterRecordTimelineStart =
+    getCurrentTime();
+
+
+  masterRecordTimelineEnd =
+    masterRecordTimelineStart;
+
+
+  masterRecorder.start(
+    250
+  );
+
+
+  masterRecording =
+    true;
+
+
+  masterRecordStartTime =
+    performance.now();
+
+
+  recordMasterBtn.disabled =
+    true;
+
+
+  stopMasterBtn.disabled =
+    false;
+
+
+  saveAsMasterBtn.disabled =
+    true;
+
+
+  masterState.textContent =
+    "Recording...";
+
+
+  startMasterWaveformCapture();
 
 }
 
@@ -5402,18 +5451,29 @@ function stopMasterRecording() {
 
   }
 
+
+  // Capture the exact audio-timeline endpoint before stopping.
+  masterRecordTimelineEnd =
+    getCurrentTime();
+
+
   masterRecorder.stop();
+
 
   masterRecording =
     false;
 
+
   stopMasterWaveformCapture();
+
 
   recordMasterBtn.disabled =
     false;
 
+
   stopMasterBtn.disabled =
     true;
+
 
   masterState.textContent =
     "Processing recording...";
@@ -5445,11 +5505,90 @@ async function finishMasterRecording() {
       new AudioContext();
 
 
-    const segmentBuffer =
+    const decodedBuffer =
       await decodeContext
         .decodeAudioData(
           arrayBuffer.slice(0)
         );
+
+
+    const expectedDuration =
+      Math.max(
+        0,
+        masterRecordTimelineEnd
+        - masterRecordTimelineStart
+      );
+
+
+    let segmentBuffer =
+      decodedBuffer;
+
+
+    if (
+      expectedDuration > 0
+    ) {
+
+      const expectedFrames =
+        Math.max(
+          1,
+          Math.round(
+            expectedDuration
+            * decodedBuffer.sampleRate
+          )
+        );
+
+
+      const normalizedBuffer =
+        decodeContext.createBuffer(
+          decodedBuffer.numberOfChannels,
+          expectedFrames,
+          decodedBuffer.sampleRate
+        );
+
+
+      const copyFrames =
+        Math.min(
+          expectedFrames,
+          decodedBuffer.length
+        );
+
+
+      // Copy only the timeline-length material.
+      // This prevents MediaRecorder container padding from moving
+      // following or overlapping Master segments.
+      for (
+        let channel = 0;
+        channel < decodedBuffer.numberOfChannels;
+        channel++
+      ) {
+
+        const source =
+          decodedBuffer.getChannelData(
+            channel
+          );
+
+
+        const destination =
+          normalizedBuffer.getChannelData(
+            channel
+          );
+
+
+        destination.set(
+          source.subarray(
+            0,
+            copyFrames
+          ),
+          0
+        );
+
+      }
+
+
+      segmentBuffer =
+        normalizedBuffer;
+
+    }
 
 
     await decodeContext.close();
@@ -5484,6 +5623,7 @@ async function finishMasterRecording() {
 
   }
 
+
   catch (error) {
 
     console.error(
@@ -5507,6 +5647,8 @@ async function finishMasterRecording() {
 
   masterState.textContent =
     "Recorded — not saved";
+
+
   saveAsMasterBtn.disabled =
     false;
 
@@ -5710,13 +5852,15 @@ function drawLivePeaksIntoContext(
   middle
 ) {
 
+  const timelineNow =
+    getCurrentTime();
+
+
   const elapsed =
     Math.max(
       0,
-      (
-        performance.now()
-        - masterRecordStartTime
-      ) / 1000
+      timelineNow
+      - masterRecordTimelineStart
     );
 
 
@@ -5737,8 +5881,12 @@ function drawLivePeaksIntoContext(
     );
 
 
-  if (recordedWidth <= 0) {
+  if (
+    recordedWidth <= 0
+  ) {
+
     return;
+
   }
 
 
@@ -5760,27 +5908,35 @@ function drawLivePeaksIntoContext(
 
 
     const peak =
-      masterLivePeaks[index];
+      masterLivePeaks[
+        index
+      ];
 
 
     const drawX =
-      startX + x;
+      startX
+      + x;
 
 
     context.moveTo(
       drawX,
-      middle - peak * middle
+      middle
+      - peak
+      * middle
     );
 
 
     context.lineTo(
       drawX,
-      middle + peak * middle
+      middle
+      + peak
+      * middle
     );
 
   }
 
 }
+
 
 
 async function rebuildMasterTrack() {
@@ -6247,6 +6403,44 @@ function drawLiveMasterWaveform() {
 
 }
 
+
+
+[
+  undoMasterBtn,
+  redoMasterBtn
+]
+.forEach(
+  button => {
+
+    button.addEventListener(
+      "keydown",
+      event => {
+
+        if (
+          event.code === "Space"
+          ||
+          event.key === " "
+        ) {
+
+          event.preventDefault();
+
+        }
+
+      }
+    );
+
+
+    button.addEventListener(
+      "click",
+      () => {
+
+        button.blur();
+
+      }
+    );
+
+  }
+);
 
 
 // ========================================
@@ -8161,8 +8355,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-6 FX buses + Master
-   | 2.2.0
+Master timeline sync fix
+   | 2.2.1
 </div>
 
 <div class="row" id="build-down">
