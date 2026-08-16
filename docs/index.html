@@ -2396,6 +2396,14 @@ let masterRecorder = null;
 let masterRecordChunks = [];
 let masterRecording = false;
 
+let masterRecordBus = null;
+let masterRecordProcessor = null;
+let masterRecordSilentGain = null;
+let masterPcmChunks = [];
+let masterPcmSampleRate = 0;
+let masterPcmChannels = 2;
+let masterPcmFrameCount = 0;
+
 let masterBlob = null;
 let savedMasterBlob = null;
 let masterObjectURL = null;
@@ -4647,7 +4655,157 @@ function ensureMixAudioGraph() {
 
 
   masterRecordDestination =
-    mixAudioContext.createMediaStreamDestination();
+    null;
+
+
+  masterRecordBus =
+    mixAudioContext.createGain();
+
+
+  masterRecordProcessor =
+    mixAudioContext.createScriptProcessor(
+      2048,
+      2,
+      2
+    );
+
+
+  masterRecordSilentGain =
+    mixAudioContext.createGain();
+
+
+  masterRecordSilentGain.gain.value =
+    0;
+
+
+  masterRecordBus.connect(
+    masterRecordProcessor
+  );
+
+
+  masterRecordProcessor.connect(
+    masterRecordSilentGain
+  );
+
+
+  masterRecordSilentGain.connect(
+    mixAudioContext.destination
+  );
+
+
+  masterRecordProcessor.onaudioprocess =
+    event => {
+
+      if (!masterRecording) {
+        return;
+      }
+
+
+      const input =
+        event.inputBuffer;
+
+
+      const channelCount =
+        Math.max(
+          1,
+          Math.min(
+            2,
+            input.numberOfChannels
+          )
+        );
+
+
+      const frames =
+        input.length;
+
+
+      const chunk =
+        [];
+
+
+      for (
+        let channel = 0;
+        channel < channelCount;
+        channel++
+      ) {
+
+        chunk.push(
+          new Float32Array(
+            input.getChannelData(
+              channel
+            )
+          )
+        );
+
+      }
+
+
+      if (
+        channelCount === 1
+      ) {
+
+        chunk.push(
+          new Float32Array(
+            chunk[0]
+          )
+        );
+
+      }
+
+
+      masterPcmChunks.push(
+        chunk
+      );
+
+
+      masterPcmFrameCount +=
+        frames;
+
+
+      // Live waveform is derived from the exact PCM being recorded.
+      let peak =
+        0;
+
+
+      for (
+        let channel = 0;
+        channel < chunk.length;
+        channel++
+      ) {
+
+        const samples =
+          chunk[
+            channel
+          ];
+
+
+        for (
+          let i = 0;
+          i < samples.length;
+          i++
+        ) {
+
+          peak =
+            Math.max(
+              peak,
+              Math.abs(
+                samples[i]
+              )
+            );
+
+        }
+
+      }
+
+
+      masterLivePeaks.push(
+        Math.min(
+          1,
+          peak
+        )
+      );
+
+    };
 
 
   stemIds.forEach(
@@ -4713,7 +4871,7 @@ function ensureMixAudioGraph() {
 
 
       stemChain.output.connect(
-        masterRecordDestination
+        masterRecordBus
       );
 
 
@@ -5274,8 +5432,12 @@ stopMasterBtn.addEventListener(
 
 async function startMasterRecording() {
 
-  if (masterRecording) {
+  if (
+    masterRecording
+  ) {
+
     return;
+
   }
 
 
@@ -5295,6 +5457,20 @@ async function startMasterRecording() {
   }
 
 
+  // Freeze the exact start position on the shared song timeline.
+  masterRecordTimelineStart =
+    getCurrentTime();
+
+
+  masterRecordTimelineEnd =
+    masterRecordTimelineStart;
+
+
+  syncAllTo(
+    masterRecordTimelineStart
+  );
+
+
   waveformData.master =
     null;
 
@@ -5311,103 +5487,51 @@ async function startMasterRecording() {
     [];
 
 
-  clearMasterCanvas();
-
-
-  // Fix the Master segment to the exact continuous audio timeline.
-  masterRecordTimelineStart =
-    getCurrentTime();
-
-
-  masterRecordTimelineEnd =
-    masterRecordTimelineStart;
-
-
-  // All six stems must begin from exactly the same time.
-  syncAllTo(
-    masterRecordTimelineStart
-  );
-
-
-  const mimeTypes = [
-    "audio/webm;codecs=opus",
-    "audio/webm",
-    "audio/ogg;codecs=opus"
-  ];
-
-
-  const mimeType =
-    mimeTypes.find(
-      type =>
-        MediaRecorder
-          .isTypeSupported(type)
-    )
-    || "";
-
-
-  masterRecordChunks =
+  masterPcmChunks =
     [];
 
 
-  masterRecorder =
-    mimeType
-    ? new MediaRecorder(
-        masterRecordDestination.stream,
-        { mimeType }
-      )
-    : new MediaRecorder(
-        masterRecordDestination.stream
-      );
+  masterPcmSampleRate =
+    mixAudioContext.sampleRate;
 
 
-  masterRecorder.addEventListener(
-    "dataavailable",
-    event => {
-
-      if (
-        event.data
-        &&
-        event.data.size > 0
-      ) {
-
-        masterRecordChunks.push(
-          event.data
-        );
-
-      }
-
-    }
-  );
+  masterPcmChannels =
+    2;
 
 
-  masterRecorder.addEventListener(
-    "stop",
-    finishMasterRecording,
-    { once: true }
-  );
+  masterPcmFrameCount =
+    0;
 
 
-  // Start the audio first. Previously MediaRecorder was started first,
-  // which could put silence at the beginning of an overdub segment.
-  if (!isPlaying) {
+  clearMasterCanvas();
+
+
+  // Start playback first, but PCM capture is still off.
+  if (
+    !isPlaying
+  ) {
 
     playCurrentMode();
 
   }
 
 
-  // Re-read the actual shared audio position immediately before recording.
-  masterRecordTimelineStart =
+  // Re-lock all six stems immediately before capture.
+  const lockedStart =
     getCurrentTime();
 
 
-  masterRecordTimelineEnd =
-    masterRecordTimelineStart;
-
-
-  masterRecorder.start(
-    250
+  syncAllTo(
+    lockedStart
   );
+
+
+  masterRecordTimelineStart =
+    lockedStart;
+
+
+  masterRecordTimelineEnd =
+    lockedStart;
 
 
   masterRecording =
@@ -5442,9 +5566,7 @@ async function startMasterRecording() {
 function stopMasterRecording() {
 
   if (
-    !masterRecorder
-    ||
-    masterRecorder.state === "inactive"
+    !masterRecording
   ) {
 
     return;
@@ -5452,16 +5574,13 @@ function stopMasterRecording() {
   }
 
 
-  // Capture the exact audio-timeline endpoint before stopping.
-  masterRecordTimelineEnd =
-    getCurrentTime();
-
-
-  masterRecorder.stop();
-
-
+  // Stop accepting PCM first.
   masterRecording =
     false;
+
+
+  masterRecordTimelineEnd =
+    getCurrentTime();
 
 
   stopMasterWaveformCapture();
@@ -5478,41 +5597,30 @@ function stopMasterRecording() {
   masterState.textContent =
     "Processing recording...";
 
+
+  finishMasterRecording();
+
 }
 
 
 async function finishMasterRecording() {
 
-  const type =
-    masterRecorder.mimeType
-    || "audio/webm";
-
-
-  const segmentBlob =
-    new Blob(
-      masterRecordChunks,
-      { type }
-    );
-
-
   try {
 
-    const arrayBuffer =
-      await segmentBlob.arrayBuffer();
+    if (
+      masterPcmFrameCount <= 0
+      ||
+      masterPcmChunks.length === 0
+    ) {
+
+      throw new Error(
+        "No PCM frames recorded"
+      );
+
+    }
 
 
-    const decodeContext =
-      new AudioContext();
-
-
-    const decodedBuffer =
-      await decodeContext
-        .decodeAudioData(
-          arrayBuffer.slice(0)
-        );
-
-
-    const expectedDuration =
+    const timelineDuration =
       Math.max(
         0,
         masterRecordTimelineEnd
@@ -5520,73 +5628,96 @@ async function finishMasterRecording() {
       );
 
 
-    let segmentBuffer =
-      decodedBuffer;
+    const expectedFrames =
+      Math.max(
+        1,
+        Math.round(
+          timelineDuration
+          * masterPcmSampleRate
+        )
+      );
 
 
-    if (
-      expectedDuration > 0
+    const availableFrames =
+      masterPcmFrameCount;
+
+
+    const frameCount =
+      Math.min(
+        availableFrames,
+        expectedFrames
+      );
+
+
+    const decodeContext =
+      new AudioContext({
+        sampleRate:
+          masterPcmSampleRate
+      });
+
+
+    const segmentBuffer =
+      decodeContext.createBuffer(
+        masterPcmChannels,
+        frameCount,
+        masterPcmSampleRate
+      );
+
+
+    let writeOffset =
+      0;
+
+
+    for (
+      const chunk
+      of masterPcmChunks
     ) {
 
-      const expectedFrames =
-        Math.max(
-          1,
-          Math.round(
-            expectedDuration
-            * decodedBuffer.sampleRate
-          )
-        );
-
-
-      const normalizedBuffer =
-        decodeContext.createBuffer(
-          decodedBuffer.numberOfChannels,
-          expectedFrames,
-          decodedBuffer.sampleRate
-        );
-
-
-      const copyFrames =
-        Math.min(
-          expectedFrames,
-          decodedBuffer.length
-        );
-
-
-      // Copy only the timeline-length material.
-      // This prevents MediaRecorder container padding from moving
-      // following or overlapping Master segments.
-      for (
-        let channel = 0;
-        channel < decodedBuffer.numberOfChannels;
-        channel++
+      if (
+        writeOffset >= frameCount
       ) {
 
-        const source =
-          decodedBuffer.getChannelData(
-            channel
-          );
-
-
-        const destination =
-          normalizedBuffer.getChannelData(
-            channel
-          );
-
-
-        destination.set(
-          source.subarray(
-            0,
-            copyFrames
-          ),
-          0
-        );
+        break;
 
       }
 
 
-      segmentBuffer =
-        normalizedBuffer;
+      const chunkFrames =
+        Math.min(
+          chunk[0].length,
+          frameCount
+          - writeOffset
+        );
+
+
+      for (
+        let channel = 0;
+        channel < masterPcmChannels;
+        channel++
+      ) {
+
+        segmentBuffer
+          .getChannelData(
+            channel
+          )
+          .set(
+            chunk[
+              Math.min(
+                channel,
+                chunk.length - 1
+              )
+            ].subarray(
+              0,
+              chunkFrames
+            ),
+            writeOffset
+          );
+
+      }
+
+
+      writeOffset +=
+        chunkFrames;
 
     }
 
@@ -5627,7 +5758,7 @@ async function finishMasterRecording() {
   catch (error) {
 
     console.error(
-      "Master segment decode error:",
+      "Master PCM recording error:",
       error
     );
 
@@ -5852,16 +5983,20 @@ function drawLivePeaksIntoContext(
   middle
 ) {
 
-  const timelineNow =
-    getCurrentTime();
+  if (
+    masterPcmFrameCount <= 0
+    ||
+    masterPcmSampleRate <= 0
+  ) {
+
+    return;
+
+  }
 
 
   const elapsed =
-    Math.max(
-      0,
-      timelineNow
-      - masterRecordTimelineStart
-    );
+    masterPcmFrameCount
+    / masterPcmSampleRate;
 
 
   const startX =
@@ -5910,7 +6045,9 @@ function drawLivePeaksIntoContext(
     const peak =
       masterLivePeaks[
         index
-      ];
+      ]
+      ||
+      0;
 
 
     const drawX =
@@ -6324,50 +6461,21 @@ function startMasterWaveformCapture() {
 
   stopMasterWaveformCapture();
 
-  const samples =
-    new Float32Array(
-      masterAnalyserNode.fftSize
-    );
 
   const capture =
     () => {
 
-      if (!masterRecording) {
-        return;
-      }
-
-      masterAnalyserNode
-        .getFloatTimeDomainData(
-          samples
-        );
-
-      let peak =
-        0;
-
-      for (
-        let i = 0;
-        i < samples.length;
-        i++
+      if (
+        !masterRecording
       ) {
 
-        peak =
-          Math.max(
-            peak,
-            Math.abs(
-              samples[i]
-            )
-          );
+        return;
 
       }
 
-      masterLivePeaks.push(
-        Math.min(
-          1,
-          peak
-        )
-      );
 
       drawLiveMasterWaveform();
+
 
       masterRecordAnimation =
         requestAnimationFrame(
@@ -6376,9 +6484,11 @@ function startMasterWaveformCapture() {
 
     };
 
+
   capture();
 
 }
+
 
 
 function stopMasterWaveformCapture() {
@@ -6412,6 +6522,18 @@ function drawLiveMasterWaveform() {
 .forEach(
   button => {
 
+    // Prevent mouse clicks from leaving keyboard focus on Undo/Redo.
+    button.addEventListener(
+      "mousedown",
+      event => {
+
+        event.preventDefault();
+
+      }
+    );
+
+
+    // Space must never activate Undo/Redo.
     button.addEventListener(
       "keydown",
       event => {
@@ -6424,6 +6546,10 @@ function drawLiveMasterWaveform() {
 
           event.preventDefault();
 
+          event.stopImmediatePropagation();
+
+          button.blur();
+
         }
 
       }
@@ -6431,10 +6557,22 @@ function drawLiveMasterWaveform() {
 
 
     button.addEventListener(
-      "click",
-      () => {
+      "keyup",
+      event => {
 
-        button.blur();
+        if (
+          event.code === "Space"
+          ||
+          event.key === " "
+        ) {
+
+          event.preventDefault();
+
+          event.stopImmediatePropagation();
+
+          button.blur();
+
+        }
 
       }
     );
@@ -8355,8 +8493,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Master timeline sync fix
-   | 2.2.1
+Наложенная запись должна начинаться ровно в том же тайм-коде
+   | 2.2.2
 </div>
 
 <div class="row" id="build-down">
