@@ -2282,6 +2282,7 @@ let waveformData = {
 
 };
 
+
 const stemIds = [
   "vocals",
   "drums",
@@ -2291,18 +2292,34 @@ const stemIds = [
   "other"
 ];
 
-const stemState = Object.fromEntries(
-  stemIds.map(
-    stemId => [
-      stemId,
-      {
-        muted: false,
-        solo: false,
-        volume: 1
-      }
-    ]
-  )
-);
+
+const instrumentalStemIds = [
+  "drums",
+  "bass",
+  "guitar",
+  "piano",
+  "other"
+];
+
+
+const stemState =
+  Object.fromEntries(
+    stemIds.map(
+      stemId => [
+        stemId,
+        {
+          muted: false,
+          solo: false,
+          volume: 1
+        }
+      ]
+    )
+  );
+
+
+let vocalStartTime =
+  null;
+
 
 let animationFrame =
   null;
@@ -2312,9 +2329,6 @@ let scrollSyncLock =
 
 let masterCursorDragging =
   false;
-
-let vocalStartTime =
-  null;
 
 
 // ========================================
@@ -2609,6 +2623,7 @@ splitBtn.addEventListener(
             data[
               stemId
             ];
+
 
           currentStemURLs[
             stemId
@@ -3479,6 +3494,19 @@ function playCurrentMode() {
     }
 
 
+    applyMix();
+
+
+    applyFxSettings(
+      "vocals"
+    );
+
+
+    applyFxSettings(
+      "minus"
+    );
+
+
     stemIds.forEach(
       stemId => {
 
@@ -3493,6 +3521,24 @@ function playCurrentMode() {
 
 
   else {
+
+    ensureMixAudioGraph();
+
+
+    if (
+      mixAudioContext.state ===
+      "suspended"
+    ) {
+
+      mixAudioContext.resume();
+
+    }
+
+
+    applyFxSettings(
+      "master"
+    );
+
 
     masterAudio.play();
 
@@ -3620,6 +3666,56 @@ endBtn.addEventListener(
 
   }
 );
+
+
+const stemAudio = {
+  vocals: vocalsAudio,
+  drums: drumsAudio,
+  bass: bassAudio,
+  guitar: guitarAudio,
+  piano: pianoAudio,
+  other: otherAudio
+};
+
+
+const stemMuteButtons = {
+  vocals: vocalsMuteBtn,
+  drums: drumsMuteBtn,
+  bass: bassMuteBtn,
+  guitar: guitarMuteBtn,
+  piano: pianoMuteBtn,
+  other: otherMuteBtn
+};
+
+
+const stemSoloButtons = {
+  vocals: vocalsSoloBtn,
+  drums: drumsSoloBtn,
+  bass: bassSoloBtn,
+  guitar: guitarSoloBtn,
+  piano: pianoSoloBtn,
+  other: otherSoloBtn
+};
+
+
+const stemVolumeControls = {
+  vocals: vocalsVolume,
+  drums: drumsVolume,
+  bass: bassVolume,
+  guitar: guitarVolume,
+  piano: pianoVolume,
+  other: otherVolume
+};
+
+
+const stemVolumeValues = {
+  vocals: vocalsVolumeValue,
+  drums: drumsVolumeValue,
+  bass: bassVolumeValue,
+  guitar: guitarVolumeValue,
+  piano: pianoVolumeValue,
+  other: otherVolumeValue
+};
 
 
 // ========================================
@@ -3755,53 +3851,23 @@ function switchMode(
 
 
 // ========================================
-// SIX STEM MIX CONTROL
+// MIX CONTROL
+
 // ========================================
 
-const stemAudio = {
-  vocals: vocalsAudio,
-  drums: drumsAudio,
-  bass: bassAudio,
-  guitar: guitarAudio,
-  piano: pianoAudio,
-  other: otherAudio
-};
+function activateMixMode() {
 
-const stemMuteButtons = {
-  vocals: vocalsMuteBtn,
-  drums: drumsMuteBtn,
-  bass: bassMuteBtn,
-  guitar: guitarMuteBtn,
-  piano: pianoMuteBtn,
-  other: otherMuteBtn
-};
+  if (
+    mode !== "mix"
+  ) {
 
-const stemSoloButtons = {
-  vocals: vocalsSoloBtn,
-  drums: drumsSoloBtn,
-  bass: bassSoloBtn,
-  guitar: guitarSoloBtn,
-  piano: pianoSoloBtn,
-  other: otherSoloBtn
-};
+    switchMode(
+      "mix"
+    );
 
-const stemVolumeControls = {
-  vocals: vocalsVolume,
-  drums: drumsVolume,
-  bass: bassVolume,
-  guitar: guitarVolume,
-  piano: pianoVolume,
-  other: otherVolume
-};
+  }
 
-const stemVolumeValues = {
-  vocals: vocalsVolumeValue,
-  drums: drumsVolumeValue,
-  bass: bassVolumeValue,
-  guitar: guitarVolumeValue,
-  piano: pianoVolumeValue,
-  other: otherVolumeValue
-};
+}
 
 
 stemIds.forEach(
@@ -3813,6 +3879,9 @@ stemIds.forEach(
       "click",
       () => {
 
+        activateMixMode();
+
+
         stemState[
           stemId
         ].muted =
@@ -3820,7 +3889,9 @@ stemIds.forEach(
             stemId
           ].muted;
 
+
         updateMixButtons();
+
 
         applyMix();
 
@@ -3834,6 +3905,9 @@ stemIds.forEach(
       "click",
       () => {
 
+        activateMixMode();
+
+
         stemState[
           stemId
         ].solo =
@@ -3841,7 +3915,9 @@ stemIds.forEach(
             stemId
           ].solo;
 
+
         updateMixButtons();
+
 
         applyMix();
 
@@ -3855,6 +3931,9 @@ stemIds.forEach(
       "input",
       () => {
 
+        activateMixMode();
+
+
         const value =
           Number(
             stemVolumeControls[
@@ -3862,16 +3941,19 @@ stemIds.forEach(
             ].value
           );
 
+
         stemState[
           stemId
         ].volume =
           value / 100;
+
 
         stemVolumeValues[
           stemId
         ].textContent =
           value
           + "%";
+
 
         applyMix();
 
@@ -3914,13 +3996,6 @@ function updateMixButtons() {
 
 function applyMix() {
 
-  if (!mixAudioContext) {
-
-    return;
-
-  }
-
-
   const anySolo =
     stemIds.some(
       stemId =>
@@ -3939,31 +4014,535 @@ function applyMix() {
         ];
 
 
-      let audible =
-        !state.muted;
+      const enabled =
+        !state.muted
+        &&
+        (
+          !anySolo
+          ||
+          state.solo
+        );
 
 
-      if (anySolo) {
+      const level =
+        enabled
+        ? state.volume
+        : 0;
 
-        audible =
-          audible
-          &&
-          state.solo;
+
+      if (
+        stemGainNodes[
+          stemId
+        ]
+      ) {
+
+        stemAudio[
+          stemId
+        ].volume =
+          1;
+
+
+        stemGainNodes[
+          stemId
+        ].gain.value =
+          level;
 
       }
 
+      else {
 
-      stemGainNodes[
-        stemId
-      ].gain.value =
-        audible
-        ? state.volume
-        : 0;
+        stemAudio[
+          stemId
+        ].volume =
+          level;
+
+      }
 
     }
   );
 
+
+  updatePlayheads();
+
 }
+
+
+// ========================================
+// EQ / EFFECTS PANEL
+
+// ========================================
+
+fxTargetVocalsBtn.addEventListener(
+  "click",
+  () => {
+
+    setFxTarget(
+      "vocals"
+    );
+
+  }
+);
+
+
+fxTargetMinusBtn.addEventListener(
+  "click",
+  () => {
+
+    setFxTarget(
+      "minus"
+    );
+
+  }
+);
+
+
+fxTargetMasterBtn.addEventListener(
+  "click",
+  () => {
+
+    setFxTarget(
+      "master"
+    );
+
+  }
+);
+
+
+function setFxTarget(
+  target
+) {
+
+  fxTarget =
+    target;
+
+
+  fxTargetVocalsBtn
+    .classList.toggle(
+      "active",
+      target === "vocals"
+    );
+
+
+  fxTargetMinusBtn
+    .classList.toggle(
+      "active",
+      target === "minus"
+    );
+
+
+  fxTargetMasterBtn
+    .classList.toggle(
+      "active",
+      target === "master"
+    );
+
+
+  loadFxPanelValues();
+
+}
+
+
+function loadFxPanelValues() {
+
+  const settings =
+    fxSettings[
+      fxTarget
+    ];
+
+
+  eqLow.value =
+    settings.eqLow;
+
+
+  eqLowMid.value =
+    settings.eqLowMid;
+
+
+  eqMid.value =
+    settings.eqMid;
+
+
+  eqHighMid.value =
+    settings.eqHighMid;
+
+
+  eqHigh.value =
+    settings.eqHigh;
+
+
+  compressorThreshold.value =
+    settings.compressorThreshold;
+
+
+  compressorRatio.value =
+    settings.compressorRatio;
+
+
+  reverbAmount.value =
+    settings.reverbAmount;
+
+
+  delayTime.value =
+    settings.delayTime;
+
+
+  delayFeedback.value =
+    settings.delayFeedback;
+
+
+  limiterCeiling.value =
+    settings.limiterCeiling;
+
+
+  fxOutputGain.value =
+    settings.outputGain;
+
+
+  compressorToggleBtn
+    .classList.toggle(
+      "active",
+      settings.compressorOn
+    );
+
+
+  compressorToggleBtn.textContent =
+    settings.compressorOn
+    ? "On"
+    : "Off";
+
+
+  reverbToggleBtn
+    .classList.toggle(
+      "active",
+      settings.reverbOn
+    );
+
+
+  reverbToggleBtn.textContent =
+    settings.reverbOn
+    ? "On"
+    : "Off";
+
+
+  delayToggleBtn
+    .classList.toggle(
+      "active",
+      settings.delayOn
+    );
+
+
+  delayToggleBtn.textContent =
+    settings.delayOn
+    ? "On"
+    : "Off";
+
+
+  limiterToggleBtn
+    .classList.toggle(
+      "active",
+      settings.limiterOn
+    );
+
+
+  limiterToggleBtn.textContent =
+    settings.limiterOn
+    ? "On"
+    : "Off";
+
+
+  updateFxLabels();
+
+}
+
+
+function updateFxLabels() {
+
+  eqLowValue.textContent =
+    eqLow.value
+    + " dB";
+
+
+  eqLowMidValue.textContent =
+    eqLowMid.value
+    + " dB";
+
+
+  eqMidValue.textContent =
+    eqMid.value
+    + " dB";
+
+
+  eqHighMidValue.textContent =
+    eqHighMid.value
+    + " dB";
+
+
+  eqHighValue.textContent =
+    eqHigh.value
+    + " dB";
+
+
+  compressorThresholdValue
+    .textContent =
+      compressorThreshold.value
+      + " dB";
+
+
+  compressorRatioValue
+    .textContent =
+      compressorRatio.value
+      + ":1";
+
+
+  reverbAmountValue
+    .textContent =
+      reverbAmount.value
+      + "%";
+
+
+  delayTimeValue.textContent =
+    delayTime.value
+    + " ms";
+
+
+  delayFeedbackValue
+    .textContent =
+      delayFeedback.value
+      + "%";
+
+
+  limiterCeilingValue
+    .textContent =
+      limiterCeiling.value
+      + " dB";
+
+
+  fxOutputGainValue
+    .textContent =
+      fxOutputGain.value
+      + " dB";
+
+}
+
+
+[
+  eqLow,
+  eqLowMid,
+  eqMid,
+  eqHighMid,
+  eqHigh,
+  compressorThreshold,
+  compressorRatio,
+  reverbAmount,
+  delayTime,
+  delayFeedback,
+  limiterCeiling,
+  fxOutputGain
+]
+.forEach(
+  control => {
+
+    control.addEventListener(
+      "input",
+      () => {
+
+        const settings =
+          fxSettings[
+            fxTarget
+          ];
+
+
+        settings.eqLow =
+          Number(
+            eqLow.value
+          );
+
+
+        settings.eqLowMid =
+          Number(
+            eqLowMid.value
+          );
+
+
+        settings.eqMid =
+          Number(
+            eqMid.value
+          );
+
+
+        settings.eqHighMid =
+          Number(
+            eqHighMid.value
+          );
+
+
+        settings.eqHigh =
+          Number(
+            eqHigh.value
+          );
+
+
+        settings.compressorThreshold =
+          Number(
+            compressorThreshold.value
+          );
+
+
+        settings.compressorRatio =
+          Number(
+            compressorRatio.value
+          );
+
+
+        settings.reverbAmount =
+          Number(
+            reverbAmount.value
+          );
+
+
+        settings.delayTime =
+          Number(
+            delayTime.value
+          );
+
+
+        settings.delayFeedback =
+          Number(
+            delayFeedback.value
+          );
+
+
+        settings.limiterCeiling =
+          Number(
+            limiterCeiling.value
+          );
+
+
+        settings.outputGain =
+          Number(
+            fxOutputGain.value
+          );
+
+
+        updateFxLabels();
+
+
+        applyFxSettings(
+          fxTarget
+        );
+
+      }
+    );
+
+  }
+);
+
+
+compressorToggleBtn
+  .addEventListener(
+    "click",
+    () => {
+
+      const settings =
+        fxSettings[
+          fxTarget
+        ];
+
+
+      settings.compressorOn =
+        !settings.compressorOn;
+
+
+      loadFxPanelValues();
+
+
+      applyFxSettings(
+        fxTarget
+      );
+
+    }
+  );
+
+
+reverbToggleBtn
+  .addEventListener(
+    "click",
+    () => {
+
+      const settings =
+        fxSettings[
+          fxTarget
+        ];
+
+
+      settings.reverbOn =
+        !settings.reverbOn;
+
+
+      loadFxPanelValues();
+
+
+      applyFxSettings(
+        fxTarget
+      );
+
+    }
+  );
+
+
+delayToggleBtn
+  .addEventListener(
+    "click",
+    () => {
+
+      const settings =
+        fxSettings[
+          fxTarget
+        ];
+
+
+      settings.delayOn =
+        !settings.delayOn;
+
+
+      loadFxPanelValues();
+
+
+      applyFxSettings(
+        fxTarget
+      );
+
+    }
+  );
+
+
+limiterToggleBtn
+  .addEventListener(
+    "click",
+    () => {
+
+      const settings =
+        fxSettings[
+          fxTarget
+        ];
+
+
+      settings.limiterOn =
+        !settings.limiterOn;
+
+
+      loadFxPanelValues();
+
+
+      applyFxSettings(
+        fxTarget
+      );
+
+    }
+  );
+
+
+loadFxPanelValues();
 
 
 // ========================================
@@ -3973,14 +4552,18 @@ function applyMix() {
 function ensureMixAudioGraph() {
 
   if (mixAudioContext) {
-
     return;
-
   }
 
 
   mixAudioContext =
     new AudioContext();
+
+
+  masterSourceNode =
+    mixAudioContext.createMediaElementSource(
+      masterAudio
+    );
 
 
   masterAnalyserNode =
@@ -3992,8 +4575,19 @@ function ensureMixAudioGraph() {
 
 
   masterRecordDestination =
-    mixAudioContext
-      .createMediaStreamDestination();
+    mixAudioContext.createMediaStreamDestination();
+
+
+  vocalsFxInput =
+    mixAudioContext.createGain();
+
+
+  minusFxInput =
+    mixAudioContext.createGain();
+
+
+  masterFxInput =
+    mixAudioContext.createGain();
 
 
   stemIds.forEach(
@@ -4002,12 +4596,11 @@ function ensureMixAudioGraph() {
       stemSourceNodes[
         stemId
       ] =
-        mixAudioContext
-          .createMediaElementSource(
-            stemAudio[
-              stemId
-            ]
-          );
+        mixAudioContext.createMediaElementSource(
+          stemAudio[
+            stemId
+          ]
+        );
 
 
       stemGainNodes[
@@ -4025,26 +4618,95 @@ function ensureMixAudioGraph() {
       );
 
 
-      stemGainNodes[
-        stemId
-      ].connect(
-        mixAudioContext.destination
-      );
+      if (
+        stemId === "vocals"
+      ) {
+
+        stemGainNodes[
+          stemId
+        ].connect(
+          vocalsFxInput
+        );
+
+      }
+
+      else {
+
+        stemGainNodes[
+          stemId
+        ].connect(
+          minusFxInput
+        );
+
+      }
+
+    }
+  );
 
 
-      stemGainNodes[
-        stemId
-      ].connect(
-        masterAnalyserNode
-      );
+  masterSourceNode.connect(
+    masterFxInput
+  );
 
 
-      stemGainNodes[
-        stemId
-      ].connect(
-        masterRecordDestination
-      );
+  const vocalsChain =
+    createFxChain(
+      vocalsFxInput,
+      "vocals"
+    );
 
+
+  const minusChain =
+    createFxChain(
+      minusFxInput,
+      "minus"
+    );
+
+
+  const masterChain =
+    createFxChain(
+      masterFxInput,
+      "master"
+    );
+
+
+  vocalsChain.output.connect(
+    mixAudioContext.destination
+  );
+
+
+  minusChain.output.connect(
+    mixAudioContext.destination
+  );
+
+
+  masterChain.output.connect(
+    mixAudioContext.destination
+  );
+
+
+  vocalsChain.output.connect(
+    masterAnalyserNode
+  );
+
+
+  minusChain.output.connect(
+    masterAnalyserNode
+  );
+
+
+  vocalsChain.output.connect(
+    masterRecordDestination
+  );
+
+
+  minusChain.output.connect(
+    masterRecordDestination
+  );
+
+
+  stemIds.forEach(
+    stemId => {
 
       stemAudio[
         stemId
@@ -4055,7 +4717,476 @@ function ensureMixAudioGraph() {
   );
 
 
+  masterAudio.volume =
+    1;
+
+
   applyMix();
+
+
+  applyFxSettings(
+    "vocals"
+  );
+
+
+  applyFxSettings(
+    "minus"
+  );
+
+
+  applyFxSettings(
+    "master"
+  );
+
+}
+
+
+
+function createFxChain(
+  inputNode,
+  target
+) {
+
+  const definitions = [
+    ["lowshelf", 80, 0],
+    ["peaking", 250, 1],
+    ["peaking", 1000, 1],
+    ["peaking", 4000, 1],
+    ["highshelf", 12000, 0]
+  ];
+
+  const eqNodes =
+    definitions.map(
+      item => {
+
+        const node =
+          mixAudioContext.createBiquadFilter();
+
+        node.type =
+          item[0];
+
+        node.frequency.value =
+          item[1];
+
+        if (item[2]) {
+          node.Q.value =
+            item[2];
+        }
+
+        return node;
+
+      }
+    );
+
+  inputNode.connect(
+    eqNodes[0]
+  );
+
+  for (
+    let i = 0;
+    i < eqNodes.length - 1;
+    i++
+  ) {
+
+    eqNodes[i].connect(
+      eqNodes[i + 1]
+    );
+
+  }
+
+  const compressor =
+    mixAudioContext.createDynamicsCompressor();
+
+  eqNodes[
+    eqNodes.length - 1
+  ].connect(
+    compressor
+  );
+
+  const reverbDry =
+    mixAudioContext.createGain();
+
+  const convolver =
+    mixAudioContext.createConvolver();
+
+  convolver.buffer =
+    createImpulseResponse(
+      mixAudioContext,
+      2.2,
+      2.5
+    );
+
+  const reverbWet =
+    mixAudioContext.createGain();
+
+  const reverbSum =
+    mixAudioContext.createGain();
+
+  compressor.connect(
+    reverbDry
+  );
+
+  compressor.connect(
+    convolver
+  );
+
+  convolver.connect(
+    reverbWet
+  );
+
+  reverbDry.connect(
+    reverbSum
+  );
+
+  reverbWet.connect(
+    reverbSum
+  );
+
+  const delayDry =
+    mixAudioContext.createGain();
+
+  const delay =
+    mixAudioContext.createDelay(
+      2
+    );
+
+  const delayFeedback =
+    mixAudioContext.createGain();
+
+  const delayWet =
+    mixAudioContext.createGain();
+
+  const delaySum =
+    mixAudioContext.createGain();
+
+  reverbSum.connect(
+    delayDry
+  );
+
+  reverbSum.connect(
+    delay
+  );
+
+  delay.connect(
+    delayFeedback
+  );
+
+  delayFeedback.connect(
+    delay
+  );
+
+  delay.connect(
+    delayWet
+  );
+
+  delayDry.connect(
+    delaySum
+  );
+
+  delayWet.connect(
+    delaySum
+  );
+
+  const limiter =
+    mixAudioContext.createDynamicsCompressor();
+
+  limiter.ratio.value =
+    20;
+
+  limiter.attack.value =
+    0.003;
+
+  limiter.release.value =
+    0.05;
+
+  delaySum.connect(
+    limiter
+  );
+
+  const outputGain =
+    mixAudioContext.createGain();
+
+  limiter.connect(
+    outputGain
+  );
+
+  if (target === "vocals") {
+
+    vocalsEqNodes = eqNodes;
+    vocalsCompressorNode = compressor;
+    vocalsReverbDryGain = reverbDry;
+    vocalsReverbWetGain = reverbWet;
+    vocalsDelayNode = delay;
+    vocalsDelayFeedbackGain = delayFeedback;
+    vocalsDelayDryGain = delayDry;
+    vocalsDelayWetGain = delayWet;
+    vocalsLimiterNode = limiter;
+    vocalsFxOutputGainNode = outputGain;
+
+  }
+
+  else if (target === "minus") {
+
+    minusEqNodes = eqNodes;
+    minusCompressorNode = compressor;
+    minusReverbDryGain = reverbDry;
+    minusReverbWetGain = reverbWet;
+    minusDelayNode = delay;
+    minusDelayFeedbackGain = delayFeedback;
+    minusDelayDryGain = delayDry;
+    minusDelayWetGain = delayWet;
+    minusLimiterNode = limiter;
+    minusFxOutputGainNode = outputGain;
+
+  }
+
+  else {
+
+    masterEqNodes = eqNodes;
+    masterCompressorNode = compressor;
+    masterReverbDryGain = reverbDry;
+    masterReverbWetGain = reverbWet;
+    masterDelayNode = delay;
+    masterDelayFeedbackGain = delayFeedback;
+    masterDelayDryGain = delayDry;
+    masterDelayWetGain = delayWet;
+    masterLimiterNode = limiter;
+    masterFxOutputGainNode = outputGain;
+
+  }
+
+  return {
+    output:
+      outputGain
+  };
+
+}
+
+
+function createImpulseResponse(
+  audioContext,
+  seconds,
+  decay
+) {
+
+  const sampleRate =
+    audioContext.sampleRate;
+
+  const length =
+    Math.floor(
+      sampleRate
+      * seconds
+    );
+
+  const impulse =
+    audioContext.createBuffer(
+      2,
+      length,
+      sampleRate
+    );
+
+  for (
+    let channel = 0;
+    channel < 2;
+    channel++
+  ) {
+
+    const data =
+      impulse.getChannelData(
+        channel
+      );
+
+    for (
+      let i = 0;
+      i < length;
+      i++
+    ) {
+
+      data[i] =
+        (
+          Math.random()
+          * 2
+          - 1
+        )
+        *
+        Math.pow(
+          1
+          - i / length,
+          decay
+        );
+
+    }
+
+  }
+
+  return impulse;
+
+}
+
+
+function dbToGain(
+  db
+) {
+
+  return Math.pow(
+    10,
+    db / 20
+  );
+
+}
+
+
+function getFxNodes(
+  target
+) {
+
+  if (target === "vocals") {
+
+    return {
+      eq: vocalsEqNodes,
+      compressor: vocalsCompressorNode,
+      reverbDry: vocalsReverbDryGain,
+      reverbWet: vocalsReverbWetGain,
+      delay: vocalsDelayNode,
+      delayFeedback: vocalsDelayFeedbackGain,
+      delayDry: vocalsDelayDryGain,
+      delayWet: vocalsDelayWetGain,
+      limiter: vocalsLimiterNode,
+      output: vocalsFxOutputGainNode
+    };
+
+  }
+
+  if (target === "minus") {
+
+    return {
+      eq: minusEqNodes,
+      compressor: minusCompressorNode,
+      reverbDry: minusReverbDryGain,
+      reverbWet: minusReverbWetGain,
+      delay: minusDelayNode,
+      delayFeedback: minusDelayFeedbackGain,
+      delayDry: minusDelayDryGain,
+      delayWet: minusDelayWetGain,
+      limiter: minusLimiterNode,
+      output: minusFxOutputGainNode
+    };
+
+  }
+
+  return {
+    eq: masterEqNodes,
+    compressor: masterCompressorNode,
+    reverbDry: masterReverbDryGain,
+    reverbWet: masterReverbWetGain,
+    delay: masterDelayNode,
+    delayFeedback: masterDelayFeedbackGain,
+    delayDry: masterDelayDryGain,
+    delayWet: masterDelayWetGain,
+    limiter: masterLimiterNode,
+    output: masterFxOutputGainNode
+  };
+
+}
+
+
+function applyFxSettings(
+  target
+) {
+
+  if (!mixAudioContext) {
+    return;
+  }
+
+  const settings =
+    fxSettings[target];
+
+  const nodes =
+    getFxNodes(
+      target
+    );
+
+  if (
+    !nodes.eq
+    ||
+    nodes.eq.length === 0
+  ) {
+    return;
+  }
+
+  const eqValues = [
+    settings.eqLow,
+    settings.eqLowMid,
+    settings.eqMid,
+    settings.eqHighMid,
+    settings.eqHigh
+  ];
+
+  nodes.eq.forEach(
+    (
+      node,
+      index
+    ) => {
+
+      node.gain.value =
+        eqValues[index];
+
+    }
+  );
+
+  nodes.compressor.threshold.value =
+    settings.compressorOn
+    ? settings.compressorThreshold
+    : 0;
+
+  nodes.compressor.ratio.value =
+    settings.compressorOn
+    ? settings.compressorRatio
+    : 1;
+
+  const reverbMix =
+    settings.reverbOn
+    ? settings.reverbAmount / 100
+    : 0;
+
+  nodes.reverbDry.gain.value =
+    1;
+
+  nodes.reverbWet.gain.value =
+    reverbMix;
+
+  nodes.delay.delayTime.value =
+    settings.delayOn
+    ? settings.delayTime / 1000
+    : 0;
+
+  nodes.delayFeedback.gain.value =
+    settings.delayOn
+    ? settings.delayFeedback / 100
+    : 0;
+
+  nodes.delayDry.gain.value =
+    1;
+
+  nodes.delayWet.gain.value =
+    settings.delayOn
+    ? 0.65
+    : 0;
+
+  nodes.limiter.threshold.value =
+    settings.limiterOn
+    ? settings.limiterCeiling
+    : 0;
+
+  nodes.limiter.ratio.value =
+    settings.limiterOn
+    ? 20
+    : 1;
+
+  nodes.output.gain.value =
+    dbToGain(
+      settings.outputGain
+    );
 
 }
 
@@ -6414,8 +7545,7 @@ function updateTimeDisplay() {
   const remaining =
     Math.max(
       0,
-      duration
-      - current
+      duration - current
     );
 
 
@@ -6432,24 +7562,104 @@ function updateTimeDisplay() {
 
 
   timeDisplay.textContent =
-      formatTime(
-        current
-      )
+
+    formatTime(
+      current
+    )
+
     + " / "
+
     + formatTime(
-        duration
-      )
+      duration
+    )
+
     + " / -"
+
     + formatTime(
-        remaining
-      )
+      remaining
+    )
+
     + " / V:-"
+
     + formatTime(
-        vocalRemaining
-      );
+      vocalRemaining
+    );
 
 }
 
+
+// ========================================
+// ANIMATION LOOP
+
+// ========================================
+
+function startAnimation() {
+
+  stopAnimation();
+
+
+  const update =
+    () => {
+
+      if (
+        !isPlaying
+      ) {
+
+        return;
+
+      }
+
+
+      keepTracksSynchronized();
+
+      updatePlayheads();
+
+      updateMasterCursor();
+
+      updateTimeDisplay();
+
+      followPlayhead();
+
+
+      if (
+        (
+          mode === "master"
+          &&
+          masterDuration > 0
+          &&
+          getCurrentTime()
+          >= masterDuration
+        )
+        ||
+        (
+          mode !== "master"
+          &&
+          getCurrentTime()
+          >= duration
+        )
+      ) {
+
+        pauseAll();
+
+        return;
+
+      }
+
+
+      animationFrame =
+        requestAnimationFrame(
+          update
+        );
+
+    };
+
+
+  animationFrame =
+    requestAnimationFrame(
+      update
+    );
+
+}
 
 
 function stopAnimation() {
@@ -6490,17 +7700,8 @@ function keepTracksSynchronized() {
     vocalsAudio.currentTime;
 
 
-  stemIds.forEach(
+  instrumentalStemIds.forEach(
     stemId => {
-
-      if (
-        stemId === "vocals"
-      ) {
-
-        return;
-
-      }
-
 
       const audio =
         stemAudio[
@@ -6527,9 +7728,9 @@ function keepTracksSynchronized() {
 }
 
 
-
 // ========================================
 // AUTO SCROLL
+
 // ========================================
 
 function followPlayhead() {
@@ -6808,6 +8009,21 @@ function resetTransport() {
     "original";
 
 
+  originalModeBtn.classList.add(
+    "active"
+  );
+
+
+  mixModeBtn.classList.remove(
+    "active"
+  );
+
+
+  masterModeBtn.classList.remove(
+    "active"
+  );
+
+
   stemIds.forEach(
     stemId => {
 
@@ -6846,7 +8062,9 @@ function resetTransport() {
 
   updateMixButtons();
 
+
   applyMix();
+
 
   updateTimeDisplay();
 
@@ -6878,19 +8096,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-1. Сепарация на 6 дорожек:
-   Vocals
-   Drums
-   Bass
-   Guitar
-   Piano
-   Other
-
-2. Автоматическое определение тайм-кода начала вокала.
-
-3. Четвёртый таймер:
-   текущее / длительность / до конца / до начала вокала
-   | 2.0.1
+6 stems + vocal timer fix
+   | 2.1.1
 </div>
 
 <div class="row" id="build-down">
