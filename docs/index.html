@@ -225,14 +225,34 @@
       font-weight: bold;
     }
 
-    .fx-target-row {
-      display: flex;
+    .fx-target-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+
       gap: 6px;
+
+      margin-bottom: 6px;
+    }
+
+    .fx-target-grid button {
+      width: 100%;
+      padding: 8px 6px;
+
+      font-size: 12px;
+    }
+
+    .fx-target-master-row {
+      display: grid;
+      grid-template-columns: 1fr;
+
       margin-bottom: 12px;
     }
 
-    .fx-target-row button {
-      flex: 1;
+    .fx-target-master-row button {
+      width: 100%;
+      padding: 9px 6px;
+
+      font-size: 12px;
     }
 
     .fx-section {
@@ -1516,7 +1536,7 @@
           EQ / Effects
         </div>
 
-        <div class="fx-target-row">
+        <div class="fx-target-grid">
 
           <button
             id="fxTargetVocalsBtn"
@@ -1525,9 +1545,29 @@
             Vocals
           </button>
 
-          <button id="fxTargetMinusBtn">
-            Instrumental
+          <button id="fxTargetDrumsBtn">
+            Drums
           </button>
+
+          <button id="fxTargetBassBtn">
+            Bass
+          </button>
+
+          <button id="fxTargetGuitarBtn">
+            Guitar
+          </button>
+
+          <button id="fxTargetPianoBtn">
+            Piano
+          </button>
+
+          <button id="fxTargetOtherBtn">
+            Other
+          </button>
+
+        </div>
+
+        <div class="fx-target-master-row">
 
           <button id="fxTargetMasterBtn">
             Master
@@ -1928,8 +1968,20 @@ const masterState =
 const fxTargetVocalsBtn =
   document.getElementById("fxTargetVocalsBtn");
 
-const fxTargetMinusBtn =
-  document.getElementById("fxTargetMinusBtn");
+const fxTargetDrumsBtn =
+  document.getElementById("fxTargetDrumsBtn");
+
+const fxTargetBassBtn =
+  document.getElementById("fxTargetBassBtn");
+
+const fxTargetGuitarBtn =
+  document.getElementById("fxTargetGuitarBtn");
+
+const fxTargetPianoBtn =
+  document.getElementById("fxTargetPianoBtn");
+
+const fxTargetOtherBtn =
+  document.getElementById("fxTargetOtherBtn");
 
 const fxTargetMasterBtn =
   document.getElementById("fxTargetMasterBtn");
@@ -2373,74 +2425,81 @@ let currentStemURLs = {};
 let fxTarget =
   "vocals";
 
+const defaultFxSettings = {
+  eqLow: 0,
+  eqLowMid: 0,
+  eqMid: 0,
+  eqHighMid: 0,
+  eqHigh: 0,
+
+  compressorOn: true,
+  compressorThreshold: -18,
+  compressorRatio: 4,
+
+  reverbOn: false,
+  reverbAmount: 20,
+
+  delayOn: false,
+  delayTime: 220,
+  delayFeedback: 25,
+
+  limiterOn: true,
+  limiterCeiling: -0.5,
+
+  outputGain: 0
+};
+
+
 const fxSettings = {
 
   vocals: {
-    eqLow: 0, eqLowMid: 0, eqMid: 0, eqHighMid: 0, eqHigh: 0,
-    compressorOn: true, compressorThreshold: -18, compressorRatio: 4,
-    reverbOn: false, reverbAmount: 20,
-    delayOn: false, delayTime: 220, delayFeedback: 25,
-    limiterOn: true, limiterCeiling: -0.5, outputGain: 0
+    ...defaultFxSettings
   },
 
-  minus: {
-    eqLow: 0, eqLowMid: 0, eqMid: 0, eqHighMid: 0, eqHigh: 0,
-    compressorOn: true, compressorThreshold: -18, compressorRatio: 4,
-    reverbOn: false, reverbAmount: 20,
-    delayOn: false, delayTime: 220, delayFeedback: 25,
-    limiterOn: true, limiterCeiling: -0.5, outputGain: 0
+  drums: {
+    ...defaultFxSettings
+  },
+
+  bass: {
+    ...defaultFxSettings
+  },
+
+  guitar: {
+    ...defaultFxSettings
+  },
+
+  piano: {
+    ...defaultFxSettings
+  },
+
+  other: {
+    ...defaultFxSettings
   },
 
   master: {
-    eqLow: 0, eqLowMid: 0, eqMid: 0, eqHighMid: 0, eqHigh: 0,
-    compressorOn: true, compressorThreshold: -18, compressorRatio: 4,
-    reverbOn: false, reverbAmount: 20,
-    delayOn: false, delayTime: 220, delayFeedback: 25,
-    limiterOn: true, limiterCeiling: -0.5, outputGain: 0
+    ...defaultFxSettings
   }
 
 };
 
-let vocalsFxInput = null;
-let minusFxInput = null;
+let stemFxInputs = {};
+let stemFxNodes = {};
+
 let masterFxInput = null;
 
-let vocalsEqNodes = [];
-let minusEqNodes = [];
 let masterEqNodes = [];
-
-let vocalsCompressorNode = null;
-let minusCompressorNode = null;
 let masterCompressorNode = null;
 
-let vocalsReverbDryGain = null;
-let vocalsReverbWetGain = null;
-let minusReverbDryGain = null;
-let minusReverbWetGain = null;
 let masterReverbDryGain = null;
 let masterReverbWetGain = null;
 
-let vocalsDelayNode = null;
-let minusDelayNode = null;
 let masterDelayNode = null;
-
-let vocalsDelayFeedbackGain = null;
-let minusDelayFeedbackGain = null;
 let masterDelayFeedbackGain = null;
 
-let vocalsDelayDryGain = null;
-let vocalsDelayWetGain = null;
-let minusDelayDryGain = null;
-let minusDelayWetGain = null;
 let masterDelayDryGain = null;
 let masterDelayWetGain = null;
 
-let vocalsLimiterNode = null;
-let minusLimiterNode = null;
 let masterLimiterNode = null;
-
-let vocalsFxOutputGainNode = null;
-let minusFxOutputGainNode = null;
 let masterFxOutputGainNode = null;
 
 let masterSourceNode = null;
@@ -3497,13 +3556,14 @@ function playCurrentMode() {
     applyMix();
 
 
-    applyFxSettings(
-      "vocals"
-    );
+    stemIds.forEach(
+      stemId => {
 
+        applyFxSettings(
+          stemId
+        );
 
-    applyFxSettings(
-      "minus"
+      }
     );
 
 
@@ -4072,36 +4132,50 @@ function applyMix() {
 
 // ========================================
 
-fxTargetVocalsBtn.addEventListener(
-  "click",
-  () => {
+const fxTargetButtons = {
 
-    setFxTarget(
-      "vocals"
-    );
+  vocals:
+    fxTargetVocalsBtn,
 
-  }
-);
+  drums:
+    fxTargetDrumsBtn,
+
+  bass:
+    fxTargetBassBtn,
+
+  guitar:
+    fxTargetGuitarBtn,
+
+  piano:
+    fxTargetPianoBtn,
+
+  other:
+    fxTargetOtherBtn,
+
+  master:
+    fxTargetMasterBtn
+
+};
 
 
-fxTargetMinusBtn.addEventListener(
-  "click",
-  () => {
+Object.entries(
+  fxTargetButtons
+)
+.forEach(
+  ([
+    target,
+    button
+  ]) => {
 
-    setFxTarget(
-      "minus"
-    );
+    button.addEventListener(
+      "click",
+      () => {
 
-  }
-);
+        setFxTarget(
+          target
+        );
 
-
-fxTargetMasterBtn.addEventListener(
-  "click",
-  () => {
-
-    setFxTarget(
-      "master"
+      }
     );
 
   }
@@ -4116,25 +4190,22 @@ function setFxTarget(
     target;
 
 
-  fxTargetVocalsBtn
-    .classList.toggle(
-      "active",
-      target === "vocals"
-    );
+  Object.entries(
+    fxTargetButtons
+  )
+  .forEach(
+    ([
+      key,
+      button
+    ]) => {
 
+      button.classList.toggle(
+        "active",
+        key === target
+      );
 
-  fxTargetMinusBtn
-    .classList.toggle(
-      "active",
-      target === "minus"
-    );
-
-
-  fxTargetMasterBtn
-    .classList.toggle(
-      "active",
-      target === "master"
-    );
+    }
+  );
 
 
   loadFxPanelValues();
@@ -4578,18 +4649,6 @@ function ensureMixAudioGraph() {
     mixAudioContext.createMediaStreamDestination();
 
 
-  vocalsFxInput =
-    mixAudioContext.createGain();
-
-
-  minusFxInput =
-    mixAudioContext.createGain();
-
-
-  masterFxInput =
-    mixAudioContext.createGain();
-
-
   stemIds.forEach(
     stemId => {
 
@@ -4609,6 +4668,12 @@ function ensureMixAudioGraph() {
         mixAudioContext.createGain();
 
 
+      stemFxInputs[
+        stemId
+      ] =
+        mixAudioContext.createGain();
+
+
       stemSourceNodes[
         stemId
       ].connect(
@@ -4618,95 +4683,38 @@ function ensureMixAudioGraph() {
       );
 
 
-      if (
-        stemId === "vocals"
-      ) {
-
-        stemGainNodes[
+      stemGainNodes[
+        stemId
+      ].connect(
+        stemFxInputs[
           stemId
-        ].connect(
-          vocalsFxInput
+        ]
+      );
+
+
+      const stemChain =
+        createFxChain(
+          stemFxInputs[
+            stemId
+          ],
+          stemId
         );
 
-      }
 
-      else {
-
-        stemGainNodes[
-          stemId
-        ].connect(
-          minusFxInput
-        );
-
-      }
-
-    }
-  );
+      stemChain.output.connect(
+        mixAudioContext.destination
+      );
 
 
-  masterSourceNode.connect(
-    masterFxInput
-  );
+      stemChain.output.connect(
+        masterAnalyserNode
+      );
 
 
-  const vocalsChain =
-    createFxChain(
-      vocalsFxInput,
-      "vocals"
-    );
+      stemChain.output.connect(
+        masterRecordDestination
+      );
 
-
-  const minusChain =
-    createFxChain(
-      minusFxInput,
-      "minus"
-    );
-
-
-  const masterChain =
-    createFxChain(
-      masterFxInput,
-      "master"
-    );
-
-
-  vocalsChain.output.connect(
-    mixAudioContext.destination
-  );
-
-
-  minusChain.output.connect(
-    mixAudioContext.destination
-  );
-
-
-  masterChain.output.connect(
-    mixAudioContext.destination
-  );
-
-
-  vocalsChain.output.connect(
-    masterAnalyserNode
-  );
-
-
-  minusChain.output.connect(
-    masterAnalyserNode
-  );
-
-
-  vocalsChain.output.connect(
-    masterRecordDestination
-  );
-
-
-  minusChain.output.connect(
-    masterRecordDestination
-  );
-
-
-  stemIds.forEach(
-    stemId => {
 
       stemAudio[
         stemId
@@ -4717,6 +4725,27 @@ function ensureMixAudioGraph() {
   );
 
 
+  masterFxInput =
+    mixAudioContext.createGain();
+
+
+  masterSourceNode.connect(
+    masterFxInput
+  );
+
+
+  const masterChain =
+    createFxChain(
+      masterFxInput,
+      "master"
+    );
+
+
+  masterChain.output.connect(
+    mixAudioContext.destination
+  );
+
+
   masterAudio.volume =
     1;
 
@@ -4724,13 +4753,14 @@ function ensureMixAudioGraph() {
   applyMix();
 
 
-  applyFxSettings(
-    "vocals"
-  );
+  stemIds.forEach(
+    stemId => {
 
+      applyFxSettings(
+        stemId
+      );
 
-  applyFxSettings(
-    "minus"
+    }
   );
 
 
@@ -4910,50 +4940,82 @@ function createFxChain(
     outputGain
   );
 
-  if (target === "vocals") {
+  if (
+    target === "master"
+  ) {
 
-    vocalsEqNodes = eqNodes;
-    vocalsCompressorNode = compressor;
-    vocalsReverbDryGain = reverbDry;
-    vocalsReverbWetGain = reverbWet;
-    vocalsDelayNode = delay;
-    vocalsDelayFeedbackGain = delayFeedback;
-    vocalsDelayDryGain = delayDry;
-    vocalsDelayWetGain = delayWet;
-    vocalsLimiterNode = limiter;
-    vocalsFxOutputGainNode = outputGain;
+    masterEqNodes =
+      eqNodes;
 
-  }
+    masterCompressorNode =
+      compressor;
 
-  else if (target === "minus") {
+    masterReverbDryGain =
+      reverbDry;
 
-    minusEqNodes = eqNodes;
-    minusCompressorNode = compressor;
-    minusReverbDryGain = reverbDry;
-    minusReverbWetGain = reverbWet;
-    minusDelayNode = delay;
-    minusDelayFeedbackGain = delayFeedback;
-    minusDelayDryGain = delayDry;
-    minusDelayWetGain = delayWet;
-    minusLimiterNode = limiter;
-    minusFxOutputGainNode = outputGain;
+    masterReverbWetGain =
+      reverbWet;
+
+    masterDelayNode =
+      delay;
+
+    masterDelayFeedbackGain =
+      delayFeedback;
+
+    masterDelayDryGain =
+      delayDry;
+
+    masterDelayWetGain =
+      delayWet;
+
+    masterLimiterNode =
+      limiter;
+
+    masterFxOutputGainNode =
+      outputGain;
 
   }
 
   else {
 
-    masterEqNodes = eqNodes;
-    masterCompressorNode = compressor;
-    masterReverbDryGain = reverbDry;
-    masterReverbWetGain = reverbWet;
-    masterDelayNode = delay;
-    masterDelayFeedbackGain = delayFeedback;
-    masterDelayDryGain = delayDry;
-    masterDelayWetGain = delayWet;
-    masterLimiterNode = limiter;
-    masterFxOutputGainNode = outputGain;
+    stemFxNodes[
+      target
+    ] = {
+
+      eq:
+        eqNodes,
+
+      compressor:
+        compressor,
+
+      reverbDry:
+        reverbDry,
+
+      reverbWet:
+        reverbWet,
+
+      delay:
+        delay,
+
+      delayFeedback:
+        delayFeedback,
+
+      delayDry:
+        delayDry,
+
+      delayWet:
+        delayWet,
+
+      limiter:
+        limiter,
+
+      output:
+        outputGain
+
+    };
 
   }
+
 
   return {
     output:
@@ -5040,54 +5102,57 @@ function getFxNodes(
   target
 ) {
 
-  if (target === "vocals") {
+  if (
+    target !== "master"
+  ) {
 
-    return {
-      eq: vocalsEqNodes,
-      compressor: vocalsCompressorNode,
-      reverbDry: vocalsReverbDryGain,
-      reverbWet: vocalsReverbWetGain,
-      delay: vocalsDelayNode,
-      delayFeedback: vocalsDelayFeedbackGain,
-      delayDry: vocalsDelayDryGain,
-      delayWet: vocalsDelayWetGain,
-      limiter: vocalsLimiterNode,
-      output: vocalsFxOutputGainNode
-    };
+    return (
+      stemFxNodes[
+        target
+      ]
+      ||
+      {}
+    );
 
   }
 
-  if (target === "minus") {
-
-    return {
-      eq: minusEqNodes,
-      compressor: minusCompressorNode,
-      reverbDry: minusReverbDryGain,
-      reverbWet: minusReverbWetGain,
-      delay: minusDelayNode,
-      delayFeedback: minusDelayFeedbackGain,
-      delayDry: minusDelayDryGain,
-      delayWet: minusDelayWetGain,
-      limiter: minusLimiterNode,
-      output: minusFxOutputGainNode
-    };
-
-  }
 
   return {
-    eq: masterEqNodes,
-    compressor: masterCompressorNode,
-    reverbDry: masterReverbDryGain,
-    reverbWet: masterReverbWetGain,
-    delay: masterDelayNode,
-    delayFeedback: masterDelayFeedbackGain,
-    delayDry: masterDelayDryGain,
-    delayWet: masterDelayWetGain,
-    limiter: masterLimiterNode,
-    output: masterFxOutputGainNode
+
+    eq:
+      masterEqNodes,
+
+    compressor:
+      masterCompressorNode,
+
+    reverbDry:
+      masterReverbDryGain,
+
+    reverbWet:
+      masterReverbWetGain,
+
+    delay:
+      masterDelayNode,
+
+    delayFeedback:
+      masterDelayFeedbackGain,
+
+    delayDry:
+      masterDelayDryGain,
+
+    delayWet:
+      masterDelayWetGain,
+
+    limiter:
+      masterLimiterNode,
+
+    output:
+      masterFxOutputGainNode
+
   };
 
 }
+
 
 
 function applyFxSettings(
@@ -8096,8 +8161,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-6 stems + vocal timer fix
-   | 2.1.1
+6 FX buses + Master
+   | 2.2.0
 </div>
 
 <div class="row" id="build-down">
