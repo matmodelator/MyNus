@@ -1,8 +1,6 @@
 # ========================================
-# Сервер теперь принимает любой из исходных типов файлов, и сам ищет ffmpeg.exe в PATH и в стандартной папке WinGet. 
-Кроме того, если FFmpeg снова упадёт, страница теперь покажет уже его настоящий текст ошибки, а не просто Master export failed / 1.3.0
+# включена модель htdemucs_6s 6 дорожек | 2.0.0
 # ========================================
-
 
 # ========================================
 # IMPORTS
@@ -132,7 +130,12 @@ def separate():
         "progress": 0,
         "status": "processing",
         "vocals": None,
-        "minus": None,
+        "drums": None,
+        "bass": None,
+        "guitar": None,
+        "piano": None,
+        "other": None,
+        "vocal_start": None,
         "error": None
     }
 
@@ -156,6 +159,45 @@ def separate():
 
 
 # ========================================
+# VOCAL START DETECTION
+# ========================================
+
+def detect_vocal_start(vocals_path):
+
+    command = [
+        "ffmpeg",
+        "-hide_banner",
+        "-i",
+        vocals_path,
+        "-af",
+        "silencedetect=noise=-38dB:d=0.35",
+        "-f",
+        "null",
+        "-"
+    ]
+
+    process = subprocess.run(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        errors="replace"
+    )
+
+    output = process.stdout + "\n" + process.stderr
+
+    match = re.search(
+        r"silence_end:\s*([0-9.]+)",
+        output
+    )
+
+    if match:
+        return max(0.0, float(match.group(1)))
+
+    return 0.0
+
+
+# ========================================
 # DEMUCS PROCESS
 # ========================================
 
@@ -171,7 +213,8 @@ def run_demucs(
         "-m",
         "demucs",
 
-        "--two-stems=vocals",
+        "-n",
+        "htdemucs_6s",
 
         "--mp3",
 
@@ -251,7 +294,7 @@ def run_demucs(
 
         model_dir = os.path.join(
             job_result_dir,
-            "htdemucs"
+            "htdemucs_6s"
         )
 
 
@@ -285,39 +328,55 @@ def run_demucs(
         )
 
 
-        vocals_source = os.path.join(
-            song_dir,
-            "vocals.mp3"
-        )
+        stem_names = [
+            "vocals",
+            "drums",
+            "bass",
+            "guitar",
+            "piano",
+            "other"
+        ]
 
 
-        minus_source = os.path.join(
-            song_dir,
-            "no_vocals.mp3"
-        )
+        stem_targets = {}
 
 
-        vocals_target = os.path.join(
-            job_result_dir,
-            "vocals.mp3"
-        )
+        for stem_name in stem_names:
+
+            source_path = os.path.join(
+                song_dir,
+                f"{stem_name}.mp3"
+            )
+
+            target_path = os.path.join(
+                job_result_dir,
+                f"{stem_name}.mp3"
+            )
+
+            if not os.path.isfile(
+                source_path
+            ):
+
+                raise Exception(
+                    f"Demucs stem not found: {stem_name}"
+                )
+
+            shutil.copy(
+                source_path,
+                target_path
+            )
+
+            stem_targets[
+                stem_name
+            ] = target_path
 
 
-        minus_target = os.path.join(
-            job_result_dir,
-            "minus.mp3"
-        )
+        # ========================================
+        # DETECT VOCAL START
+        # ========================================
 
-
-        shutil.copy(
-            vocals_source,
-            vocals_target
-        )
-
-
-        shutil.copy(
-            minus_source,
-            minus_target
+        vocal_start = detect_vocal_start(
+            stem_targets["vocals"]
         )
 
 
@@ -336,10 +395,30 @@ def run_demucs(
             f"/results/{job_id}/vocals.mp3"
         )
 
-
-        jobs[job_id]["minus"] = (
-            f"/results/{job_id}/minus.mp3"
+        jobs[job_id]["drums"] = (
+            f"/results/{job_id}/drums.mp3"
         )
+
+        jobs[job_id]["bass"] = (
+            f"/results/{job_id}/bass.mp3"
+        )
+
+        jobs[job_id]["guitar"] = (
+            f"/results/{job_id}/guitar.mp3"
+        )
+
+        jobs[job_id]["piano"] = (
+            f"/results/{job_id}/piano.mp3"
+        )
+
+        jobs[job_id]["other"] = (
+            f"/results/{job_id}/other.mp3"
+        )
+
+        jobs[job_id]["vocal_start"] = (
+            vocal_start
+        )
+
 
 
     except Exception as error:
