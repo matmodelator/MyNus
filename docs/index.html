@@ -869,67 +869,170 @@
 
     }
 
+/* ========================================
+   SEQUENCER + EQ/EFFECTS LAYOUT FIX
+======================================== */
 
-    @media (max-width: 700px) {
+.studio-layout {
+  display: grid;
 
-      .track {
-        grid-template-columns: 1fr;
-      }
+  grid-template-columns:
+    minmax(0, 1fr)
+    clamp(210px, 18vw, 300px);
 
-      .load-row {
-        flex-direction: column;
+  gap: 12px;
 
-        align-items: stretch;
-      }
+  align-items: start;
 
-      #fileName {
-        width: 100%;
-      }
+  width: 100%;
+}
 
-      .master-timeline-title {
-        margin-left: 0;
-      }
 
-      .master-timeline {
-        width: 100%;
-        margin-left: 0;
-      }
+/* ========================================
+   SEQUENCER
+======================================== */
 
-      .master-timeline-row {
-        grid-template-columns: 1fr;
-        gap: 4px;
-      }
+.sequencer {
+  min-width: 0;
+  width: 100%;
+}
 
-      .shared-scroll-row {
-        grid-template-columns: 1fr;
-        gap: 2px;
-      }
 
-      .shared-scroll-spacer {
-        display: none;
-      }
+/* ========================================
+   EQ / EFFECTS — ALWAYS RIGHT
+======================================== */
 
-      .transport-stack {
-        margin-left: 0;
-        width: 100%;
-      }
+.fx-panel {
+  position: sticky;
 
-      .track-duration-info {
-        width: 100%;
-        text-align: left;
-      }
+  top: 12px;
 
-      .transport-counters {
-        grid-template-columns: 1fr;
-        gap: 4px;
-      }
+  width: 100%;
+  min-width: 0;
+  max-width: 300px;
 
-      .selection-info {
-        margin-left: 0;
-      }
+  margin: 0;
 
-    }
+  box-sizing: border-box;
 
+  align-self: start;
+
+  overflow: hidden;
+}
+
+
+/* ========================================
+   COMPACT FX CONTENT
+======================================== */
+
+.fx-panel button,
+.fx-panel select,
+.fx-panel input {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+
+.fx-track-buttons {
+  display: grid;
+
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+
+  gap: 4px;
+}
+
+
+.fx-track-buttons button {
+  width: 100%;
+  min-width: 0;
+
+  padding: 5px 3px;
+
+  font-size: 11px;
+}
+
+
+.fx-master-button {
+  width: 100%;
+
+  margin-top: 4px;
+}
+
+
+/* ========================================
+   DON'T ALLOW GRID CONTENT TO PUSH FX DOWN
+======================================== */
+
+.studio-layout > * {
+  min-width: 0;
+}
+
+
+/* ========================================
+   SMALLER DESKTOP WINDOWS
+======================================== */
+
+@media (max-width: 1200px) {
+
+  .studio-layout {
+    grid-template-columns:
+      minmax(0, 1fr)
+      clamp(190px, 20vw, 240px);
+
+    gap: 8px;
+  }
+
+
+  .fx-panel {
+    max-width: 240px;
+
+    padding: 6px;
+  }
+
+
+  .fx-panel button {
+    font-size: 10px;
+
+    padding-left: 2px;
+    padding-right: 2px;
+  }
+
+}
+
+
+/* ========================================
+   VERY NARROW WINDOWS
+   STILL KEEP FX ON THE RIGHT
+======================================== */
+
+@media (max-width: 900px) {
+
+  .studio-layout {
+    grid-template-columns:
+      minmax(0, 1fr)
+      180px;
+
+    gap: 6px;
+  }
+
+
+  .fx-panel {
+    width: 180px;
+    max-width: 180px;
+
+    padding: 5px;
+  }
+
+
+  .fx-track-buttons {
+    gap: 2px;
+  }
+
+}
+
+   
   </style>
 
 </head>
@@ -9948,8 +10051,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Shared scroll + crop masks + vocal range
-   | 2.5.0
+CSS fix
+   | 2.5.1
 </div>
 
 <div class="row" id="build-down">
