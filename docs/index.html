@@ -17,9 +17,8 @@
   <title>MyNus</title>
 
 
-  <style>
-
-    /* ========================================
+ <style>
+/* ========================================
        PAGE
     ======================================== */
 
@@ -197,86 +196,86 @@
 
     .studio-layout {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 320px;
-      gap: 16px;
+      grid-template-columns:
+        minmax(0, 1fr)
+        clamp(190px, 18vw, 280px);
+      gap: 12px;
       align-items: start;
+      width: 100%;
     }
 
     .studio-main {
       min-width: 0;
+      width: 100%;
     }
 
     .fx-panel {
       position: sticky;
       top: 12px;
-
-      margin-top: 0;
-
+      width: 100%;
+      min-width: 0;
+      max-width: 280px;
+      margin: 0;
       padding: 6px;
-
+      align-self: start;
+      overflow: hidden;
       background: #f5f5f5;
       border-radius: 10px;
+      box-sizing: border-box;
     }
 
     .fx-panel-title {
-      margin-bottom: 10px;
-
-      font-size: 15px;
+      margin-bottom: 6px;
+      font-size: 14px;
       font-weight: bold;
     }
 
     .fx-target-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-
-      gap: 6px;
-
-      margin-bottom: 6px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 4px;
+      margin-bottom: 4px;
     }
 
     .fx-target-grid button {
       width: 100%;
-      padding: 8px 6px;
-
-      font-size: 12px;
+      min-width: 0;
+      padding: 5px 3px;
+      font-size: 10px;
     }
 
     .fx-target-master-row {
       display: grid;
       grid-template-columns: 1fr;
-
-      margin-bottom: 12px;
+      margin-bottom: 6px;
     }
 
     .fx-target-master-row button {
       width: 100%;
-      padding: 9px 6px;
-
-      font-size: 12px;
+      min-width: 0;
+      padding: 5px 3px;
+      font-size: 10px;
     }
 
     .fx-section {
-      margin-top: 12px;
-      padding-top: 12px;
-
+      margin-top: 6px;
+      padding-top: 6px;
       border-top: 1px solid #ddd;
     }
 
     .fx-section-title {
-      margin-bottom: 8px;
-
-      font-size: 13px;
+      margin-bottom: 4px;
+      font-size: 12px;
       font-weight: bold;
     }
 
     .eq-row,
     .fx-control-row {
       display: grid;
-      grid-template-columns: 72px 1fr 48px;
-      gap: 8px;
+      grid-template-columns: 60px minmax(0, 1fr) 42px;
+      gap: 5px;
       align-items: center;
-
-      margin-bottom: 8px;
+      margin-bottom: 4px;
     }
 
     .eq-row label,
@@ -300,16 +299,14 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-
-      gap: 10px;
-
-      margin-bottom: 8px;
+      gap: 6px;
+      margin-bottom: 4px;
     }
 
     .fx-toggle-row button {
-      padding: 7px 10px;
+      padding: 4px 7px;
+      font-size: 10px;
     }
-
 
 
     /* ========================================
@@ -781,7 +778,6 @@
     }
 
 
-
     .track-save-row button {
       flex: 1;
       padding: 2px 3px;
@@ -789,7 +785,6 @@
       line-height: 14px;
       white-space: nowrap;
     }
-
 
 
     .master-controls {
@@ -852,188 +847,74 @@
       margin-bottom: 12px;
     }
 
-    /* ========================================
-       RESPONSIVE
-    ======================================== */
-
-    @media (max-width: 1000px) {
-
-      .studio-layout {
-        grid-template-columns: 1fr;
-      }
-
-      .fx-panel {
+    
+.fx-panel {
         position: static;
         margin-top: 0;
       }
 
     }
 
-/* ========================================
-   SEQUENCER + EQ/EFFECTS LAYOUT FIX
-======================================== */
 
-.studio-layout {
-  display: grid;
+    /* ========================================
+       RESPONSIVE — FX ALWAYS STAYS RIGHT
+    ======================================== */
 
-  grid-template-columns:
-    minmax(0, 1fr)
-    clamp(210px, 18vw, 300px);
+    @media (max-width: 1200px) {
 
-  gap: 12px;
+      .studio-layout {
+        grid-template-columns:
+          minmax(0, 1fr)
+          clamp(180px, 20vw, 230px);
+        gap: 8px;
+      }
 
-  align-items: start;
+      .fx-panel {
+        max-width: 230px;
+        padding: 5px;
+      }
 
-  width: 100%;
-}
+      .eq-row,
+      .fx-control-row {
+        grid-template-columns: 54px minmax(0, 1fr) 38px;
+        gap: 4px;
+      }
 
-
-/* ========================================
-   SEQUENCER
-======================================== */
-
-.sequencer {
-  min-width: 0;
-  width: 100%;
-}
-
-
-/* ========================================
-   EQ / EFFECTS — ALWAYS RIGHT
-======================================== */
-
-.fx-panel {
-  position: sticky;
-
-  top: 12px;
-
-  width: 100%;
-  min-width: 0;
-  max-width: 300px;
-
-  margin: 0;
-
-  box-sizing: border-box;
-
-  align-self: start;
-
-  overflow: hidden;
-}
+    }
 
 
-/* ========================================
-   COMPACT FX CONTENT
-======================================== */
+    @media (max-width: 900px) {
 
-.fx-panel button,
-.fx-panel select,
-.fx-panel input {
-  min-width: 0;
-  max-width: 100%;
-  box-sizing: border-box;
-}
+      .studio-layout {
+        grid-template-columns:
+          minmax(0, 1fr)
+          175px;
+        gap: 6px;
+      }
 
+      .fx-panel {
+        width: 175px;
+        max-width: 175px;
+      }
 
-.fx-track-buttons {
-  display: grid;
+      .fx-target-grid {
+        gap: 2px;
+      }
 
-  grid-template-columns:
-    repeat(3, minmax(0, 1fr));
+      .eq-row,
+      .fx-control-row {
+        grid-template-columns: 48px minmax(0, 1fr) 34px;
+        gap: 3px;
+      }
 
-  gap: 4px;
-}
+      .fx-value,
+      .eq-row label,
+      .fx-control-row label {
+        font-size: 9px;
+      }
 
-
-.fx-track-buttons button {
-  width: 100%;
-  min-width: 0;
-
-  padding: 5px 3px;
-
-  font-size: 11px;
-}
-
-
-.fx-master-button {
-  width: 100%;
-
-  margin-top: 4px;
-}
-
-
-/* ========================================
-   DON'T ALLOW GRID CONTENT TO PUSH FX DOWN
-======================================== */
-
-.studio-layout > * {
-  min-width: 0;
-}
-
-
-/* ========================================
-   SMALLER DESKTOP WINDOWS
-======================================== */
-
-@media (max-width: 1200px) {
-
-  .studio-layout {
-    grid-template-columns:
-      minmax(0, 1fr)
-      clamp(190px, 20vw, 240px);
-
-    gap: 8px;
-  }
-
-
-  .fx-panel {
-    max-width: 240px;
-
-    padding: 6px;
-  }
-
-
-  .fx-panel button {
-    font-size: 10px;
-
-    padding-left: 2px;
-    padding-right: 2px;
-  }
-
-}
-
-
-/* ========================================
-   VERY NARROW WINDOWS
-   STILL KEEP FX ON THE RIGHT
-======================================== */
-
-@media (max-width: 900px) {
-
-  .studio-layout {
-    grid-template-columns:
-      minmax(0, 1fr)
-      180px;
-
-    gap: 6px;
-  }
-
-
-  .fx-panel {
-    width: 180px;
-    max-width: 180px;
-
-    padding: 5px;
-  }
-
-
-  .fx-track-buttons {
-    gap: 2px;
-  }
-
-}
-
-   
-  </style>
+    }
+</style>
 
 </head>
 
@@ -10051,8 +9932,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-CSS fix
-   | 2.5.1
+CSS clean
+   | 2.5.2
 </div>
 
 <div class="row" id="build-down">
