@@ -210,7 +210,7 @@
       position: sticky;
       top: 12px;
 
-      margin-top: 96px;
+      margin-top: 0;
 
       padding: 6px;
 
@@ -541,8 +541,7 @@
 
       height: 46px;
 
-      overflow-x: auto;
-      overflow-y: hidden;
+      overflow: hidden;
 
       background: #fafafa;
 
@@ -612,8 +611,7 @@
 
       height: 42px;
 
-      overflow-x: auto;
-      overflow-y: hidden;
+      overflow: hidden;
 
       background: #ececec;
 
@@ -631,6 +629,51 @@
       min-width: 100%;
 
       cursor: pointer;
+    }
+
+    .shared-scroll-row {
+      display: grid;
+      grid-template-columns: 190px 1fr;
+      gap: 12px;
+      align-items: center;
+      width: 100%;
+      margin-top: 2px;
+    }
+
+    .shared-scroll-spacer {
+      width: 190px;
+      height: 1px;
+    }
+
+    .shared-scroll {
+      overflow-x: auto;
+      overflow-y: hidden;
+      height: 14px;
+      scrollbar-width: thin;
+    }
+
+    .shared-scroll-inner {
+      height: 1px;
+      min-width: 100%;
+    }
+
+    .transport-stack {
+      margin-left: 202px;
+      width: calc(100% - 202px);
+    }
+
+    .transport-counters {
+      display: block;
+      width: 100%;
+    }
+
+    .crop-mask {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      background: rgba(0,0,0,.28);
+      pointer-events: none;
+      z-index: 4;
     }
 
     .master-ruler {
@@ -751,6 +794,22 @@
 
     .master-controls {
       align-self: stretch;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .master-controls .track-buttons {
+      display: flex;
+      gap: 4px;
+      margin: 0;
+    }
+
+    .master-controls .track-buttons button {
+      flex: 1 1 0;
+      min-width: 0;
+      padding: 3px 4px;
+      font-size: 10px;
     }
 
     .master-state {
@@ -839,6 +898,20 @@
       .master-timeline-row {
         grid-template-columns: 1fr;
         gap: 4px;
+      }
+
+      .shared-scroll-row {
+        grid-template-columns: 1fr;
+        gap: 2px;
+      }
+
+      .shared-scroll-spacer {
+        display: none;
+      }
+
+      .transport-stack {
+        margin-left: 0;
+        width: 100%;
       }
 
       .track-duration-info {
@@ -1083,6 +1156,16 @@
           <canvas id="vocalsCanvas"></canvas>
 
           <div
+            id="vocalsCropMaskLeft"
+            class="crop-mask"
+          ></div>
+
+          <div
+            id="vocalsCropMaskRight"
+            class="crop-mask"
+          ></div>
+
+          <div
             class="playhead"
             id="vocalsPlayhead"
           ></div>
@@ -1167,6 +1250,16 @@
         >
 
           <canvas id="drumsCanvas"></canvas>
+
+          <div
+            id="drumsCropMaskLeft"
+            class="crop-mask"
+          ></div>
+
+          <div
+            id="drumsCropMaskRight"
+            class="crop-mask"
+          ></div>
 
           <div
             class="playhead"
@@ -1255,6 +1348,16 @@
           <canvas id="bassCanvas"></canvas>
 
           <div
+            id="bassCropMaskLeft"
+            class="crop-mask"
+          ></div>
+
+          <div
+            id="bassCropMaskRight"
+            class="crop-mask"
+          ></div>
+
+          <div
             class="playhead"
             id="bassPlayhead"
           ></div>
@@ -1339,6 +1442,16 @@
         >
 
           <canvas id="guitarCanvas"></canvas>
+
+          <div
+            id="guitarCropMaskLeft"
+            class="crop-mask"
+          ></div>
+
+          <div
+            id="guitarCropMaskRight"
+            class="crop-mask"
+          ></div>
 
           <div
             class="playhead"
@@ -1427,6 +1540,16 @@
           <canvas id="pianoCanvas"></canvas>
 
           <div
+            id="pianoCropMaskLeft"
+            class="crop-mask"
+          ></div>
+
+          <div
+            id="pianoCropMaskRight"
+            class="crop-mask"
+          ></div>
+
+          <div
             class="playhead"
             id="pianoPlayhead"
           ></div>
@@ -1511,6 +1634,16 @@
         >
 
           <canvas id="otherCanvas"></canvas>
+
+          <div
+            id="otherCropMaskLeft"
+            class="crop-mask"
+          ></div>
+
+          <div
+            id="otherCropMaskRight"
+            class="crop-mask"
+          ></div>
 
           <div
             class="playhead"
@@ -1625,6 +1758,23 @@
 
         </div>
 
+      </div>
+
+    </div>
+
+
+    <div class="shared-scroll-row">
+
+      <div class="shared-scroll-spacer"></div>
+
+      <div
+        id="sharedScroll"
+        class="shared-scroll"
+      >
+        <div
+          id="sharedScrollInner"
+          class="shared-scroll-inner"
+        ></div>
       </div>
 
     </div>
@@ -2418,6 +2568,42 @@ const otherCropInBtn =
 const otherCropOutBtn =
   document.getElementById("otherCropOutBtn");
 
+const vocalsCropMaskLeft =
+  document.getElementById("vocalsCropMaskLeft");
+
+const vocalsCropMaskRight =
+  document.getElementById("vocalsCropMaskRight");
+
+const drumsCropMaskLeft =
+  document.getElementById("drumsCropMaskLeft");
+
+const drumsCropMaskRight =
+  document.getElementById("drumsCropMaskRight");
+
+const bassCropMaskLeft =
+  document.getElementById("bassCropMaskLeft");
+
+const bassCropMaskRight =
+  document.getElementById("bassCropMaskRight");
+
+const guitarCropMaskLeft =
+  document.getElementById("guitarCropMaskLeft");
+
+const guitarCropMaskRight =
+  document.getElementById("guitarCropMaskRight");
+
+const pianoCropMaskLeft =
+  document.getElementById("pianoCropMaskLeft");
+
+const pianoCropMaskRight =
+  document.getElementById("pianoCropMaskRight");
+
+const otherCropMaskLeft =
+  document.getElementById("otherCropMaskLeft");
+
+const otherCropMaskRight =
+  document.getElementById("otherCropMaskRight");
+
 const zoomOutBtn =
   document.getElementById("zoomOutBtn");
 
@@ -2429,6 +2615,12 @@ const zoomValue =
 
 const masterTimeline =
   document.getElementById("masterTimeline");
+
+const sharedScroll =
+  document.getElementById("sharedScroll");
+
+const sharedScrollInner =
+  document.getElementById("sharedScrollInner");
 
 const masterTimelineInner =
   document.getElementById("masterTimelineInner");
@@ -2616,7 +2808,13 @@ const stemCrop = Object.fromEntries(
 let vocalStartTimeRaw =
   null;
 
+let vocalEndTimeRaw =
+  null;
+
 let vocalStartTime =
+  null;
+
+let vocalEndTime =
   null;
 
 
@@ -2988,8 +3186,24 @@ splitBtn.addEventListener(
         : null;
 
 
+      vocalEndTimeRaw =
+        Number.isFinite(
+          Number(
+            data.vocal_end
+          )
+        )
+        ? Number(
+            data.vocal_end
+          )
+        : null;
+
+
       vocalStartTime =
         vocalStartTimeRaw;
+
+
+      vocalEndTime =
+        vocalEndTimeRaw;
 
 
       currentOriginalFile =
@@ -3022,13 +3236,37 @@ splitBtn.addEventListener(
         originalAudio.duration;
 
 
+      const fitWidth =
+        Math.max(
+          1,
+          masterTimeline.clientWidth
+        );
+
+
+      pixelsPerSecond =
+        duration > 0
+        ? fitWidth / duration
+        : 10;
+
+
+      zoomValue.textContent =
+        pixelsPerSecond
+          .toFixed(1)
+        + " px/s";
+
+
+      sharedScrollInner.style.width =
+        getTimelineWidth()
+        + "px";
+
+
       await loadWaveforms(
         file,
         data
       );
 
 
-      updateEffectiveVocalStart();
+      updateEffectiveVocalRange();
 
 
       resetTransport();
@@ -3462,15 +3700,15 @@ function drawAllWaveforms() {
   drawMasterCompositeWaveform();
 
 
-  stemIds.forEach(
-    stemId => {
+  updateCropMasks();
 
-      drawCropMask(
-        stemId
-      );
 
-    }
-  );
+  sharedScrollInner.style.width =
+    getTimelineWidth()
+    + "px";
+
+
+  applySharedScroll();
 
 
   updatePlayheads();
@@ -3481,79 +3719,6 @@ function drawAllWaveforms() {
 
 
 
-
-
-function drawCropMask(
-  stemId
-) {
-
-  const crop =
-    stemCrop[
-      stemId
-    ];
-
-
-  const canvas =
-    canvases[
-      stemId
-    ];
-
-
-  const context =
-    canvas.getContext(
-      "2d"
-    );
-
-
-  const width =
-    getTimelineWidth();
-
-
-  const height =
-    canvas.height;
-
-
-  const inX =
-    crop.in
-    * pixelsPerSecond;
-
-
-  if (
-    inX > 0
-  ) {
-
-    context.clearRect(
-      0,
-      0,
-      inX,
-      height
-    );
-
-  }
-
-
-  if (
-    crop.out !== null
-  ) {
-
-    const outX =
-      crop.out
-      * pixelsPerSecond;
-
-
-    context.clearRect(
-      outX,
-      0,
-      Math.max(
-        0,
-        width - outX
-      ),
-      height
-    );
-
-  }
-
-}
 
 
 function drawWaveform(
@@ -4167,6 +4332,24 @@ const stemCropOutButtons = {
   other: otherCropOutBtn
 };
 
+const stemCropMaskLeft = {
+  vocals: vocalsCropMaskLeft,
+  drums: drumsCropMaskLeft,
+  bass: bassCropMaskLeft,
+  guitar: guitarCropMaskLeft,
+  piano: pianoCropMaskLeft,
+  other: otherCropMaskLeft
+};
+
+const stemCropMaskRight = {
+  vocals: vocalsCropMaskRight,
+  drums: drumsCropMaskRight,
+  bass: bassCropMaskRight,
+  guitar: guitarCropMaskRight,
+  piano: pianoCropMaskRight,
+  other: otherCropMaskRight
+};
+
 
 // ========================================
 // ORIGINAL / MIX
@@ -4552,47 +4735,57 @@ stemIds.forEach(
       "click",
       () => {
 
-        const current =
-          getCurrentTime();
-
-
-        stemCrop[
-          stemId
-        ].in =
-          current;
-
-
         if (
           stemCrop[
             stemId
-          ].out !== null
-          &&
-          stemCrop[
-            stemId
-          ].out <= current
+          ].in > 0
         ) {
 
           stemCrop[
             stemId
-          ].out =
-            null;
+          ].in = 0;
+
+        }
+
+        else {
+
+          const current =
+            getCurrentTime();
+
+
+          if (
+            stemCrop[
+              stemId
+            ].out === null
+            ||
+            current <
+            stemCrop[
+              stemId
+            ].out
+          ) {
+
+            stemCrop[
+              stemId
+            ].in =
+              current;
+
+          }
 
         }
 
 
         updateCropButtons();
 
+        updateCropMasks();
+
 
         if (
           stemId === "vocals"
         ) {
 
-          updateEffectiveVocalStart();
+          updateEffectiveVocalRange();
 
         }
-
-
-        drawAllWaveforms();
 
       }
     );
@@ -4604,38 +4797,53 @@ stemIds.forEach(
       "click",
       () => {
 
-        const current =
-          getCurrentTime();
-
-
         if (
-          current >
           stemCrop[
             stemId
-          ].in
+          ].out !== null
         ) {
 
           stemCrop[
             stemId
-          ].out =
-            current;
+          ].out = null;
+
+        }
+
+        else {
+
+          const current =
+            getCurrentTime();
+
+
+          if (
+            current >
+            stemCrop[
+              stemId
+            ].in
+          ) {
+
+            stemCrop[
+              stemId
+            ].out =
+              current;
+
+          }
 
         }
 
 
         updateCropButtons();
 
+        updateCropMasks();
+
 
         if (
           stemId === "vocals"
         ) {
 
-          updateEffectiveVocalStart();
+          updateEffectiveVocalRange();
 
         }
-
-
-        drawAllWaveforms();
 
       }
     );
@@ -4674,25 +4882,107 @@ function updateCropButtons() {
 }
 
 
-function updateEffectiveVocalStart() {
+function updateCropMasks() {
+
+  const width =
+    getTimelineWidth();
+
+
+  stemIds.forEach(
+    stemId => {
+
+      const crop =
+        stemCrop[
+          stemId
+        ];
+
+
+      const left =
+        stemCropMaskLeft[
+          stemId
+        ];
+
+
+      const right =
+        stemCropMaskRight[
+          stemId
+        ];
+
+
+      const leftWidth =
+        Math.max(
+          0,
+          crop.in
+          * pixelsPerSecond
+        );
+
+
+      left.style.left =
+        "0px";
+
+
+      left.style.width =
+        leftWidth
+        + "px";
+
+
+      if (
+        crop.out === null
+      ) {
+
+        right.style.display =
+          "none";
+
+      }
+
+      else {
+
+        const outX =
+          crop.out
+          * pixelsPerSecond;
+
+
+        right.style.display =
+          "block";
+
+
+        right.style.left =
+          outX
+          + "px";
+
+
+        right.style.width =
+          Math.max(
+            0,
+            width - outX
+          )
+          + "px";
+
+      }
+
+    }
+  );
+
+}
+
+
+function updateEffectiveVocalRange() {
 
   const buffer =
     waveformData.vocals;
 
 
-  if (
-    !buffer
-  ) {
+  if (!buffer) {
 
     vocalStartTime =
-      Number.isFinite(
-        vocalStartTimeRaw
-      )
-      ? Math.max(
-          vocalStartTimeRaw,
-          stemCrop.vocals.in || 0
-        )
-      : null;
+      vocalStartTimeRaw;
+
+
+    vocalEndTime =
+      vocalEndTimeRaw;
+
+
+    updateTimeDisplay();
 
     return;
 
@@ -4742,9 +5032,6 @@ function updateEffectiveVocalStart() {
     );
 
 
-  // Similar to FFmpeg silencedetect, but rerun on the cropped region.
-  // A short random bleed will not count: activity must remain
-  // above threshold for a sustained interval.
   const threshold =
     Math.pow(
       10,
@@ -4752,12 +5039,20 @@ function updateEffectiveVocalStart() {
     );
 
 
+  const windowSeconds =
+    0.02;
+
+
+  const requiredSeconds =
+    0.35;
+
+
   const windowFrames =
     Math.max(
       1,
       Math.floor(
         sampleRate
-        * 0.02
+        * windowSeconds
       )
     );
 
@@ -4766,17 +5061,14 @@ function updateEffectiveVocalStart() {
     Math.max(
       1,
       Math.ceil(
-        0.35 / 0.02
+        requiredSeconds
+        / windowSeconds
       )
     );
 
 
-  let activeWindows =
-    0;
-
-
-  let candidateFrame =
-    null;
+  const windows =
+    [];
 
 
   for (
@@ -4792,12 +5084,9 @@ function updateEffectiveVocalStart() {
       );
 
 
-    let sumSquares =
-      0;
+    let sumSquares = 0;
 
-
-    let count =
-      0;
+    let count = 0;
 
 
     for (
@@ -4807,14 +5096,11 @@ function updateEffectiveVocalStart() {
     ) {
 
       const sample =
-        samples[
-          i
-        ];
+        samples[i];
 
 
       sumSquares +=
-        sample
-        * sample;
+        sample * sample;
 
 
       count++;
@@ -4822,45 +5108,49 @@ function updateEffectiveVocalStart() {
     }
 
 
-    const rms =
-      count > 0
-      ? Math.sqrt(
-          sumSquares
-          / count
+    windows.push({
+      frame,
+      active:
+        count > 0
+        &&
+        Math.sqrt(
+          sumSquares / count
         )
-      : 0;
+        >= threshold
+    });
+
+  }
 
 
-    if (
-      rms >= threshold
-    ) {
+  let firstActive = null;
+
+  let run = 0;
+
+
+  for (
+    let i = 0;
+    i < windows.length;
+    i++
+  ) {
+
+    if (windows[i].active) {
+
+      run++;
+
 
       if (
-        activeWindows === 0
-      ) {
-
-        candidateFrame =
-          frame;
-
-      }
-
-
-      activeWindows++;
-
-
-      if (
-        activeWindows >=
+        run >=
         requiredWindows
       ) {
 
-        vocalStartTime =
-          candidateFrame
-          / sampleRate;
+        firstActive =
+          windows[
+            i
+            - requiredWindows
+            + 1
+          ].frame;
 
-
-        updateTimeDisplay();
-
-        return;
+        break;
 
       }
 
@@ -4868,27 +5158,79 @@ function updateEffectiveVocalStart() {
 
     else {
 
-      activeWindows =
-        0;
-
-
-      candidateFrame =
-        null;
+      run = 0;
 
     }
 
   }
 
 
-  // No sustained vocal activity remains inside the crop.
+  let lastActive = null;
+
+  run = 0;
+
+
+  for (
+    let i = windows.length - 1;
+    i >= 0;
+    i--
+  ) {
+
+    if (windows[i].active) {
+
+      run++;
+
+
+      if (
+        run >=
+        requiredWindows
+      ) {
+
+        const endWindow =
+          windows[
+            i
+            + requiredWindows
+            - 1
+          ];
+
+
+        lastActive =
+          Math.min(
+            endFrame,
+            endWindow.frame
+            + windowFrames
+          );
+
+        break;
+
+      }
+
+    }
+
+    else {
+
+      run = 0;
+
+    }
+
+  }
+
+
   vocalStartTime =
-    null;
+    firstActive === null
+    ? null
+    : firstActive / sampleRate;
+
+
+  vocalEndTime =
+    lastActive === null
+    ? null
+    : lastActive / sampleRate;
 
 
   updateTimeDisplay();
 
 }
-
 
 
 // ========================================
@@ -8974,16 +9316,38 @@ function updateTimeDisplay() {
     );
 
 
-  const vocalRemaining =
+  let vocalRemaining = 0;
+
+
+  if (
     Number.isFinite(
       vocalStartTime
     )
-    ? Math.max(
-        0,
-        vocalStartTime
-        - current
-      )
-    : 0;
+    &&
+    current <
+    vocalStartTime
+  ) {
+
+    vocalRemaining =
+      vocalStartTime
+      - current;
+
+  }
+
+  else if (
+    Number.isFinite(
+      vocalEndTime
+    )
+    &&
+    current <
+    vocalEndTime
+  ) {
+
+    vocalRemaining =
+      vocalEndTime
+      - current;
+
+  }
 
 
   const inDisplay =
@@ -9040,6 +9404,7 @@ function updateTimeDisplay() {
 
 // ========================================
 // ANIMATION LOOP
+
 
 
 
@@ -9252,18 +9617,14 @@ function followPlayhead() {
     * pixelsPerSecond;
 
 
-  const mainScroll =
-    scrollAreas[0];
-
-
   const left =
-    mainScroll.scrollLeft;
+    getSharedScrollLeft();
 
 
   const right =
     left
     +
-    mainScroll.clientWidth;
+    sharedScroll.clientWidth;
 
 
   const margin =
@@ -9271,36 +9632,28 @@ function followPlayhead() {
 
 
   if (
-    x
-    >
+    x >
     right - margin
   ) {
 
     syncScrollTo(
-
       x
-      -
-      mainScroll.clientWidth
-      +
-      margin
-
+      - sharedScroll.clientWidth
+      + margin
     );
 
   }
 
   else if (
-    x
-    <
+    x <
     left + margin
   ) {
 
     syncScrollTo(
-
       Math.max(
         0,
         x - margin
       )
-
     );
 
   }
@@ -9309,96 +9662,55 @@ function followPlayhead() {
 
 
 // ========================================
-// SYNCHRONIZED SCROLL
+// SHARED HORIZONTAL SCROLL
+
 // ========================================
 
-scrollAreas.forEach(
-  area => {
+function getSharedScrollLeft() {
 
-    area.addEventListener(
-      "scroll",
-      () => {
+  return (
+    sharedScroll.scrollLeft
+    ||
+    0
+  );
 
-        if (
-          scrollSyncLock
-        ) {
-
-          return;
-
-        }
+}
 
 
-        scrollSyncLock =
-          true;
+function applySharedScroll() {
+
+  const left =
+    getSharedScrollLeft();
 
 
-        const left =
-          area.scrollLeft;
+  Object.values(
+    timelines
+  )
+  .forEach(
+    timeline => {
+
+      timeline.style.transform =
+        "translateX("
+        + (-left)
+        + "px)";
+
+    }
+  );
 
 
-        scrollAreas.forEach(
-          other => {
+  masterTimelineInner.style.transform =
+    "translateX("
+    + (-left)
+    + "px)";
 
-            if (
-              other !== area
-            ) {
-
-              other.scrollLeft =
-                left;
-
-            }
-
-          }
-        );
+}
 
 
-        masterTimeline.scrollLeft =
-          left;
-
-
-        scrollSyncLock =
-          false;
-
-      }
-    );
-
-  }
-);
-
-
-masterTimeline.addEventListener(
+sharedScroll.addEventListener(
   "scroll",
   () => {
 
-    if (
-      scrollSyncLock
-    ) {
-
-      return;
-
-    }
-
-
-    scrollSyncLock =
-      true;
-
-
-    const left =
-      masterTimeline.scrollLeft;
-
-
-    scrollAreas.forEach(
-      area => {
-
-        area.scrollLeft =
-          left;
-
-      }
-    );
-
-
-    scrollSyncLock =
-      false;
+    applySharedScroll();
 
   }
 );
@@ -9408,32 +9720,21 @@ function syncScrollTo(
   left
 ) {
 
-  scrollSyncLock =
-    true;
+  sharedScroll.scrollLeft =
+    Math.max(
+      0,
+      left
+    );
 
 
-  scrollAreas.forEach(
-    area => {
-
-      area.scrollLeft =
-        left;
-
-    }
-  );
-
-
-  masterTimeline.scrollLeft =
-    left;
-
-
-  scrollSyncLock =
-    false;
+  applySharedScroll();
 
 }
 
 
 // ========================================
 // ZOOM
+
 // ========================================
 
 zoomInBtn.addEventListener(
@@ -9468,9 +9769,22 @@ function changeZoom(
     getCurrentTime();
 
 
+  const viewport =
+    Math.max(
+      1,
+      masterTimeline.clientWidth
+    );
+
+
+  const minZoom =
+    duration > 0
+    ? viewport / duration
+    : 10;
+
+
   pixelsPerSecond =
     Math.max(
-      10,
+      minZoom,
       Math.min(
         200,
         value
@@ -9480,6 +9794,7 @@ function changeZoom(
 
   zoomValue.textContent =
     pixelsPerSecond
+      .toFixed(1)
     + " px/s";
 
 
@@ -9488,6 +9803,13 @@ function changeZoom(
   drawMasterTimeline();
 
   updateSelectionDisplay();
+
+  updateCropMasks();
+
+
+  sharedScrollInner.style.width =
+    getTimelineWidth()
+    + "px";
 
 
   const left =
@@ -9508,6 +9830,7 @@ function changeZoom(
 
 // ========================================
 // RESET
+
 // ========================================
 
 function resetTransport() {
@@ -9625,8 +9948,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Compact tracks + aligned timeline + crop redetect
-   | 2.4.0
+Shared scroll + crop masks + vocal range
+   | 2.5.0
 </div>
 
 <div class="row" id="build-down">
