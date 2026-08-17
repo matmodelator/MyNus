@@ -72,7 +72,7 @@
       display: flex;
       align-items: center;
 
-      gap: 10px;
+      gap: 5px;
     }
 
     #audioFile {
@@ -212,7 +212,7 @@
 
       margin-top: 96px;
 
-      padding: 12px;
+      padding: 6px;
 
       background: #f5f5f5;
       border-radius: 10px;
@@ -333,27 +333,57 @@
       min-width: 72px;
     }
 
-    .transport-fragment {
-      display: flex;
-      gap: 6px;
-      margin-left: auto;
-    }
-
-    .transport-fragment button {
-      min-width: 58px;
-    }
-
     #loopBtn.active {
       font-weight: bold;
       outline: 2px solid currentColor;
     }
 
     #playBtn {
-      min-width: 90px;
+      min-width: 58px;
+    }
+
+    .track-duration-info {
+      width: 190px;
+      padding: 6px 8px;
+      font-family: monospace;
+      font-size: 12px;
+      text-align: right;
+      box-sizing: border-box;
+    }
+
+    .transport-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .transport-row {
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 4px;
+      width: 100%;
+    }
+
+    .transport-row button {
+      min-width: 46px;
+      padding: 5px 6px;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .transport-counters {
+      display: grid;
+      grid-template-columns: 190px 1fr;
+      gap: 12px;
+      align-items: center;
+      width: 100%;
     }
 
     .time-display {
-      min-width: 170px;
+      flex: 1;
+      min-width: 0;
 
       padding: 8px 10px;
 
@@ -407,15 +437,24 @@
       display: grid;
 
       grid-template-columns:
-        95px 1fr;
+        190px 1fr;
 
       gap: 12px;
 
-      margin-bottom: 12px;
+      margin-bottom: 6px;
     }
 
     .track-controls {
-      padding: 10px;
+      display: grid;
+      grid-template-columns: 52px 1fr;
+      grid-template-areas:
+        "title buttons"
+        "volume volume"
+        "save save"
+        "crop crop";
+      gap: 2px 4px;
+
+      padding: 4px 6px;
 
       background: #f5f5f5;
 
@@ -423,33 +462,44 @@
     }
 
     .track-title {
-      margin-bottom: 10px;
+      grid-area: title;
 
+      margin: 0;
+
+      align-self: center;
+
+      font-size: 11px;
       font-weight: bold;
     }
 
     .track-buttons {
+      grid-area: buttons;
+
       display: flex;
 
-      gap: 6px;
+      gap: 4px;
 
-      margin-bottom: 10px;
+      margin: 0;
     }
 
     .track-buttons button {
       flex: 1;
 
-      padding: 6px;
+      padding: 2px 3px;
 
-      font-size: 12px;
+      font-size: 10px;
+      line-height: 14px;
     }
 
     .volume-row {
+      grid-area: volume;
+
       display: flex;
 
       align-items: center;
 
-      gap: 7px;
+      gap: 5px;
+      min-height: 16px;
     }
 
     .volume-row input {
@@ -472,7 +522,7 @@
 
       height: 100%;
 
-      padding: 10px;
+      padding: 4px 6px;
 
       background: #ececec;
 
@@ -489,7 +539,7 @@
     .timeline-scroll {
       position: relative;
 
-      height: 92px;
+      height: 46px;
 
       overflow-x: auto;
       overflow-y: hidden;
@@ -505,7 +555,7 @@
     .timeline-inner {
       position: relative;
 
-      height: 90px;
+      height: 46px;
 
       min-width: 100%;
     }
@@ -514,7 +564,7 @@
       display: block;
 
       width: 100%;
-      height: 90px;
+      height: 46px;
 
       cursor: pointer;
     }
@@ -540,17 +590,25 @@
     ======================================== */
 
     .master-timeline-title {
-      margin: 20px 0 8px 202px;
+      margin: 10px 0 4px 202px;
 
       font-size: 13px;
       font-weight: bold;
     }
 
+    .master-timeline-row {
+      display: grid;
+      grid-template-columns: 190px 1fr;
+      gap: 12px;
+      align-items: center;
+      width: 100%;
+    }
+
     .master-timeline {
       position: relative;
 
-      width: calc(100% - 202px);
-      margin-left: 202px;
+      width: 100%;
+      margin-left: 0;
 
       height: 42px;
 
@@ -664,15 +722,29 @@
     }
 
     .track-save-row {
+      grid-area: save;
+
       display: flex;
-      gap: 6px;
-      margin-top: 8px;
+      gap: 4px;
+      margin: 0;
     }
+
+    .crop-row {
+      grid-area: crop;
+    }
+    .crop-row button.active {
+      font-weight: bold;
+      outline: 2px solid currentColor;
+    }
+
+
 
     .track-save-row button {
       flex: 1;
-      padding: 6px;
-      font-size: 11px;
+      padding: 2px 3px;
+      font-size: 9px;
+      line-height: 14px;
+      white-space: nowrap;
     }
 
 
@@ -762,6 +834,21 @@
       .master-timeline {
         width: 100%;
         margin-left: 0;
+      }
+
+      .master-timeline-row {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+
+      .track-duration-info {
+        width: 100%;
+        text-align: left;
+      }
+
+      .transport-counters {
+        grid-template-columns: 1fr;
+        gap: 4px;
       }
 
       .selection-info {
@@ -972,6 +1059,14 @@
             Save Selection
           </button>
         </div>
+        <div class="track-save-row crop-row">
+          <button id="vocalsCropInBtn">
+            Crop In
+          </button>
+          <button id="vocalsCropOutBtn">
+            Crop Out
+          </button>
+        </div>
 
       </div>
 
@@ -1048,6 +1143,14 @@
           </button>
           <button data-export-track="drums" data-export-scope="selection">
             Save Selection
+          </button>
+        </div>
+        <div class="track-save-row crop-row">
+          <button id="drumsCropInBtn">
+            Crop In
+          </button>
+          <button id="drumsCropOutBtn">
+            Crop Out
           </button>
         </div>
 
@@ -1128,6 +1231,14 @@
             Save Selection
           </button>
         </div>
+        <div class="track-save-row crop-row">
+          <button id="bassCropInBtn">
+            Crop In
+          </button>
+          <button id="bassCropOutBtn">
+            Crop Out
+          </button>
+        </div>
 
       </div>
 
@@ -1204,6 +1315,14 @@
           </button>
           <button data-export-track="guitar" data-export-scope="selection">
             Save Selection
+          </button>
+        </div>
+        <div class="track-save-row crop-row">
+          <button id="guitarCropInBtn">
+            Crop In
+          </button>
+          <button id="guitarCropOutBtn">
+            Crop Out
           </button>
         </div>
 
@@ -1284,6 +1403,14 @@
             Save Selection
           </button>
         </div>
+        <div class="track-save-row crop-row">
+          <button id="pianoCropInBtn">
+            Crop In
+          </button>
+          <button id="pianoCropOutBtn">
+            Crop Out
+          </button>
+        </div>
 
       </div>
 
@@ -1360,6 +1487,14 @@
           </button>
           <button data-export-track="other" data-export-scope="selection">
             Save Selection
+          </button>
+        </div>
+        <div class="track-save-row crop-row">
+          <button id="otherCropInBtn">
+            Crop In
+          </button>
+          <button id="otherCropOutBtn">
+            Crop Out
           </button>
         </div>
 
@@ -1454,30 +1589,41 @@
       Master Timeline
     </div>
 
-    <div
-      id="masterTimeline"
-      class="master-timeline"
-    >
+    <div class="master-timeline-row">
 
       <div
-        id="masterTimelineInner"
-        class="master-timeline-inner"
+        id="trackDurationInfo"
+        class="track-duration-info"
+      >
+        Total: 00:00.00
+      </div>
+
+      <div
+        id="masterTimeline"
+        class="master-timeline"
       >
 
         <div
-          id="masterRuler"
-          class="master-ruler"
-        ></div>
+          id="masterTimelineInner"
+          class="master-timeline-inner"
+        >
 
-        <div
-          id="selectionRange"
-          class="selection-range"
-        ></div>
+          <div
+            id="masterRuler"
+            class="master-ruler"
+          ></div>
 
-        <div
-          id="masterCursor"
-          class="master-cursor"
-        ></div>
+          <div
+            id="selectionRange"
+            class="selection-range"
+          ></div>
+
+          <div
+            id="masterCursor"
+            class="master-cursor"
+          ></div>
+
+        </div>
 
       </div>
 
@@ -1493,50 +1639,43 @@
 
 
     <!-- ========================================
-         TRANSPORT
+         TRACK INFO + TRANSPORT
     ======================================== -->
 
-    <div class="transport">
+    <div class="transport-stack">
 
-      <button
-        id="originalModeBtn"
-        class="active"
-      >
-        Original
-      </button>
+      <div class="transport-row">
 
-      <button id="mixModeBtn">
-        Mix
-      </button>
+        <button
+          id="originalModeBtn"
+          class="active"
+        >
+          Original
+        </button>
 
-      <button id="masterModeBtn">
-        Master
-      </button>
+        <button id="mixModeBtn">
+          Mix
+        </button>
 
-      <button id="startBtn">
-        Start
-      </button>
+        <button id="masterModeBtn">
+          Master
+        </button>
 
-      <button id="playBtn">
-        Play
-      </button>
+        <button id="startBtn">
+          Start
+        </button>
 
-      <button id="stopBtn">
-        Stop
-      </button>
+        <button id="playBtn">
+          Play
+        </button>
 
-      <button id="endBtn">
-        End
-      </button>
+        <button id="stopBtn">
+          Stop
+        </button>
 
-      <div
-        id="timeDisplay"
-        class="time-display"
-      >
-        00:00.00 / 00:00.00 / -00:00.00 / V:-00:00.00 / IN --:--.-- / OUT --:--.--
-      </div>
-
-      <div class="transport-fragment">
+        <button id="endBtn">
+          End
+        </button>
 
         <button id="fragmentStartBtn">
           IN
@@ -1552,10 +1691,21 @@
 
       </div>
 
-    </div>
 
+      <div class="transport-counters">
+
+        <div class="track-duration-info"></div>
+
+        <div
+          id="timeDisplay"
+          class="time-display"
+        >
+          00:00.00 / -00:00.00 / V:-00:00.00 / IN --:--.-- / OUT --:--.--
+        </div>
 
       </div>
+
+    </div>
 
 
       <!-- ========================================
@@ -2133,6 +2283,9 @@ const endBtn =
 const timeDisplay =
   document.getElementById("timeDisplay");
 
+const trackDurationInfo =
+  document.getElementById("trackDurationInfo");
+
 const originalAudio =
   document.getElementById("originalAudio");
 
@@ -2228,6 +2381,42 @@ const otherVolumeValue =
 
 const masterAudio =
   document.getElementById("masterAudio");
+
+const vocalsCropInBtn =
+  document.getElementById("vocalsCropInBtn");
+
+const vocalsCropOutBtn =
+  document.getElementById("vocalsCropOutBtn");
+
+const drumsCropInBtn =
+  document.getElementById("drumsCropInBtn");
+
+const drumsCropOutBtn =
+  document.getElementById("drumsCropOutBtn");
+
+const bassCropInBtn =
+  document.getElementById("bassCropInBtn");
+
+const bassCropOutBtn =
+  document.getElementById("bassCropOutBtn");
+
+const guitarCropInBtn =
+  document.getElementById("guitarCropInBtn");
+
+const guitarCropOutBtn =
+  document.getElementById("guitarCropOutBtn");
+
+const pianoCropInBtn =
+  document.getElementById("pianoCropInBtn");
+
+const pianoCropOutBtn =
+  document.getElementById("pianoCropOutBtn");
+
+const otherCropInBtn =
+  document.getElementById("otherCropInBtn");
+
+const otherCropOutBtn =
+  document.getElementById("otherCropOutBtn");
 
 const zoomOutBtn =
   document.getElementById("zoomOutBtn");
@@ -2410,6 +2599,22 @@ const stemState =
     )
   );
 
+const stemCrop = Object.fromEntries(
+  stemIds.map(
+    stemId => [
+      stemId,
+      {
+        in: 0,
+        out: null
+      }
+    ]
+  )
+);
+
+
+
+let vocalStartTimeRaw =
+  null;
 
 let vocalStartTime =
   null;
@@ -2722,6 +2927,27 @@ splitBtn.addEventListener(
       resetMaster();
 
 
+      stemIds.forEach(
+        stemId => {
+
+          stemCrop[
+            stemId
+          ].in =
+            0;
+
+
+          stemCrop[
+            stemId
+          ].out =
+            null;
+
+        }
+      );
+
+
+      updateCropButtons();
+
+
       const data =
         await waitForSeparation(
           jobId
@@ -2750,7 +2976,7 @@ splitBtn.addEventListener(
       );
 
 
-      vocalStartTime =
+      vocalStartTimeRaw =
         Number.isFinite(
           Number(
             data.vocal_start
@@ -2760,6 +2986,10 @@ splitBtn.addEventListener(
             data.vocal_start
           )
         : null;
+
+
+      vocalStartTime =
+        vocalStartTimeRaw;
 
 
       currentOriginalFile =
@@ -2796,6 +3026,9 @@ splitBtn.addEventListener(
         file,
         data
       );
+
+
+      updateEffectiveVocalStart();
 
 
       resetTransport();
@@ -3229,6 +3462,17 @@ function drawAllWaveforms() {
   drawMasterCompositeWaveform();
 
 
+  stemIds.forEach(
+    stemId => {
+
+      drawCropMask(
+        stemId
+      );
+
+    }
+  );
+
+
   updatePlayheads();
 
   updateMasterCursor();
@@ -3237,6 +3481,79 @@ function drawAllWaveforms() {
 
 
 
+
+
+function drawCropMask(
+  stemId
+) {
+
+  const crop =
+    stemCrop[
+      stemId
+    ];
+
+
+  const canvas =
+    canvases[
+      stemId
+    ];
+
+
+  const context =
+    canvas.getContext(
+      "2d"
+    );
+
+
+  const width =
+    getTimelineWidth();
+
+
+  const height =
+    canvas.height;
+
+
+  const inX =
+    crop.in
+    * pixelsPerSecond;
+
+
+  if (
+    inX > 0
+  ) {
+
+    context.clearRect(
+      0,
+      0,
+      inX,
+      height
+    );
+
+  }
+
+
+  if (
+    crop.out !== null
+  ) {
+
+    const outX =
+      crop.out
+      * pixelsPerSecond;
+
+
+    context.clearRect(
+      outX,
+      0,
+      Math.max(
+        0,
+        width - outX
+      ),
+      height
+    );
+
+  }
+
+}
 
 
 function drawWaveform(
@@ -3832,6 +4149,24 @@ const stemVolumeValues = {
   other: otherVolumeValue
 };
 
+const stemCropInButtons = {
+  vocals: vocalsCropInBtn,
+  drums: drumsCropInBtn,
+  bass: bassCropInBtn,
+  guitar: guitarCropInBtn,
+  piano: pianoCropInBtn,
+  other: otherCropInBtn
+};
+
+const stemCropOutButtons = {
+  vocals: vocalsCropOutBtn,
+  drums: drumsCropOutBtn,
+  bass: bassCropOutBtn,
+  guitar: guitarCropOutBtn,
+  piano: pianoCropOutBtn,
+  other: otherCropOutBtn
+};
+
 
 // ========================================
 // ORIGINAL / MIX
@@ -4129,8 +4464,30 @@ function applyMix() {
         ];
 
 
+      const current =
+        getCurrentTime();
+
+
+      const crop =
+        stemCrop[
+          stemId
+        ];
+
+
+      const insideCrop =
+        current >= crop.in
+        &&
+        (
+          crop.out === null
+          ||
+          current < crop.out
+        );
+
+
       const enabled =
         !state.muted
+        &&
+        insideCrop
         &&
         (
           !anySolo
@@ -4180,6 +4537,358 @@ function applyMix() {
   updatePlayheads();
 
 }
+
+
+// ========================================
+// TRACK CROP IN / OUT
+// ========================================
+
+stemIds.forEach(
+  stemId => {
+
+    stemCropInButtons[
+      stemId
+    ].addEventListener(
+      "click",
+      () => {
+
+        const current =
+          getCurrentTime();
+
+
+        stemCrop[
+          stemId
+        ].in =
+          current;
+
+
+        if (
+          stemCrop[
+            stemId
+          ].out !== null
+          &&
+          stemCrop[
+            stemId
+          ].out <= current
+        ) {
+
+          stemCrop[
+            stemId
+          ].out =
+            null;
+
+        }
+
+
+        updateCropButtons();
+
+
+        if (
+          stemId === "vocals"
+        ) {
+
+          updateEffectiveVocalStart();
+
+        }
+
+
+        drawAllWaveforms();
+
+      }
+    );
+
+
+    stemCropOutButtons[
+      stemId
+    ].addEventListener(
+      "click",
+      () => {
+
+        const current =
+          getCurrentTime();
+
+
+        if (
+          current >
+          stemCrop[
+            stemId
+          ].in
+        ) {
+
+          stemCrop[
+            stemId
+          ].out =
+            current;
+
+        }
+
+
+        updateCropButtons();
+
+
+        if (
+          stemId === "vocals"
+        ) {
+
+          updateEffectiveVocalStart();
+
+        }
+
+
+        drawAllWaveforms();
+
+      }
+    );
+
+  }
+);
+
+
+function updateCropButtons() {
+
+  stemIds.forEach(
+    stemId => {
+
+      stemCropInButtons[
+        stemId
+      ].classList.toggle(
+        "active",
+        stemCrop[
+          stemId
+        ].in > 0
+      );
+
+
+      stemCropOutButtons[
+        stemId
+      ].classList.toggle(
+        "active",
+        stemCrop[
+          stemId
+        ].out !== null
+      );
+
+    }
+  );
+
+}
+
+
+function updateEffectiveVocalStart() {
+
+  const buffer =
+    waveformData.vocals;
+
+
+  if (
+    !buffer
+  ) {
+
+    vocalStartTime =
+      Number.isFinite(
+        vocalStartTimeRaw
+      )
+      ? Math.max(
+          vocalStartTimeRaw,
+          stemCrop.vocals.in || 0
+        )
+      : null;
+
+    return;
+
+  }
+
+
+  const sampleRate =
+    buffer.sampleRate;
+
+
+  const samples =
+    buffer.getChannelData(
+      0
+    );
+
+
+  const cropIn =
+    Math.max(
+      0,
+      stemCrop.vocals.in || 0
+    );
+
+
+  const cropOut =
+    stemCrop.vocals.out === null
+    ? buffer.duration
+    : Math.min(
+        buffer.duration,
+        stemCrop.vocals.out
+      );
+
+
+  const startFrame =
+    Math.floor(
+      cropIn
+      * sampleRate
+    );
+
+
+  const endFrame =
+    Math.min(
+      samples.length,
+      Math.floor(
+        cropOut
+        * sampleRate
+      )
+    );
+
+
+  // Similar to FFmpeg silencedetect, but rerun on the cropped region.
+  // A short random bleed will not count: activity must remain
+  // above threshold for a sustained interval.
+  const threshold =
+    Math.pow(
+      10,
+      -38 / 20
+    );
+
+
+  const windowFrames =
+    Math.max(
+      1,
+      Math.floor(
+        sampleRate
+        * 0.02
+      )
+    );
+
+
+  const requiredWindows =
+    Math.max(
+      1,
+      Math.ceil(
+        0.35 / 0.02
+      )
+    );
+
+
+  let activeWindows =
+    0;
+
+
+  let candidateFrame =
+    null;
+
+
+  for (
+    let frame = startFrame;
+    frame < endFrame;
+    frame += windowFrames
+  ) {
+
+    const windowEnd =
+      Math.min(
+        endFrame,
+        frame + windowFrames
+      );
+
+
+    let sumSquares =
+      0;
+
+
+    let count =
+      0;
+
+
+    for (
+      let i = frame;
+      i < windowEnd;
+      i++
+    ) {
+
+      const sample =
+        samples[
+          i
+        ];
+
+
+      sumSquares +=
+        sample
+        * sample;
+
+
+      count++;
+
+    }
+
+
+    const rms =
+      count > 0
+      ? Math.sqrt(
+          sumSquares
+          / count
+        )
+      : 0;
+
+
+    if (
+      rms >= threshold
+    ) {
+
+      if (
+        activeWindows === 0
+      ) {
+
+        candidateFrame =
+          frame;
+
+      }
+
+
+      activeWindows++;
+
+
+      if (
+        activeWindows >=
+        requiredWindows
+      ) {
+
+        vocalStartTime =
+          candidateFrame
+          / sampleRate;
+
+
+        updateTimeDisplay();
+
+        return;
+
+      }
+
+    }
+
+    else {
+
+      activeWindows =
+        0;
+
+
+      candidateFrame =
+        null;
+
+    }
+
+  }
+
+
+  // No sustained vocal activity remains inside the crop.
+  vocalStartTime =
+    null;
+
+
+  updateTimeDisplay();
+
+}
+
 
 
 // ========================================
@@ -8293,16 +9002,17 @@ function updateTimeDisplay() {
       );
 
 
+  trackDurationInfo.textContent =
+    "Total: "
+    + formatTime(
+        duration
+      );
+
+
   timeDisplay.textContent =
 
     formatTime(
       current
-    )
-
-    + " / "
-
-    + formatTime(
-      duration
     )
 
     + " / -"
@@ -8332,6 +9042,7 @@ function updateTimeDisplay() {
 // ANIMATION LOOP
 
 
+
 // ========================================
 
 function startAnimation() {
@@ -8352,6 +9063,8 @@ function startAnimation() {
 
 
       keepTracksSynchronized();
+
+      applyMix();
 
       updatePlayheads();
 
@@ -8912,8 +9625,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Replace recording + fragment transport
-   | 2.3.0
+Compact tracks + aligned timeline + crop redetect
+   | 2.4.0
 </div>
 
 <div class="row" id="build-down">
