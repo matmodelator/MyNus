@@ -1,5 +1,5 @@
 # ========================================
-# включена модель htdemucs_6s 6 дорожек | 2.0.0
+# vocal_end | 2.1.0
 # ========================================
 
 # ========================================
@@ -136,6 +136,7 @@ def separate():
         "piano": None,
         "other": None,
         "vocal_start": None,
+        "vocal_end": None,
         "error": None
     }
 
@@ -159,10 +160,12 @@ def separate():
 
 
 # ========================================
-# VOCAL START DETECTION
+# VOCAL START\END DETECTION
 # ========================================
 
-def detect_vocal_start(vocals_path):
+def detect_vocal_range(
+    vocals_path
+):
 
     command = [
         "ffmpeg",
@@ -184,18 +187,54 @@ def detect_vocal_start(vocals_path):
         errors="replace"
     )
 
-    output = process.stdout + "\n" + process.stderr
-
-    match = re.search(
-        r"silence_end:\s*([0-9.]+)",
-        output
+    output = (
+        process.stdout
+        + "\n"
+        + process.stderr
     )
 
-    if match:
-        return max(0.0, float(match.group(1)))
 
-    return 0.0
+    silence_ends = [
+        float(value)
+        for value in re.findall(
+            r"silence_end:\s*([0-9.]+)",
+            output
+        )
+    ]
 
+
+    silence_starts = [
+        float(value)
+        for value in re.findall(
+            r"silence_start:\s*([0-9.]+)",
+            output
+        )
+    ]
+
+
+    vocal_start = (
+        silence_ends[0]
+        if silence_ends
+        else 0.0
+    )
+
+
+    vocal_end = None
+
+
+    for value in silence_starts:
+
+        if value > vocal_start:
+            vocal_end = value
+
+
+    return (
+        max(
+            0.0,
+            vocal_start
+        ),
+        vocal_end
+    )
 
 # ========================================
 # DEMUCS PROCESS
@@ -372,10 +411,13 @@ def run_demucs(
 
 
         # ========================================
-        # DETECT VOCAL START
+        # DETECT VOCAL START\END
         # ========================================
 
-        vocal_start = detect_vocal_start(
+        (
+            vocal_start,
+            vocal_end
+        ) = detect_vocal_range(
             stem_targets["vocals"]
         )
 
@@ -419,6 +461,9 @@ def run_demucs(
             vocal_start
         )
 
+        jobs[job_id]["vocal_end"] = (
+            vocal_end
+        )
 
 
     except Exception as error:
