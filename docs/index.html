@@ -325,11 +325,27 @@
 
       gap: 8px;
 
-      margin-bottom: 20px;
+      margin-top: 12px;
+      margin-bottom: 0;
     }
 
     .transport button {
       min-width: 72px;
+    }
+
+    .transport-fragment {
+      display: flex;
+      gap: 6px;
+      margin-left: auto;
+    }
+
+    .transport-fragment button {
+      min-width: 58px;
+    }
+
+    #loopBtn.active {
+      font-weight: bold;
+      outline: 2px solid currentColor;
     }
 
     #playBtn {
@@ -391,7 +407,7 @@
       display: grid;
 
       grid-template-columns:
-        190px 1fr;
+        95px 1fr;
 
       gap: 12px;
 
@@ -833,53 +849,6 @@
 
       <div class="studio-main">
 
-
-
-    <!-- ========================================
-         TRANSPORT
-    ======================================== -->
-
-    <div class="transport">
-
-      <button
-        id="originalModeBtn"
-        class="active"
-      >
-        Original
-      </button>
-
-      <button id="mixModeBtn">
-        Mix
-      </button>
-
-      <button id="masterModeBtn">
-        Master
-      </button>
-
-      <button id="startBtn">
-        |&lt;
-      </button>
-
-      <button id="playBtn">
-        Play
-      </button>
-
-      <button id="stopBtn">
-        Stop
-      </button>
-
-      <button id="endBtn">
-        &gt;|
-      </button>
-
-      <div
-        id="timeDisplay"
-        class="time-display"
-      >
-        00:00.00 / 00:00.00 / -00:00.00 / V:-00:00.00
-      </div>
-
-    </div>
 
 
     <!-- ========================================
@@ -1433,8 +1402,8 @@
         </div>
 
         <div class="track-buttons">
-          <button id="recordMasterBtn">Record</button>
-          <button id="stopMasterBtn" disabled>Stop</button>
+          <button id="recordMasterBtn">Rec On</button>
+          <button id="stopMasterBtn" disabled>Rec Off</button>
         </div>
 
         <div class="track-buttons">
@@ -1520,6 +1489,69 @@
       class="selection-info"
     >
       Selection: none
+    </div>
+
+
+    <!-- ========================================
+         TRANSPORT
+    ======================================== -->
+
+    <div class="transport">
+
+      <button
+        id="originalModeBtn"
+        class="active"
+      >
+        Original
+      </button>
+
+      <button id="mixModeBtn">
+        Mix
+      </button>
+
+      <button id="masterModeBtn">
+        Master
+      </button>
+
+      <button id="startBtn">
+        Start
+      </button>
+
+      <button id="playBtn">
+        Play
+      </button>
+
+      <button id="stopBtn">
+        Stop
+      </button>
+
+      <button id="endBtn">
+        End
+      </button>
+
+      <div
+        id="timeDisplay"
+        class="time-display"
+      >
+        00:00.00 / 00:00.00 / -00:00.00 / V:-00:00.00 / IN --:--.-- / OUT --:--.--
+      </div>
+
+      <div class="transport-fragment">
+
+        <button id="fragmentStartBtn">
+          IN
+        </button>
+
+        <button id="loopBtn">
+          Loop
+        </button>
+
+        <button id="fragmentEndBtn">
+          OUT
+        </button>
+
+      </div>
+
     </div>
 
 
@@ -1963,6 +1995,16 @@ const selectionInfo =
 
 const masterState =
   document.getElementById("masterState");
+
+
+const fragmentStartBtn =
+  document.getElementById("fragmentStartBtn");
+
+const loopBtn =
+  document.getElementById("loopBtn");
+
+const fragmentEndBtn =
+  document.getElementById("fragmentEndBtn");
 
 
 const fxTargetVocalsBtn =
@@ -2420,6 +2462,10 @@ let masterRedoStack = [];
 
 let selectionStart = null;
 let selectionEnd = null;
+
+let fragmentStart = null;
+let fragmentEnd = null;
+let loopEnabled = false;
 let selectionDragging = false;
 let selectionPointerStartX = 0;
 let selectionMoved = false;
@@ -5736,12 +5782,212 @@ async function finishMasterRecording() {
       [];
 
 
+    const replaceStart =
+      masterRecordTimelineStart;
+
+
+    const replaceEnd =
+      masterRecordTimelineStart
+      + segmentBuffer.duration;
+
+
+    const replacementSegments =
+      [];
+
+
+    for (
+      const oldSegment
+      of masterSegments
+    ) {
+
+      const oldStart =
+        oldSegment.start;
+
+
+      const oldEnd =
+        oldSegment.start
+        + oldSegment.buffer.duration;
+
+
+      if (
+        oldEnd <= replaceStart
+        ||
+        oldStart >= replaceEnd
+      ) {
+
+        replacementSegments.push(
+          oldSegment
+        );
+
+        continue;
+
+      }
+
+
+      const sampleRate =
+        oldSegment.buffer.sampleRate;
+
+
+      const channels =
+        oldSegment.buffer.numberOfChannels;
+
+
+      if (
+        oldStart < replaceStart
+      ) {
+
+        const leftFrames =
+          Math.max(
+            0,
+            Math.floor(
+              (replaceStart - oldStart)
+              * sampleRate
+            )
+          );
+
+
+        if (
+          leftFrames > 0
+        ) {
+
+          const leftBuffer =
+            new AudioContext({
+              sampleRate
+            }).createBuffer(
+              channels,
+              leftFrames,
+              sampleRate
+            );
+
+
+          for (
+            let channel = 0;
+            channel < channels;
+            channel++
+          ) {
+
+            leftBuffer
+              .getChannelData(
+                channel
+              )
+              .set(
+                oldSegment.buffer
+                  .getChannelData(
+                    channel
+                  )
+                  .subarray(
+                    0,
+                    leftFrames
+                  )
+              );
+
+          }
+
+
+          replacementSegments.push({
+            start:
+              oldStart,
+            buffer:
+              leftBuffer
+          });
+
+        }
+
+      }
+
+
+      if (
+        oldEnd > replaceEnd
+      ) {
+
+        const rightStartFrame =
+          Math.max(
+            0,
+            Math.ceil(
+              (replaceEnd - oldStart)
+              * sampleRate
+            )
+          );
+
+
+        const rightFrames =
+          Math.max(
+            0,
+            oldSegment.buffer.length
+            - rightStartFrame
+          );
+
+
+        if (
+          rightFrames > 0
+        ) {
+
+          const rightBuffer =
+            new AudioContext({
+              sampleRate
+            }).createBuffer(
+              channels,
+              rightFrames,
+              sampleRate
+            );
+
+
+          for (
+            let channel = 0;
+            channel < channels;
+            channel++
+          ) {
+
+            rightBuffer
+              .getChannelData(
+                channel
+              )
+              .set(
+                oldSegment.buffer
+                  .getChannelData(
+                    channel
+                  )
+                  .subarray(
+                    rightStartFrame
+                  )
+              );
+
+          }
+
+
+          replacementSegments.push({
+            start:
+              replaceEnd,
+            buffer:
+              rightBuffer
+          });
+
+        }
+
+      }
+
+    }
+
+
+    masterSegments =
+      replacementSegments;
+
+
     masterSegments.push({
       start:
-        masterRecordTimelineStart,
+        replaceStart,
       buffer:
         segmentBuffer
     });
+
+
+    masterSegments.sort(
+      (
+        a,
+        b
+      ) =>
+        a.start - b.start
+    );
 
 
     updateMasterHistoryButtons();
@@ -6181,14 +6427,7 @@ async function rebuildMasterTrack() {
 
 
           output[index] =
-            Math.max(
-              -1,
-              Math.min(
-                1,
-                output[index]
-                + source[i]
-              )
-            );
+            source[i];
 
         }
 
@@ -7289,6 +7528,86 @@ function syncAllTo(
 
 
 // ========================================
+// FRAGMENT IN / LOOP / OUT
+// ========================================
+
+fragmentStartBtn.addEventListener(
+  "click",
+  () => {
+
+    fragmentStart =
+      getCurrentTime();
+
+
+    if (
+      fragmentEnd !== null
+      &&
+      fragmentEnd <= fragmentStart
+    ) {
+
+      fragmentEnd =
+        null;
+
+    }
+
+
+    updateTimeDisplay();
+
+  }
+);
+
+
+fragmentEndBtn.addEventListener(
+  "click",
+  () => {
+
+    const current =
+      getCurrentTime();
+
+
+    if (
+      fragmentStart !== null
+      &&
+      current > fragmentStart
+    ) {
+
+      fragmentEnd =
+        current;
+
+    }
+
+    else {
+
+      fragmentEnd =
+        null;
+
+    }
+
+
+    updateTimeDisplay();
+
+  }
+);
+
+
+loopBtn.addEventListener(
+  "click",
+  () => {
+
+    loopEnabled =
+      !loopEnabled;
+
+
+    loopBtn.classList.toggle(
+      "active",
+      loopEnabled
+    );
+
+  }
+);
+
+
+// ========================================
 // WAVEFORM SEEK
 // ========================================
 
@@ -7958,6 +8277,22 @@ function updateTimeDisplay() {
     : 0;
 
 
+  const inDisplay =
+    fragmentStart === null
+    ? "--:--.--"
+    : formatTime(
+        fragmentStart
+      );
+
+
+  const outDisplay =
+    fragmentEnd === null
+    ? "--:--.--"
+    : formatTime(
+        fragmentEnd
+      );
+
+
   timeDisplay.textContent =
 
     formatTime(
@@ -7980,13 +8315,22 @@ function updateTimeDisplay() {
 
     + formatTime(
       vocalRemaining
-    );
+    )
+
+    + " / IN "
+
+    + inDisplay
+
+    + " / OUT "
+
+    + outDisplay;
 
 }
 
 
 // ========================================
 // ANIMATION LOOP
+
 
 // ========================================
 
@@ -8016,6 +8360,64 @@ function startAnimation() {
       updateTimeDisplay();
 
       followPlayhead();
+
+
+      if (
+        fragmentEnd !== null
+        &&
+        fragmentStart !== null
+        &&
+        fragmentEnd > fragmentStart
+        &&
+        getCurrentTime() >= fragmentEnd
+      ) {
+
+        if (
+          masterRecording
+        ) {
+
+          stopMasterRecording();
+
+        }
+
+
+        if (
+          loopEnabled
+        ) {
+
+          syncAllTo(
+            fragmentStart
+          );
+
+
+          updatePlayheads();
+
+          updateMasterCursor();
+
+          updateTimeDisplay();
+
+        }
+
+        else {
+
+          pauseAll();
+
+          syncAllTo(
+            fragmentEnd
+          );
+
+
+          updatePlayheads();
+
+          updateMasterCursor();
+
+          updateTimeDisplay();
+
+          return;
+
+        }
+
+      }
 
 
       if (
@@ -8457,6 +8859,23 @@ function resetTransport() {
   );
 
 
+  fragmentStart =
+    null;
+
+
+  fragmentEnd =
+    null;
+
+
+  loopEnabled =
+    false;
+
+
+  loopBtn.classList.remove(
+    "active"
+  );
+
+
   updateMixButtons();
 
 
@@ -8493,8 +8912,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Наложенная запись должна начинаться ровно в том же тайм-коде
-   | 2.2.2
+Replace recording + fragment transport
+   | 2.3.0
 </div>
 
 <div class="row" id="build-down">
