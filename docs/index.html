@@ -17,7 +17,7 @@
   <title>MyNus</title>
 
 
- <style>
+  <style>
 /* ========================================
        PAGE
     ======================================== */
@@ -313,23 +313,6 @@
        TRANSPORT
     ======================================== */
 
-    .transport {
-      display: flex;
-      flex-wrap: wrap;
-
-      justify-content: center;
-      align-items: center;
-
-      gap: 8px;
-
-      margin-top: 12px;
-      margin-bottom: 0;
-    }
-
-    .transport button {
-      min-width: 72px;
-    }
-
     #loopBtn.active {
       font-weight: bold;
       outline: 2px solid currentColor;
@@ -368,14 +351,6 @@
       padding: 5px 6px;
       font-size: 11px;
       white-space: nowrap;
-    }
-
-    .transport-counters {
-      display: grid;
-      grid-template-columns: 190px 1fr;
-      gap: 12px;
-      align-items: center;
-      width: 100%;
     }
 
     .time-display {
@@ -545,7 +520,6 @@
       border: 1px solid #ddd;
       border-radius: 8px;
 
-      scrollbar-width: thin;
     }
 
     .timeline-inner {
@@ -615,7 +589,6 @@
       border: 1px solid #ccc;
       border-radius: 7px;
 
-      scrollbar-width: thin;
     }
 
     .master-timeline-inner {
@@ -646,7 +619,6 @@
       overflow-x: auto;
       overflow-y: hidden;
       height: 14px;
-      scrollbar-width: thin;
     }
 
     .shared-scroll-inner {
@@ -847,17 +819,8 @@
       margin-bottom: 12px;
     }
 
-    
-.fx-panel {
-        position: static;
-        margin-top: 0;
-      }
-
-    }
-
-
     /* ========================================
-       RESPONSIVE — FX ALWAYS STAYS RIGHT
+       RESPONSIVE
     ======================================== */
 
     @media (max-width: 1200px) {
@@ -876,7 +839,8 @@
 
       .eq-row,
       .fx-control-row {
-        grid-template-columns: 54px minmax(0, 1fr) 38px;
+        grid-template-columns:
+          54px minmax(0, 1fr) 38px;
         gap: 4px;
       }
 
@@ -903,7 +867,8 @@
 
       .eq-row,
       .fx-control-row {
-        grid-template-columns: 48px minmax(0, 1fr) 34px;
+        grid-template-columns:
+          48px minmax(0, 1fr) 34px;
         gap: 3px;
       }
 
@@ -914,7 +879,9 @@
       }
 
     }
+
 </style>
+
 
 </head>
 
@@ -9932,8 +9899,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-CSS clean
-   | 2.5.2
+style only
+   | 2.5.3
 </div>
 
 <div class="row" id="build-down">
