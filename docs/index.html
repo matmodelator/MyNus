@@ -210,8 +210,7 @@
     }
 
     .fx-panel {
-      position: sticky;
-      top: 12px;
+      position: static;
       width: 100%;
       min-width: 0;
       max-width: 280px;
@@ -927,10 +926,74 @@
     }
 
     .shortcut-legend {
-      font-size: 9px;
-      line-height: 1.25;
-      color: #666;
-      text-align: right;
+      position: relative;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .shortcut-help {
+      position: relative;
+      display: inline-block;
+    }
+
+    .shortcut-help-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 54px;
+      padding: 5px 7px;
+      border-radius: 6px;
+      background: #ececec;
+      color: #333;
+      font-size: 10px;
+      font-weight: bold;
+      cursor: help;
+      user-select: none;
+    }
+
+    .shortcut-popup {
+      position: absolute;
+      left: 0;
+      z-index: 2000;
+      display: none;
+      width: 300px;
+      padding: 10px 12px;
+      background: #222;
+      color: white;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.25);
+      font-family: monospace;
+      font-size: 11px;
+      line-height: 1.45;
+      text-align: left;
+      white-space: normal;
+      pointer-events: none;
+    }
+
+    .transport-top .shortcut-popup {
+      top: calc(100% + 6px);
+    }
+
+    .transport-bottom .shortcut-popup {
+      bottom: calc(100% + 6px);
+    }
+
+    .shortcut-help:hover .shortcut-popup,
+    .shortcut-help:focus-within .shortcut-popup {
+      display: block;
+    }
+
+    .shortcut-line {
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 8px;
+    }
+
+    .shortcut-key {
+      font-weight: bold;
+      white-space: nowrap;
     }
 
     .transport-row {
@@ -1015,8 +1078,7 @@
       grid-column: 2;
       grid-row: 1;
       align-self: start;
-      position: sticky;
-      top: 12px;
+      position: static;
       margin: 0;
     }
 
@@ -1029,10 +1091,6 @@
 
       .transport-counter-spacer {
         width: 150px;
-      }
-
-      .shortcut-legend {
-        font-size: 8px;
       }
 
       .transport-row button {
@@ -1138,7 +1196,30 @@
       </div>
 
       <div class="transport-band">
-        <div class="shortcut-legend">Space Play/Pause · Backspace Stop · Home Start · End End · PgUp IN · PgDn OUT · Ins Loop · ↑/↓ Zoom · ←/→ Cursor · 1–6 FX tracks · 0 Master · Ctrl/Alt/Win Play mode · −/+ Undo/Redo · Enter Rec · Esc Reset</div>
+        <div class="shortcut-legend">
+          <div class="shortcut-help" tabindex="0">
+            <span class="shortcut-help-button">Keys ?</span>
+            <div class="shortcut-popup">
+              <div class="shortcut-line"><span class="shortcut-key">Space</span><span>Play / Pause</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Backspace</span><span>Stop</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Home</span><span>Start</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">End</span><span>End</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Page Up</span><span>IN</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Page Down</span><span>OUT</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Insert</span><span>Loop</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">↑ / ↓</span><span>Zoom + / −</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">← / →</span><span>Cursor − / + 1 sec</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">1–6</span><span>Effects track</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">0</span><span>Master effects</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Ctrl</span><span>Original</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Alt</span><span>Mix</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Win</span><span>Master</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">− / +</span><span>Undo / Redo</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Enter</span><span>Rec On / Rec Off</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Esc</span><span>Reset</span></div>
+            </div>
+          </div>
+        </div>
         <div class="transport-row">
 
         <button class="transport-proxy mode-proxy active" data-proxy="originalModeBtn" data-mode="original">Original</button>
@@ -1171,6 +1252,25 @@
 
         <div class="track-title">
           Original
+        </div>
+
+        <div class="volume-row">
+
+          <input
+            type="range"
+            id="originalVolume"
+            min="0"
+            max="100"
+            value="100"
+          >
+
+          <span
+            id="originalVolumeValue"
+            class="volume-value"
+          >
+            100%
+          </span>
+
         </div>
 
         <div class="track-save-row">
@@ -1811,6 +1911,25 @@
           <button id="redoMasterBtn" disabled>Redo</button>
         </div>
 
+        <div class="volume-row">
+
+          <input
+            type="range"
+            id="masterVolume"
+            min="0"
+            max="100"
+            value="100"
+          >
+
+          <span
+            id="masterVolumeValue"
+            class="volume-value"
+          >
+            100%
+          </span>
+
+        </div>
+
         <div id="masterState" class="master-state">
           Empty
         </div>
@@ -1927,7 +2046,30 @@
     <div class="transport-stack transport-bottom">
 
       <div class="transport-band">
-        <div class="shortcut-legend">Space Play/Pause · Backspace Stop · Home Start · End End · PgUp IN · PgDn OUT · Ins Loop · ↑/↓ Zoom · ←/→ Cursor · 1–6 FX tracks · 0 Master · Ctrl/Alt/Win Play mode · −/+ Undo/Redo · Enter Rec · Esc Reset</div>
+        <div class="shortcut-legend">
+          <div class="shortcut-help" tabindex="0">
+            <span class="shortcut-help-button">Keys ?</span>
+            <div class="shortcut-popup">
+              <div class="shortcut-line"><span class="shortcut-key">Space</span><span>Play / Pause</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Backspace</span><span>Stop</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Home</span><span>Start</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">End</span><span>End</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Page Up</span><span>IN</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Page Down</span><span>OUT</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Insert</span><span>Loop</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">↑ / ↓</span><span>Zoom + / −</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">← / →</span><span>Cursor − / + 1 sec</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">1–6</span><span>Effects track</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">0</span><span>Master effects</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Ctrl</span><span>Original</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Alt</span><span>Mix</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Win</span><span>Master</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">− / +</span><span>Undo / Redo</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Enter</span><span>Rec On / Rec Off</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Esc</span><span>Reset</span></div>
+            </div>
+          </div>
+        </div>
         <div class="transport-row">
 
         <button id="originalModeBtn" class="active">Original</button>
@@ -2588,6 +2730,12 @@ const trackDurationInfo =
 const originalAudio =
   document.getElementById("originalAudio");
 
+const originalVolume =
+  document.getElementById("originalVolume");
+
+const originalVolumeValue =
+  document.getElementById("originalVolumeValue");
+
 const vocalsAudio =
   document.getElementById("vocalsAudio");
 
@@ -2680,6 +2828,12 @@ const otherVolumeValue =
 
 const masterAudio =
   document.getElementById("masterAudio");
+
+const masterVolume =
+  document.getElementById("masterVolume");
+
+const masterVolumeValue =
+  document.getElementById("masterVolumeValue");
 
 const vocalsCropInBtn =
   document.getElementById("vocalsCropInBtn");
@@ -4607,6 +4761,53 @@ const stemCropMaskRight = {
 };
 
 
+
+// ========================================
+// ORIGINAL / MASTER VOLUME
+// ========================================
+
+originalVolume.addEventListener(
+  "input",
+  () => {
+
+    const value =
+      Number(
+        originalVolume.value
+      );
+
+
+    originalAudio.volume =
+      value / 100;
+
+
+    originalVolumeValue.textContent =
+      value + "%";
+
+  }
+);
+
+
+masterVolume.addEventListener(
+  "input",
+  () => {
+
+    const value =
+      Number(
+        masterVolume.value
+      );
+
+
+    masterAudio.volume =
+      value / 100;
+
+
+    masterVolumeValue.textContent =
+      value + "%";
+
+  }
+);
+
+
 // ========================================
 // ORIGINAL / MIX
 // ========================================
@@ -6286,7 +6487,9 @@ function ensureMixAudioGraph() {
 
 
   masterAudio.volume =
-    1;
+    Number(
+      masterVolume.value
+    ) / 100;
 
 
   applyMix();
@@ -10298,6 +10501,30 @@ function resetToInitialSplit() {
   };
 
 
+  originalVolume.value =
+    100;
+
+
+  originalVolumeValue.textContent =
+    "100%";
+
+
+  originalAudio.volume =
+    1;
+
+
+  masterVolume.value =
+    100;
+
+
+  masterVolumeValue.textContent =
+    "100%";
+
+
+  masterAudio.volume =
+    1;
+
+
   fragmentStart = null;
 
   fragmentEnd = null;
@@ -10469,6 +10696,30 @@ function resetTransport() {
 
     }
   );
+
+
+  originalVolume.value =
+    100;
+
+
+  originalVolumeValue.textContent =
+    "100%";
+
+
+  originalAudio.volume =
+    1;
+
+
+  masterVolume.value =
+    100;
+
+
+  masterVolumeValue.textContent =
+    "100%";
+
+
+  masterAudio.volume =
+    1;
 
 
   fragmentStart =
@@ -10941,8 +11192,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-1 + ceil + курсор
-   | 2.6.3
+хувер клавы
+   | 2.7.0
 </div>
 
 <div class="row" id="build-down">
