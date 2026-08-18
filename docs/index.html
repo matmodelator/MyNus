@@ -4025,7 +4025,9 @@ function drawWaveform(
 
 
   const context =
-    canvas.getContext("2d");
+    canvas.getContext(
+      "2d"
+    );
 
 
   context.clearRect(
@@ -4037,21 +4039,22 @@ function drawWaveform(
 
 
   const samples =
-    audioBuffer.getChannelData(0);
-
-
-  const step =
-    Math.max(
-      1,
-      Math.floor(
-        samples.length
-        / width
-      )
+    audioBuffer.getChannelData(
+      0
     );
+
+
+  const sampleRate =
+    audioBuffer.sampleRate;
 
 
   const middle =
     height / 2;
+
+
+  const samplesPerPixel =
+    sampleRate
+    / pixelsPerSecond;
 
 
   context.beginPath();
@@ -4063,9 +4066,34 @@ function drawWaveform(
     x++
   ) {
 
-    const start =
-      x
-      * step;
+    const sampleStart =
+      Math.floor(
+        x
+        * samplesPerPixel
+      );
+
+
+    if (
+      sampleStart >=
+      samples.length
+    ) {
+
+      break;
+
+    }
+
+
+    const sampleEnd =
+      Math.min(
+        samples.length,
+        Math.max(
+          sampleStart + 1,
+          Math.floor(
+            (x + 1)
+            * samplesPerPixel
+          )
+        )
+      );
 
 
     let min =
@@ -4077,24 +4105,15 @@ function drawWaveform(
 
 
     for (
-      let i = 0;
-      i < step;
+      let i = sampleStart;
+      i < sampleEnd;
       i++
     ) {
 
       const sample =
         samples[
-          start + i
+          i
         ];
-
-
-      if (
-        sample === undefined
-      ) {
-
-        break;
-
-      }
 
 
       if (
@@ -4119,29 +4138,19 @@ function drawWaveform(
     }
 
 
-    const y1 =
-      middle
-      +
-      min
-      * middle;
-
-
-    const y2 =
-      middle
-      +
-      max
-      * middle;
-
-
     context.moveTo(
       x,
-      y1
+      middle
+      + min
+      * middle
     );
 
 
     context.lineTo(
       x,
-      y2
+      middle
+      + max
+      * middle
     );
 
   }
@@ -4160,10 +4169,11 @@ function drawWaveform(
 }
 
 
+
 function getTimelineWidth() {
 
   return Math.max(
-    800,
+    1,
     Math.ceil(
       duration
       * pixelsPerSecond
@@ -9024,21 +9034,22 @@ function seekFromWaveform(
     Math.max(
       0,
       Math.min(
-        rect.width,
+        getTimelineWidth(),
         event.clientX
         - rect.left
       )
     );
 
 
-  const ratio =
-    x
-    / rect.width;
-
-
   const time =
-    ratio
-    * duration;
+    Math.max(
+      0,
+      Math.min(
+        duration,
+        x
+        / pixelsPerSecond
+      )
+    );
 
 
   syncAllTo(
@@ -9053,7 +9064,6 @@ function seekFromWaveform(
   updateTimeDisplay();
 
 }
-
 
 
 
@@ -9168,15 +9178,25 @@ masterTimelineInner.addEventListener(
 
 
     selectionStart =
-      startX
-      / rect.width
-      * duration;
+      Math.max(
+        0,
+        Math.min(
+          duration,
+          startX
+          / pixelsPerSecond
+        )
+      );
 
 
     selectionEnd =
-      endX
-      / rect.width
-      * duration;
+      Math.max(
+        0,
+        Math.min(
+          duration,
+          endX
+          / pixelsPerSecond
+        )
+      );
 
 
     updateSelectionDisplay();
@@ -9444,29 +9464,26 @@ function seekFromMasterTimeline(
       .getBoundingClientRect();
 
 
-  let x =
-    event.clientX
-    - rect.left;
-
-
-  x =
+  const x =
     Math.max(
       0,
       Math.min(
-        rect.width,
-        x
+        getTimelineWidth(),
+        event.clientX
+        - rect.left
       )
     );
 
 
-  const ratio =
-    x
-    / rect.width;
-
-
   const time =
-    ratio
-    * duration;
+    Math.max(
+      0,
+      Math.min(
+        duration,
+        x
+        / pixelsPerSecond
+      )
+    );
 
 
   syncAllTo(
@@ -10942,8 +10959,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Dual transport + Pan
-   | 2.6.0
+Unified waveform/playhead timeline
+   | 2.6.1
 </div>
 
 <div class="row" id="build-down">
