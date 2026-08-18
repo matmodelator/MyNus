@@ -4163,8 +4163,8 @@ function drawWaveform(
 function getTimelineWidth() {
 
   return Math.max(
-    800,
-    Math.ceil(
+    1,
+    Math.floor(
       duration
       * pixelsPerSecond
     )
@@ -10942,8 +10942,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Dual transport + Pan
-   | 2.6.0
+1 + floor
+   | 2.6.1
 </div>
 
 <div class="row" id="build-down">
