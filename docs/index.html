@@ -3486,7 +3486,9 @@ splitBtn.addEventListener(
       duration =
         originalAudio.duration;
 
-
+studio.style.display =
+  "block";
+      
       const fitWidth =
         Math.max(
           1,
@@ -3527,10 +3529,7 @@ splitBtn.addEventListener(
       drawMasterTimeline();
 
 
-      studio.style.display =
-        "block";
-
-
+    
       progressBar.style.width =
         "100%";
 
@@ -4164,7 +4163,7 @@ function getTimelineWidth() {
 
   return Math.max(
     1,
-    Math.floor(
+    Math.ceil(
       duration
       * pixelsPerSecond
     )
@@ -10942,8 +10941,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-1 + floor
-   | 2.6.1
+1 + ceil + курсор
+   | 2.6.3
 </div>
 
 <div class="row" id="build-down">
