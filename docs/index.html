@@ -4025,9 +4025,7 @@ function drawWaveform(
 
 
   const context =
-    canvas.getContext(
-      "2d"
-    );
+    canvas.getContext("2d");
 
 
   context.clearRect(
@@ -4039,22 +4037,21 @@ function drawWaveform(
 
 
   const samples =
-    audioBuffer.getChannelData(
-      0
+    audioBuffer.getChannelData(0);
+
+
+  const step =
+    Math.max(
+      1,
+      Math.floor(
+        samples.length
+        / width
+      )
     );
-
-
-  const sampleRate =
-    audioBuffer.sampleRate;
 
 
   const middle =
     height / 2;
-
-
-  const samplesPerPixel =
-    sampleRate
-    / pixelsPerSecond;
 
 
   context.beginPath();
@@ -4066,34 +4063,9 @@ function drawWaveform(
     x++
   ) {
 
-    const sampleStart =
-      Math.floor(
-        x
-        * samplesPerPixel
-      );
-
-
-    if (
-      sampleStart >=
-      samples.length
-    ) {
-
-      break;
-
-    }
-
-
-    const sampleEnd =
-      Math.min(
-        samples.length,
-        Math.max(
-          sampleStart + 1,
-          Math.floor(
-            (x + 1)
-            * samplesPerPixel
-          )
-        )
-      );
+    const start =
+      x
+      * step;
 
 
     let min =
@@ -4105,15 +4077,24 @@ function drawWaveform(
 
 
     for (
-      let i = sampleStart;
-      i < sampleEnd;
+      let i = 0;
+      i < step;
       i++
     ) {
 
       const sample =
         samples[
-          i
+          start + i
         ];
+
+
+      if (
+        sample === undefined
+      ) {
+
+        break;
+
+      }
 
 
       if (
@@ -4138,19 +4119,29 @@ function drawWaveform(
     }
 
 
+    const y1 =
+      middle
+      +
+      min
+      * middle;
+
+
+    const y2 =
+      middle
+      +
+      max
+      * middle;
+
+
     context.moveTo(
       x,
-      middle
-      + min
-      * middle
+      y1
     );
 
 
     context.lineTo(
       x,
-      middle
-      + max
-      * middle
+      y2
     );
 
   }
@@ -4167,7 +4158,6 @@ function drawWaveform(
   context.stroke();
 
 }
-
 
 
 function getTimelineWidth() {
@@ -9034,22 +9024,21 @@ function seekFromWaveform(
     Math.max(
       0,
       Math.min(
-        getTimelineWidth(),
+        rect.width,
         event.clientX
         - rect.left
       )
     );
 
 
+  const ratio =
+    x
+    / rect.width;
+
+
   const time =
-    Math.max(
-      0,
-      Math.min(
-        duration,
-        x
-        / pixelsPerSecond
-      )
-    );
+    ratio
+    * duration;
 
 
   syncAllTo(
@@ -9064,6 +9053,7 @@ function seekFromWaveform(
   updateTimeDisplay();
 
 }
+
 
 
 
@@ -9178,25 +9168,15 @@ masterTimelineInner.addEventListener(
 
 
     selectionStart =
-      Math.max(
-        0,
-        Math.min(
-          duration,
-          startX
-          / pixelsPerSecond
-        )
-      );
+      startX
+      / rect.width
+      * duration;
 
 
     selectionEnd =
-      Math.max(
-        0,
-        Math.min(
-          duration,
-          endX
-          / pixelsPerSecond
-        )
-      );
+      endX
+      / rect.width
+      * duration;
 
 
     updateSelectionDisplay();
@@ -9464,26 +9444,29 @@ function seekFromMasterTimeline(
       .getBoundingClientRect();
 
 
-  const x =
+  let x =
+    event.clientX
+    - rect.left;
+
+
+  x =
     Math.max(
       0,
       Math.min(
-        getTimelineWidth(),
-        event.clientX
-        - rect.left
+        rect.width,
+        x
       )
     );
+
+
+  const ratio =
+    x
+    / rect.width;
 
 
   const time =
-    Math.max(
-      0,
-      Math.min(
-        duration,
-        x
-        / pixelsPerSecond
-      )
-    );
+    ratio
+    * duration;
 
 
   syncAllTo(
@@ -10959,8 +10942,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Unified waveform/playhead timeline
-   | 2.6.1
+волна 1
+   | 2.6.2
 </div>
 
 <div class="row" id="build-down">
