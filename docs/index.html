@@ -17,7 +17,7 @@
   <title>MyNus</title>
 
 
-  <style>
+ <style>
 /* ========================================
        PAGE
     ======================================== */
@@ -313,6 +313,23 @@
        TRANSPORT
     ======================================== */
 
+    .transport {
+      display: flex;
+      flex-wrap: wrap;
+
+      justify-content: center;
+      align-items: center;
+
+      gap: 8px;
+
+      margin-top: 12px;
+      margin-bottom: 0;
+    }
+
+    .transport button {
+      min-width: 72px;
+    }
+
     #loopBtn.active {
       font-weight: bold;
       outline: 2px solid currentColor;
@@ -351,6 +368,14 @@
       padding: 5px 6px;
       font-size: 11px;
       white-space: nowrap;
+    }
+
+    .transport-counters {
+      display: grid;
+      grid-template-columns: 190px 1fr;
+      gap: 12px;
+      align-items: center;
+      width: 100%;
     }
 
     .time-display {
@@ -520,6 +545,7 @@
       border: 1px solid #ddd;
       border-radius: 8px;
 
+      scrollbar-width: thin;
     }
 
     .timeline-inner {
@@ -589,6 +615,7 @@
       border: 1px solid #ccc;
       border-radius: 7px;
 
+      scrollbar-width: thin;
     }
 
     .master-timeline-inner {
@@ -619,6 +646,7 @@
       overflow-x: auto;
       overflow-y: hidden;
       height: 14px;
+      scrollbar-width: thin;
     }
 
     .shared-scroll-inner {
@@ -818,9 +846,8 @@
       gap: 8px;
       margin-bottom: 12px;
     }
-
     /* ========================================
-       RESPONSIVE
+       RESPONSIVE — FX ALWAYS STAYS RIGHT
     ======================================== */
 
     @media (max-width: 1200px) {
@@ -839,8 +866,7 @@
 
       .eq-row,
       .fx-control-row {
-        grid-template-columns:
-          54px minmax(0, 1fr) 38px;
+        grid-template-columns: 54px minmax(0, 1fr) 38px;
         gap: 4px;
       }
 
@@ -867,8 +893,7 @@
 
       .eq-row,
       .fx-control-row {
-        grid-template-columns:
-          48px minmax(0, 1fr) 34px;
+        grid-template-columns: 48px minmax(0, 1fr) 34px;
         gap: 3px;
       }
 
@@ -880,8 +905,148 @@
 
     }
 
-</style>
+    /* ========================================
+       DUAL TRANSPORT / PAN / RESET
+    ======================================== */
 
+    .transport-stack {
+      margin: 8px 0;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .transport-band,
+    .transport-counter-line {
+      display: grid;
+      grid-template-columns: 190px minmax(0, 1fr);
+      gap: 12px;
+      align-items: center;
+      width: 100%;
+    }
+
+    .shortcut-legend {
+      font-size: 9px;
+      line-height: 1.25;
+      color: #666;
+      text-align: right;
+    }
+
+    .transport-row {
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 3px;
+      min-width: 0;
+      width: 100%;
+    }
+
+    .transport-row button {
+      min-width: 0;
+      flex: 0 1 auto;
+      padding: 5px 6px;
+      font-size: 10px;
+      white-space: nowrap;
+    }
+
+    .zoom-inline {
+      flex: 0 0 auto;
+      min-width: 58px;
+      padding: 4px 3px;
+      text-align: center;
+      font-size: 10px;
+      font-family: monospace;
+      background: #f3f3f3;
+      border-radius: 5px;
+    }
+
+    .transport-counter-spacer {
+      width: 190px;
+    }
+
+    .transport-counter-line .time-display {
+      width: 100%;
+    }
+
+    .track-info-left {
+      width: 190px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 5px;
+      align-items: center;
+    }
+
+    .track-info-left #resetBtn {
+      padding: 5px 7px;
+      font-size: 10px;
+    }
+
+    .track-info-left .track-duration-info {
+      width: auto;
+      padding: 4px 2px;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .pan-row {
+      display: grid;
+      grid-template-columns: 12px minmax(0, 1fr) 12px 34px;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .pan-row input {
+      width: 100%;
+      margin: 0;
+    }
+
+    .studio-layout {
+      grid-template-columns:
+        minmax(0, 1fr)
+        clamp(190px, 18vw, 280px);
+    }
+
+    .studio-main {
+      min-width: 0;
+    }
+
+    .fx-panel {
+      grid-column: 2;
+      grid-row: 1;
+      align-self: start;
+      position: sticky;
+      top: 12px;
+      margin: 0;
+    }
+
+    @media (max-width: 900px) {
+      .transport-band,
+      .transport-counter-line {
+        grid-template-columns: 150px minmax(0, 1fr);
+        gap: 6px;
+      }
+
+      .transport-counter-spacer {
+        width: 150px;
+      }
+
+      .shortcut-legend {
+        font-size: 8px;
+      }
+
+      .transport-row button {
+        padding: 4px 4px;
+        font-size: 9px;
+      }
+
+      .zoom-inline {
+        min-width: 48px;
+        font-size: 9px;
+      }
+    }
+
+</style>
 
 </head>
 
@@ -962,25 +1127,36 @@
 
 
 
-    <!-- ========================================
-         ZOOM
-    ======================================== -->
 
-    <div class="zoom-row">
+    <div class="transport-stack transport-top">
 
-      <span>Timeline</span>
+      <div class="transport-counter-line">
+        <div class="transport-counter-spacer"></div>
+        <div id="timeDisplayTop" class="time-display">
+          00:00.00 / -00:00.00 / V:-00:00.00 / IN --:--.-- / OUT --:--.--
+        </div>
+      </div>
 
-      <button id="zoomOutBtn">
-        −
-      </button>
+      <div class="transport-band">
+        <div class="shortcut-legend">Space Play/Pause · Backspace Stop · Home Start · End End · PgUp IN · PgDn OUT · Ins Loop · ↑/↓ Zoom · ←/→ Cursor · 1–6 FX tracks · 0 Master · Ctrl/Alt/Win Play mode · −/+ Undo/Redo · Enter Rec · Esc Reset</div>
+        <div class="transport-row">
 
-      <span id="zoomValue">
-        40 px/s
-      </span>
+        <button class="transport-proxy mode-proxy active" data-proxy="originalModeBtn" data-mode="original">Original</button>
+        <button class="transport-proxy mode-proxy" data-proxy="mixModeBtn" data-mode="mix">Mix</button>
+        <button class="transport-proxy mode-proxy" data-proxy="masterModeBtn" data-mode="master">Master</button>
+        <button class="transport-proxy" data-proxy="startBtn">Start</button>
+        <button class="transport-proxy play-proxy" data-proxy="playBtn">Play</button>
+        <button class="transport-proxy" data-proxy="stopBtn">Stop</button>
+        <button class="transport-proxy" data-proxy="endBtn">End</button>
+        <button class="transport-proxy" data-proxy="fragmentStartBtn">IN</button>
+        <button class="transport-proxy loop-proxy" data-proxy="loopBtn">Loop</button>
+        <button class="transport-proxy" data-proxy="fragmentEndBtn">OUT</button>
+        <button class="transport-proxy" data-proxy="zoomOutBtn">−</button>
+        <span id="zoomValueTop" class="zoom-inline">40 px/s</span>
+        <button class="transport-proxy" data-proxy="zoomInBtn">+</button>
 
-      <button id="zoomInBtn">
-        +
-      </button>
+        </div>
+      </div>
 
     </div>
 
@@ -1675,11 +1851,15 @@
 
     <div class="master-timeline-row">
 
-      <div
-        id="trackDurationInfo"
-        class="track-duration-info"
-      >
-        Total: 00:00.00
+      <div class="track-info-left">
+        <button id="resetBtn">Reset</button>
+
+        <div
+          id="trackDurationInfo"
+          class="track-duration-info"
+        >
+          Total: 00:00.00
+        </div>
       </div>
 
       <div
@@ -1743,71 +1923,43 @@
          TRACK INFO + TRANSPORT
     ======================================== -->
 
-    <div class="transport-stack">
 
-      <div class="transport-row">
+    <div class="transport-stack transport-bottom">
 
-        <button
-          id="originalModeBtn"
-          class="active"
-        >
-          Original
-        </button>
+      <div class="transport-band">
+        <div class="shortcut-legend">Space Play/Pause · Backspace Stop · Home Start · End End · PgUp IN · PgDn OUT · Ins Loop · ↑/↓ Zoom · ←/→ Cursor · 1–6 FX tracks · 0 Master · Ctrl/Alt/Win Play mode · −/+ Undo/Redo · Enter Rec · Esc Reset</div>
+        <div class="transport-row">
 
-        <button id="mixModeBtn">
-          Mix
-        </button>
+        <button id="originalModeBtn" class="active">Original</button>
+        <button id="mixModeBtn">Mix</button>
+        <button id="masterModeBtn">Master</button>
+        <button id="startBtn">Start</button>
+        <button id="playBtn">Play</button>
+        <button id="stopBtn">Stop</button>
+        <button id="endBtn">End</button>
+        <button id="fragmentStartBtn">IN</button>
+        <button id="loopBtn">Loop</button>
+        <button id="fragmentEndBtn">OUT</button>
+        <button id="zoomOutBtn">−</button>
+        <span id="zoomValue" class="zoom-inline">40 px/s</span>
+        <button id="zoomInBtn">+</button>
 
-        <button id="masterModeBtn">
-          Master
-        </button>
-
-        <button id="startBtn">
-          Start
-        </button>
-
-        <button id="playBtn">
-          Play
-        </button>
-
-        <button id="stopBtn">
-          Stop
-        </button>
-
-        <button id="endBtn">
-          End
-        </button>
-
-        <button id="fragmentStartBtn">
-          IN
-        </button>
-
-        <button id="loopBtn">
-          Loop
-        </button>
-
-        <button id="fragmentEndBtn">
-          OUT
-        </button>
-
+        </div>
       </div>
 
-
-      <div class="transport-counters">
-
-        <div class="track-duration-info"></div>
-
-        <div
-          id="timeDisplay"
-          class="time-display"
-        >
+      <div class="transport-counter-line">
+        <div class="transport-counter-spacer"></div>
+        <div id="timeDisplay" class="time-display">
           00:00.00 / -00:00.00 / V:-00:00.00 / IN --:--.-- / OUT --:--.--
         </div>
-
       </div>
 
     </div>
-</div>
+
+
+
+    </div>
+
 
       <!-- ========================================
            MIX / MASTER EQ AND EFFECTS
@@ -1952,6 +2104,37 @@
               class="fx-value"
             >
               0 dB
+            </span>
+          </div>
+
+        </div>
+
+
+        <div class="fx-section">
+
+          <div class="fx-section-title">
+            Pan
+          </div>
+
+          <div class="pan-row">
+            <span>L</span>
+
+            <input
+              id="panControl"
+              type="range"
+              min="-100"
+              max="100"
+              step="1"
+              value="0"
+            >
+
+            <span>R</span>
+
+            <span
+              id="panValue"
+              class="fx-value"
+            >
+              C
             </span>
           </div>
 
@@ -2362,6 +2545,21 @@ const fxOutputGain =
 
 const fxOutputGainValue =
   document.getElementById("fxOutputGainValue");
+
+const panControl =
+  document.getElementById("panControl");
+
+const panValue =
+  document.getElementById("panValue");
+
+const timeDisplayTop =
+  document.getElementById("timeDisplayTop");
+
+const zoomValueTop =
+  document.getElementById("zoomValueTop");
+
+const resetBtn =
+  document.getElementById("resetBtn");
 
 const masterExportDialog =
   document.getElementById("masterExportDialog");
@@ -2841,6 +3039,8 @@ const defaultFxSettings = {
   eqHighMid: 0,
   eqHigh: 0,
 
+  pan: 0,
+
   compressorOn: true,
   compressorThreshold: -18,
   compressorRatio: 4,
@@ -2897,6 +3097,7 @@ let stemFxNodes = {};
 let masterFxInput = null;
 
 let masterEqNodes = [];
+let masterPanNode = null;
 let masterCompressorNode = null;
 
 let masterReverbDryGain = null;
@@ -2912,6 +3113,105 @@ let masterLimiterNode = null;
 let masterFxOutputGainNode = null;
 
 let masterSourceNode = null;
+
+
+
+// ========================================
+// DUAL TRANSPORT MIRRORS
+// ========================================
+
+document
+  .querySelectorAll(
+    "[data-proxy]"
+  )
+  .forEach(
+    proxy => {
+
+      proxy.addEventListener(
+        "click",
+        () => {
+
+          const target =
+            document.getElementById(
+              proxy.dataset.proxy
+            );
+
+
+          if (target) {
+
+            target.click();
+
+          }
+
+        }
+      );
+
+    }
+  );
+
+
+function syncTransportMirrors() {
+
+  document
+    .querySelectorAll(
+      ".mode-proxy"
+    )
+    .forEach(
+      button => {
+
+        button.classList.toggle(
+          "active",
+          button.dataset.mode === mode
+        );
+
+      }
+    );
+
+
+  document
+    .querySelectorAll(
+      ".play-proxy"
+    )
+    .forEach(
+      button => {
+
+        button.textContent =
+          isPlaying
+          ? "Pause"
+          : "Play";
+
+      }
+    );
+
+
+  document
+    .querySelectorAll(
+      ".loop-proxy"
+    )
+    .forEach(
+      button => {
+
+        button.classList.toggle(
+          "active",
+          loopEnabled
+        );
+
+      }
+    );
+
+
+  if (
+    zoomValueTop
+  ) {
+
+    zoomValueTop.textContent =
+      pixelsPerSecond
+        .toFixed(1)
+      + " px/s";
+
+  }
+
+}
 
 
 // ========================================
@@ -4101,6 +4401,9 @@ function playCurrentMode() {
     "Pause";
 
 
+  syncTransportMirrors();
+
+
   startAnimation();
 
 }
@@ -4135,6 +4438,9 @@ function pauseAll() {
 
   playBtn.textContent =
     "Play";
+
+
+  syncTransportMirrors();
 
 
   stopAnimation();
@@ -4430,6 +4736,8 @@ function switchMode(
   updateMasterCursor();
 
   updateTimeDisplay();
+
+  syncTransportMirrors();
 
 }
 
@@ -5298,6 +5606,10 @@ function loadFxPanelValues() {
     settings.eqHigh;
 
 
+  panControl.value =
+    settings.pan;
+
+
   compressorThreshold.value =
     settings.compressorThreshold;
 
@@ -5410,6 +5722,20 @@ function updateFxLabels() {
     + " dB";
 
 
+  const panNumber =
+    Number(
+      panControl.value
+    );
+
+
+  panValue.textContent =
+    panNumber === 0
+    ? "C"
+    : panNumber < 0
+      ? "L " + Math.abs(panNumber)
+      : "R " + panNumber;
+
+
   compressorThresholdValue
     .textContent =
       compressorThreshold.value
@@ -5459,6 +5785,7 @@ function updateFxLabels() {
   eqMid,
   eqHighMid,
   eqHigh,
+  panControl,
   compressorThreshold,
   compressorRatio,
   reverbAmount,
@@ -5507,6 +5834,12 @@ function updateFxLabels() {
         settings.eqHigh =
           Number(
             eqHigh.value
+          );
+
+
+        settings.pan =
+          Number(
+            panControl.value
           );
 
 
@@ -6031,12 +6364,21 @@ function createFxChain(
 
   }
 
+  const panner =
+    mixAudioContext.createStereoPanner();
+
+
   const compressor =
     mixAudioContext.createDynamicsCompressor();
 
   eqNodes[
     eqNodes.length - 1
   ].connect(
+    panner
+  );
+
+
+  panner.connect(
     compressor
   );
 
@@ -6154,6 +6496,9 @@ function createFxChain(
     masterEqNodes =
       eqNodes;
 
+    masterPanNode =
+      panner;
+
     masterCompressorNode =
       compressor;
 
@@ -6191,6 +6536,9 @@ function createFxChain(
 
       eq:
         eqNodes,
+
+      pan:
+        panner,
 
       compressor:
         compressor,
@@ -6329,6 +6677,9 @@ function getFxNodes(
     eq:
       masterEqNodes,
 
+    pan:
+      masterPanNode,
+
     compressor:
       masterCompressorNode,
 
@@ -6405,6 +6756,22 @@ function applyFxSettings(
 
     }
   );
+
+  if (
+    nodes.pan
+  ) {
+
+    nodes.pan.pan.value =
+      Math.max(
+        -1,
+        Math.min(
+          1,
+          settings.pan / 100
+        )
+      );
+
+  }
+
 
   nodes.compressor.threshold.value =
     settings.compressorOn
@@ -8605,6 +8972,9 @@ loopBtn.addEventListener(
       loopEnabled
     );
 
+
+    syncTransportMirrors();
+
   }
 );
 
@@ -9324,7 +9694,7 @@ function updateTimeDisplay() {
       );
 
 
-  timeDisplay.textContent =
+  const counterText =
 
     formatTime(
       current
@@ -9349,6 +9719,14 @@ function updateTimeDisplay() {
     + " / OUT "
 
     + outDisplay;
+
+
+  timeDisplay.textContent =
+    counterText;
+
+
+  timeDisplayTop.textContent =
+    counterText;
 
 }
 
@@ -9716,7 +10094,7 @@ function changeZoom(
   value
 ) {
 
-  const time =
+  const currentTime =
     getCurrentTime();
 
 
@@ -9731,6 +10109,24 @@ function changeZoom(
     duration > 0
     ? viewport / duration
     : 10;
+
+
+  const oldPixelsPerSecond =
+    pixelsPerSecond;
+
+
+  const oldScrollLeft =
+    getSharedScrollLeft();
+
+
+  const oldViewportCenterTime =
+    oldPixelsPerSecond > 0
+    ? (
+        oldScrollLeft
+        + viewport / 2
+      )
+      / oldPixelsPerSecond
+    : currentTime;
 
 
   pixelsPerSecond =
@@ -9749,6 +10145,10 @@ function changeZoom(
     + " px/s";
 
 
+  zoomValueTop.textContent =
+    zoomValue.textContent;
+
+
   drawAllWaveforms();
 
   drawMasterTimeline();
@@ -9763,18 +10163,29 @@ function changeZoom(
     + "px";
 
 
-  const left =
+  const newScrollLeft =
     Math.max(
       0,
-      time
+      oldViewportCenterTime
       * pixelsPerSecond
-      - 150
+      - viewport / 2
     );
 
 
   syncScrollTo(
-    left
+    newScrollLeft
   );
+
+
+  // Audio position is the source of truth.
+  // Zoom never seeks; only redraw coordinates from the same time.
+  updatePlayheads();
+
+  updateMasterCursor();
+
+  updateTimeDisplay();
+
+  syncTransportMirrors();
 
 }
 
@@ -9783,6 +10194,221 @@ function changeZoom(
 // RESET
 
 // ========================================
+
+
+
+function resetToInitialSplit() {
+
+  if (
+    masterRecording
+  ) {
+
+    stopMasterRecording();
+
+  }
+
+
+  pauseAll();
+
+
+  masterSegments =
+    [];
+
+
+  masterUndoStack =
+    [];
+
+
+  masterRedoStack =
+    [];
+
+
+  masterBlob =
+    null;
+
+
+  savedMasterBlob =
+    null;
+
+
+  waveformData.master =
+    null;
+
+
+  masterAudio.removeAttribute(
+    "src"
+  );
+
+
+  masterAudio.load();
+
+
+  clearMasterCanvas();
+
+
+  stemIds.forEach(
+    stemId => {
+
+      stemState[
+        stemId
+      ].muted = false;
+
+
+      stemState[
+        stemId
+      ].solo = false;
+
+
+      stemState[
+        stemId
+      ].volume = 1;
+
+
+      stemVolumeControls[
+        stemId
+      ].value = 100;
+
+
+      stemVolumeValues[
+        stemId
+      ].textContent = "100%";
+
+
+      stemCrop[
+        stemId
+      ].in = 0;
+
+
+      stemCrop[
+        stemId
+      ].out = null;
+
+
+      fxSettings[
+        stemId
+      ] = {
+        ...defaultFxSettings
+      };
+
+    }
+  );
+
+
+  fxSettings.master = {
+    ...defaultFxSettings
+  };
+
+
+  fragmentStart = null;
+
+  fragmentEnd = null;
+
+  loopEnabled = false;
+
+
+  selectionStart = null;
+
+  selectionEnd = null;
+
+
+  mode = "original";
+
+
+  syncAllTo(0);
+
+
+  updateMixButtons();
+
+  updateCropButtons();
+
+  updateCropMasks();
+
+  updateSelectionDisplay();
+
+  updateSelectionButtons();
+
+  updateMasterHistoryButtons();
+
+
+  const viewport =
+    Math.max(
+      1,
+      masterTimeline.clientWidth
+    );
+
+
+  pixelsPerSecond =
+    duration > 0
+    ? viewport / duration
+    : 10;
+
+
+  zoomValue.textContent =
+    pixelsPerSecond
+      .toFixed(1)
+    + " px/s";
+
+
+  zoomValueTop.textContent =
+    zoomValue.textContent;
+
+
+  setFxTarget(
+    "vocals"
+  );
+
+
+  applyMix();
+
+
+  stemIds.forEach(
+    stemId => {
+
+      applyFxSettings(
+        stemId
+      );
+
+    }
+  );
+
+
+  applyFxSettings(
+    "master"
+  );
+
+
+  drawAllWaveforms();
+
+  drawMasterTimeline();
+
+
+  syncScrollTo(0);
+
+
+  updatePlayheads();
+
+  updateMasterCursor();
+
+  updateTimeDisplay();
+
+  syncTransportMirrors();
+
+
+  masterState.textContent =
+    "Empty";
+
+
+  status.textContent =
+    "Reset to initial split";
+
+}
+
+
+resetBtn.addEventListener(
+  "click",
+  resetToInitialSplit
+);
+
 
 function resetTransport() {
 
@@ -9883,6 +10509,423 @@ function resetTransport() {
 
 
 
+
+// ========================================
+// KEYBOARD SHORTCUTS
+// ========================================
+
+let modifierCandidate =
+  null;
+
+
+function isTypingTarget(
+  target
+) {
+
+  return (
+    target instanceof HTMLInputElement
+    ||
+    target instanceof HTMLTextAreaElement
+    ||
+    target instanceof HTMLSelectElement
+    ||
+    target.isContentEditable
+  );
+
+}
+
+
+function seekBy(
+  seconds
+) {
+
+  syncAllTo(
+    getCurrentTime()
+    + seconds
+  );
+
+
+  updatePlayheads();
+
+  updateMasterCursor();
+
+  updateTimeDisplay();
+
+}
+
+
+window.addEventListener(
+  "keydown",
+  event => {
+
+    if (
+      isTypingTarget(
+        event.target
+      )
+    ) {
+
+      return;
+
+    }
+
+
+    if (
+      event.key === "Control"
+    ) {
+
+      modifierCandidate =
+        "original";
+
+      return;
+
+    }
+
+
+    if (
+      event.key === "Alt"
+    ) {
+
+      modifierCandidate =
+        "mix";
+
+      return;
+
+    }
+
+
+    if (
+      event.key === "Meta"
+    ) {
+
+      modifierCandidate =
+        "master";
+
+      return;
+
+    }
+
+
+    if (
+      event.ctrlKey
+      ||
+      event.altKey
+      ||
+      event.metaKey
+    ) {
+
+      modifierCandidate =
+        null;
+
+    }
+
+
+    const code =
+      event.code;
+
+
+    if (
+      code === "Space"
+    ) {
+
+      event.preventDefault();
+
+      playBtn.click();
+
+    }
+
+    else if (
+      code === "Backspace"
+    ) {
+
+      event.preventDefault();
+
+      stopBtn.click();
+
+    }
+
+    else if (
+      code === "Home"
+    ) {
+
+      event.preventDefault();
+
+      startBtn.click();
+
+    }
+
+    else if (
+      code === "End"
+    ) {
+
+      event.preventDefault();
+
+      endBtn.click();
+
+    }
+
+    else if (
+      code === "PageUp"
+    ) {
+
+      event.preventDefault();
+
+      fragmentStartBtn.click();
+
+    }
+
+    else if (
+      code === "PageDown"
+    ) {
+
+      event.preventDefault();
+
+      fragmentEndBtn.click();
+
+    }
+
+    else if (
+      code === "Insert"
+    ) {
+
+      event.preventDefault();
+
+      loopBtn.click();
+
+    }
+
+    else if (
+      code === "ArrowUp"
+    ) {
+
+      event.preventDefault();
+
+      zoomInBtn.click();
+
+    }
+
+    else if (
+      code === "ArrowDown"
+    ) {
+
+      event.preventDefault();
+
+      zoomOutBtn.click();
+
+    }
+
+    else if (
+      code === "ArrowLeft"
+    ) {
+
+      event.preventDefault();
+
+      seekBy(-1);
+
+    }
+
+    else if (
+      code === "ArrowRight"
+    ) {
+
+      event.preventDefault();
+
+      seekBy(1);
+
+    }
+
+    else if (
+      code === "Digit1"
+      ||
+      code === "Numpad1"
+    ) {
+
+      setFxTarget("vocals");
+
+    }
+
+    else if (
+      code === "Digit2"
+      ||
+      code === "Numpad2"
+    ) {
+
+      setFxTarget("drums");
+
+    }
+
+    else if (
+      code === "Digit3"
+      ||
+      code === "Numpad3"
+    ) {
+
+      setFxTarget("bass");
+
+    }
+
+    else if (
+      code === "Digit4"
+      ||
+      code === "Numpad4"
+    ) {
+
+      setFxTarget("guitar");
+
+    }
+
+    else if (
+      code === "Digit5"
+      ||
+      code === "Numpad5"
+    ) {
+
+      setFxTarget("piano");
+
+    }
+
+    else if (
+      code === "Digit6"
+      ||
+      code === "Numpad6"
+    ) {
+
+      setFxTarget("other");
+
+    }
+
+    else if (
+      code === "Digit0"
+      ||
+      code === "Numpad0"
+    ) {
+
+      setFxTarget("master");
+
+    }
+
+    else if (
+      code === "Minus"
+      ||
+      code === "NumpadSubtract"
+    ) {
+
+      event.preventDefault();
+
+      undoMasterBtn.click();
+
+    }
+
+    else if (
+      code === "Equal"
+      ||
+      code === "NumpadAdd"
+    ) {
+
+      event.preventDefault();
+
+      redoMasterBtn.click();
+
+    }
+
+    else if (
+      code === "Enter"
+    ) {
+
+      event.preventDefault();
+
+      if (
+        masterRecording
+      ) {
+
+        stopMasterRecording();
+
+      }
+
+      else {
+
+        startMasterRecording();
+
+      }
+
+    }
+
+    else if (
+      code === "Escape"
+    ) {
+
+      event.preventDefault();
+
+      resetToInitialSplit();
+
+    }
+
+  }
+);
+
+
+window.addEventListener(
+  "keyup",
+  event => {
+
+    if (
+      event.key === "Control"
+      &&
+      modifierCandidate === "original"
+    ) {
+
+      switchMode(
+        "original"
+      );
+
+
+      modifierCandidate =
+        null;
+
+    }
+
+    else if (
+      event.key === "Alt"
+      &&
+      modifierCandidate === "mix"
+    ) {
+
+      switchMode(
+        "mix"
+      );
+
+
+      modifierCandidate =
+        null;
+
+    }
+
+    else if (
+      event.key === "Meta"
+      &&
+      modifierCandidate === "master"
+    ) {
+
+      if (
+        masterBlob
+      ) {
+
+        switchMode(
+          "master"
+        );
+
+      }
+
+
+      modifierCandidate =
+        null;
+
+    }
+
+  }
+);
+
+
+
 updateSelectionButtons();
 
 updateMasterHistoryButtons();
@@ -9899,8 +10942,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-</div>
-   | 2.5.4
+Dual transport + Pan
+   | 2.6.0
 </div>
 
 <div class="row" id="build-down">
