@@ -10773,38 +10773,102 @@ function updateTimeDisplay() {
     );
 
 
-  let vocalRemaining = 0;
-
-
-  if (
-    Number.isFinite(
-      vocalStartTime
-    )
+const lyricsWords =
+  (
+    lyricsData
     &&
-    current <
-    vocalStartTime
-  ) {
-
-    vocalRemaining =
-      vocalStartTime
-      - current;
-
-  }
-
-  else if (
-    Number.isFinite(
-      vocalEndTime
+    Array.isArray(
+      lyricsData.words
     )
-    &&
-    current <
-    vocalEndTime
-  ) {
+  )
+  ? lyricsData.words
+  : [];
 
-    vocalRemaining =
-      vocalEndTime
-      - current;
 
-  }
+const lyricsVocalStart =
+  lyricsWords.length
+  ? Number(
+      lyricsWords[0].start
+    )
+  : null;
+
+
+const lyricsVocalEnd =
+  lyricsWords.length
+  ? Number(
+      lyricsWords[
+        lyricsWords.length - 1
+      ].end
+    )
+  : null;
+
+
+let vocalRemaining =
+  0;
+
+
+/*
+========================================
+ДО ПЕРВОГО СЛОВА
+
+Считаем до начала вокала.
+========================================
+*/
+
+if (
+  Number.isFinite(
+    lyricsVocalStart
+  )
+  &&
+  current <
+  lyricsVocalStart
+) {
+
+  vocalRemaining =
+    lyricsVocalStart
+    - current;
+
+}
+
+
+/*
+========================================
+ОТ ПЕРВОГО ДО ПОСЛЕДНЕГО СЛОВА
+
+Считаем до конца вокала.
+========================================
+*/
+
+else if (
+  Number.isFinite(
+    lyricsVocalEnd
+  )
+  &&
+  current <
+  lyricsVocalEnd
+) {
+
+  vocalRemaining =
+    lyricsVocalEnd
+    - current;
+
+}
+
+
+/*
+========================================
+ПОСЛЕ ПОСЛЕДНЕГО СЛОВА
+
+Стоим на нуле.
+========================================
+*/
+
+else {
+
+  vocalRemaining =
+    0;
+
+}
 
 
   const inDisplay =
@@ -12124,8 +12188,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-текстовый редактор
-   | 4.0.0
+счетчик вокала по тексту
+   | 4.0.1
 </div>
 
 <div class="row" id="build-down">
