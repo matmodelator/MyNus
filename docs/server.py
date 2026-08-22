@@ -1,5 +1,5 @@
 # ========================================
-# vocal_end | 2.1.0
+# lirycs | 3.0.0
 # ========================================
 
 # ========================================
@@ -237,6 +237,125 @@ def detect_vocal_range(
     )
 
 # ========================================
+# WHISPERX LYRICS
+# ========================================
+
+def detect_lyrics(vocal_path):
+
+    import whisperx
+    import torch
+
+    device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "cpu"
+    )
+
+    compute_type = (
+        "float16"
+        if device == "cuda"
+        else "int8"
+    )
+
+    print(
+        f"WhisperX: {device}, "
+        f"{compute_type}"
+    )
+
+    audio = whisperx.load_audio(
+        vocal_path
+    )
+
+    model = whisperx.load_model(
+        "small",
+        device,
+        compute_type=compute_type,
+        language="ru"
+    )
+
+    result = model.transcribe(
+        audio,
+        batch_size=4
+    )
+
+    language = result.get(
+        "language",
+        "ru"
+    )
+
+    align_model, metadata = (
+        whisperx.load_align_model(
+            language_code=language,
+            device=device
+        )
+    )
+
+    result = whisperx.align(
+        result["segments"],
+        align_model,
+        metadata,
+        audio,
+        device,
+        return_char_alignments=False
+    )
+
+    words = []
+
+    for segment in result["segments"]:
+
+        for word in segment.get(
+            "words",
+            []
+        ):
+
+            if (
+                "start" not in word
+                or
+                "end" not in word
+            ):
+                continue
+
+            words.append({
+                "word":
+                    word.get(
+                        "word",
+                        ""
+                    ).strip(),
+
+                "start":
+                    round(
+                        float(
+                            word["start"]
+                        ),
+                        3
+                    ),
+
+                "end":
+                    round(
+                        float(
+                            word["end"]
+                        ),
+                        3
+                    )
+            })
+
+    text = " ".join(
+        segment.get(
+            "text",
+            ""
+        ).strip()
+
+        for segment
+        in result["segments"]
+    ).strip()
+
+    return {
+        "language": language,
+        "text": text,
+        "words": words
+    }
+
+# ========================================
 # DEMUCS PROCESS
 # ========================================
 
@@ -409,17 +528,30 @@ def run_demucs(
                 stem_name
             ] = target_path
 
+# ========================================
+# DETECT VOCAL START / END
+# ========================================
 
-        # ========================================
-        # DETECT VOCAL START\END
-        # ========================================
+(
+    vocal_start,
+    vocal_end
+) = detect_vocal_range(
+    stem_targets["vocals"]
+)
 
-        (
-            vocal_start,
-            vocal_end
-        ) = detect_vocal_range(
-            stem_targets["vocals"]
-        )
+
+# ========================================
+# DETECT LYRICS
+# ========================================
+
+lyrics = detect_lyrics(
+    stem_targets["vocals"]
+)
+
+
+# ========================================
+# JOB COMPLETE
+# ========================================
 
 
         # ========================================
@@ -465,6 +597,9 @@ def run_demucs(
             vocal_end
         )
 
+        jobs[job_id]["lyrics"] = (
+            lyrics
+        )
 
     except Exception as error:
 
