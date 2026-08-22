@@ -510,6 +510,57 @@
       font-size: 12px;
     }
 
+    /* ========================================
+       LYRICS
+    ======================================== */
+
+    .lyrics-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 46px;
+      padding: 4px 6px;
+      background: #f5f5f5;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: bold;
+    }
+
+    .lyrics-panel {
+      min-height: 46px;
+      max-height: 92px;
+      overflow-y: auto;
+      padding: 8px 10px;
+      background: #fafafa;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      line-height: 1.65;
+      font-size: 14px;
+    }
+
+    .lyrics-word {
+      display: inline;
+      padding: 1px 2px;
+      border-radius: 3px;
+      transition:
+        background .08s linear,
+        color .08s linear;
+    }
+
+    .lyrics-word.active {
+      background: #222;
+      color: white;
+    }
+
+    .lyrics-word.past {
+      color: #888;
+    }
+
+    .lyrics-empty {
+      color: #888;
+      font-style: italic;
+    }
+
     .static-track-title {
       display: flex;
 
@@ -1399,6 +1450,28 @@
 
         </div>
 
+      </div>
+
+    </div>
+
+
+    <!-- ========================================
+         LYRICS TRACK
+    ======================================== -->
+
+    <div class="track">
+
+      <div class="lyrics-controls">
+        Lyrics
+      </div>
+
+      <div
+        id="lyricsPanel"
+        class="lyrics-panel"
+      >
+        <span class="lyrics-empty">
+          Lyrics: none
+        </span>
       </div>
 
     </div>
@@ -2727,6 +2800,10 @@ const timeDisplay =
 const trackDurationInfo =
   document.getElementById("trackDurationInfo");
 
+const lyricsPanel =
+  document.getElementById("lyricsPanel");
+
+
 const originalAudio =
   document.getElementById("originalAudio");
 
@@ -3106,6 +3183,17 @@ const stemCrop = Object.fromEntries(
   )
 );
 
+
+
+let lyricsData = {
+  language: null,
+  text: "",
+  words: []
+};
+
+
+let activeLyricsIndex =
+  -1;
 
 
 let vocalStartTimeRaw =
@@ -3609,6 +3697,25 @@ splitBtn.addEventListener(
 
       vocalEndTime =
         vocalEndTimeRaw;
+
+
+      lyricsData =
+        (
+          data.lyrics
+          &&
+          Array.isArray(
+            data.lyrics.words
+          )
+        )
+        ? data.lyrics
+        : {
+            language: null,
+            text: "",
+            words: []
+          };
+
+
+      renderLyrics();
 
 
       currentOriginalFile =
@@ -9826,10 +9933,225 @@ function formatShortTime(
 }
 
 
+// ========================================
+// LYRICS
+// ========================================
+
+function renderLyrics() {
+
+  lyricsPanel.innerHTML =
+    "";
+
+
+  activeLyricsIndex =
+    -1;
+
+
+  if (
+    !lyricsData
+    ||
+    !Array.isArray(
+      lyricsData.words
+    )
+    ||
+    lyricsData.words.length === 0
+  ) {
+
+    const empty =
+      document.createElement(
+        "span"
+      );
+
+
+    empty.className =
+      "lyrics-empty";
+
+
+    empty.textContent =
+      "Lyrics: none";
+
+
+    lyricsPanel.appendChild(
+      empty
+    );
+
+
+    return;
+
+  }
+
+
+  lyricsData.words.forEach(
+    (word, index) => {
+
+      const span =
+        document.createElement(
+          "span"
+        );
+
+
+      span.className =
+        "lyrics-word";
+
+
+      span.dataset.index =
+        String(index);
+
+
+      span.textContent =
+        (
+          word.word
+          ||
+          ""
+        )
+        + " ";
+
+
+      lyricsPanel.appendChild(
+        span
+      );
+
+    }
+  );
+
+}
+
+
+function updateLyrics(
+  currentTime
+) {
+
+  if (
+    !lyricsData
+    ||
+    !Array.isArray(
+      lyricsData.words
+    )
+    ||
+    lyricsData.words.length === 0
+  ) {
+
+    return;
+
+  }
+
+
+  let newIndex =
+    -1;
+
+
+  for (
+    let i = 0;
+    i < lyricsData.words.length;
+    i++
+  ) {
+
+    const word =
+      lyricsData.words[
+        i
+      ];
+
+
+    const start =
+      Number(
+        word.start
+      );
+
+
+    const end =
+      Number(
+        word.end
+      );
+
+
+    if (
+      Number.isFinite(start)
+      &&
+      Number.isFinite(end)
+      &&
+      currentTime >= start
+      &&
+      currentTime < end
+    ) {
+
+      newIndex =
+        i;
+
+      break;
+
+    }
+
+  }
+
+
+  if (
+    newIndex === activeLyricsIndex
+  ) {
+
+    return;
+
+  }
+
+
+  const spans =
+    lyricsPanel.querySelectorAll(
+      ".lyrics-word"
+    );
+
+
+  spans.forEach(
+    (span, index) => {
+
+      span.classList.toggle(
+        "active",
+        index === newIndex
+      );
+
+
+      span.classList.toggle(
+        "past",
+        newIndex >= 0
+        &&
+        index < newIndex
+      );
+
+    }
+  );
+
+
+  activeLyricsIndex =
+    newIndex;
+
+
+  if (
+    newIndex >= 0
+    &&
+    spans[
+      newIndex
+    ]
+  ) {
+
+    spans[
+      newIndex
+    ].scrollIntoView({
+      block: "nearest",
+      inline: "nearest"
+    });
+
+  }
+
+}
+
+
 function updateTimeDisplay() {
 
   const current =
     getCurrentTime();
+
+
+  updateLyrics(
+    current
+  );
 
 
   const remaining =
@@ -10722,6 +11044,16 @@ function resetTransport() {
     1;
 
 
+  lyricsData = {
+    language: null,
+    text: "",
+    words: []
+  };
+
+
+  renderLyrics();
+
+
   fragmentStart =
     null;
 
@@ -11192,8 +11524,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-хувер клавы
-   | 2.7.0
+lirycs
+   | 3.0.0
 </div>
 
 <div class="row" id="build-down">
