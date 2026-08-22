@@ -528,36 +528,31 @@ def run_demucs(
                 stem_name
             ] = target_path
 
-# ========================================
-# DETECT VOCAL START / END
-# ========================================
+        # ========================================
+        # DETECT VOCAL START / END
+        # ========================================
 
-(
-    vocal_start,
-    vocal_end
-) = detect_vocal_range(
-    stem_targets["vocals"]
-)
-
-
-# ========================================
-# DETECT LYRICS
-# ========================================
-
-lyrics = detect_lyrics(
-    stem_targets["vocals"]
-)
+        (
+            vocal_start,
+            vocal_end
+        ) = detect_vocal_range(
+            stem_targets["vocals"]
+        )
 
 
-# ========================================
-# JOB COMPLETE
-# ========================================
+        # ========================================
+        # DETECT LYRICS
+        # ========================================
+
+        lyrics = detect_lyrics(
+            stem_targets["vocals"]
+        )
 
 
         # ========================================
         # JOB COMPLETE
         # ========================================
-
+      
         jobs[job_id]["progress"] = 100
 
         jobs[job_id]["status"] = (
