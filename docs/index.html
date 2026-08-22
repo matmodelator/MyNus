@@ -1155,6 +1155,39 @@
       }
     }
 
+
+    .karaoke-line {
+      min-height: 20px;
+      text-align: center;
+      white-space: normal;
+    }
+
+    .karaoke-current {
+      font-size: 16px;
+      font-weight: bold;
+    }
+
+    .karaoke-next {
+      margin-top: 2px;
+      color: #888;
+      font-size: 13px;
+    }
+
+    .karaoke-word {
+      display: inline;
+      padding: 1px 2px;
+      border-radius: 3px;
+    }
+
+    .karaoke-word.past {
+      color: #888;
+    }
+
+    .karaoke-word.active {
+      background: #222;
+      color: white;
+    }
+
 </style>
 
 </head>
@@ -1453,31 +1486,7 @@
       </div>
 
     </div>
-
-
-    <!-- ========================================
-         LYRICS TRACK
-    ======================================== -->
-
-    <div class="track">
-
-      <div class="lyrics-controls">
-        Lyrics
-      </div>
-
-      <div
-        id="lyricsPanel"
-        class="lyrics-panel"
-      >
-        <span class="lyrics-empty">
-          Lyrics: none
-        </span>
-      </div>
-
-    </div>
-
-
-    <!-- ========================================
+<!-- ========================================
          DRUMS TRACK
     ======================================== -->
 
@@ -2032,6 +2041,33 @@
 
     </div>
 
+
+
+
+
+    <!-- ========================================
+         LYRICS TRACK
+    ======================================== -->
+
+    <div class="track">
+
+      <div class="lyrics-controls">
+        Lyrics
+      </div>
+
+      <div
+        id="lyricsPanel"
+        class="lyrics-panel"
+      >
+        <span class="lyrics-empty">
+          Lyrics: none
+        </span>
+      </div>
+
+    </div>
+
+
+    
 
     <!-- ========================================
          MASTER TIMELINE
@@ -3192,7 +3228,10 @@ let lyricsData = {
 };
 
 
-let activeLyricsIndex =
+let karaokeLines = [];
+
+
+let activeKaraokeLine =
   -1;
 
 
@@ -3713,6 +3752,9 @@ splitBtn.addEventListener(
             text: "",
             words: []
           };
+
+
+      buildKaraokeLines();
 
 
       renderLyrics();
@@ -9934,8 +9976,156 @@ function formatShortTime(
 
 
 // ========================================
-// LYRICS
+// LYRICS / KARAOKE
 // ========================================
+
+function buildKaraokeLines() {
+
+  karaokeLines = [];
+
+
+  if (
+    !lyricsData
+    ||
+    !Array.isArray(
+      lyricsData.words
+    )
+  ) {
+
+    return;
+
+  }
+
+
+  let currentLine = [];
+  let currentLength = 0;
+
+
+  lyricsData.words.forEach(
+    (word, index) => {
+
+      const text =
+        (
+          word.word
+          || ""
+        ).trim();
+
+
+      if (!text) {
+
+        return;
+
+      }
+
+
+      const previous =
+        currentLine.length
+        ? currentLine[
+            currentLine.length - 1
+          ]
+        : null;
+
+
+      const pause =
+        previous
+        ? Number(word.start)
+          - Number(previous.end)
+        : 0;
+
+
+      const shouldBreak =
+        currentLine.length > 0
+        &&
+        (
+          pause > 0.75
+          ||
+          (
+            currentLength
+            + text.length
+            + 1
+          ) > 42
+          ||
+          currentLine.length >= 8
+        );
+
+
+      if (shouldBreak) {
+
+        karaokeLines.push({
+
+          words:
+            currentLine,
+
+          start:
+            Number(
+              currentLine[0].start
+            ),
+
+          end:
+            Number(
+              currentLine[
+                currentLine.length - 1
+              ].end
+            )
+
+        });
+
+
+        currentLine = [];
+        currentLength = 0;
+
+      }
+
+
+      currentLine.push({
+
+        ...word,
+
+        sourceIndex:
+          index
+
+      });
+
+
+      currentLength +=
+        text.length
+        + 1;
+
+    }
+  );
+
+
+  if (
+    currentLine.length
+  ) {
+
+    karaokeLines.push({
+
+      words:
+        currentLine,
+
+      start:
+        Number(
+          currentLine[0].start
+        ),
+
+      end:
+        Number(
+          currentLine[
+            currentLine.length - 1
+          ].end
+        )
+
+    });
+
+  }
+
+
+  activeKaraokeLine =
+    -1;
+
+}
+
 
 function renderLyrics() {
 
@@ -9943,37 +10133,92 @@ function renderLyrics() {
     "";
 
 
-  activeLyricsIndex =
+  const currentLine =
+    document.createElement(
+      "div"
+    );
+
+
+  currentLine.id =
+    "karaokeCurrent";
+
+
+  currentLine.className =
+    "karaoke-line karaoke-current";
+
+
+  const nextLine =
+    document.createElement(
+      "div"
+    );
+
+
+  nextLine.id =
+    "karaokeNext";
+
+
+  nextLine.className =
+    "karaoke-line karaoke-next";
+
+
+  lyricsPanel.appendChild(
+    currentLine
+  );
+
+
+  lyricsPanel.appendChild(
+    nextLine
+  );
+
+
+  activeKaraokeLine =
     -1;
 
 
+  updateKaraoke(
+    getCurrentTime()
+  );
+
+}
+
+
+function updateKaraoke(
+  currentTime
+) {
+
+  const currentBox =
+    document.getElementById(
+      "karaokeCurrent"
+    );
+
+
+  const nextBox =
+    document.getElementById(
+      "karaokeNext"
+    );
+
+
   if (
-    !lyricsData
+    !currentBox
     ||
-    !Array.isArray(
-      lyricsData.words
-    )
-    ||
-    lyricsData.words.length === 0
+    !nextBox
   ) {
 
-    const empty =
-      document.createElement(
-        "span"
-      );
+    return;
+
+  }
 
 
-    empty.className =
-      "lyrics-empty";
+  if (
+    !karaokeLines.length
+  ) {
 
-
-    empty.textContent =
+    currentBox.textContent =
       "Lyrics: none";
 
 
-    lyricsPanel.appendChild(
-      empty
-    );
+    nextBox.textContent =
+      "";
 
 
     return;
@@ -9981,8 +10226,56 @@ function renderLyrics() {
   }
 
 
-  lyricsData.words.forEach(
-    (word, index) => {
+  let lineIndex =
+    karaokeLines.findIndex(
+      line =>
+        currentTime >= line.start
+        &&
+        currentTime <= line.end
+    );
+
+
+  if (
+    lineIndex < 0
+  ) {
+
+    lineIndex =
+      karaokeLines.findIndex(
+        line =>
+          line.start > currentTime
+      );
+
+
+    if (
+      lineIndex < 0
+    ) {
+
+      lineIndex =
+        karaokeLines.length - 1;
+
+    }
+
+  }
+
+
+  const line =
+    karaokeLines[
+      lineIndex
+    ];
+
+
+  const nextLine =
+    karaokeLines[
+      lineIndex + 1
+    ];
+
+
+  currentBox.innerHTML =
+    "";
+
+
+  line.words.forEach(
+    word => {
 
       const span =
         document.createElement(
@@ -9990,155 +10283,71 @@ function renderLyrics() {
         );
 
 
-      span.className =
-        "lyrics-word";
-
-
-      span.dataset.index =
-        String(index);
-
-
       span.textContent =
-        (
-          word.word
-          ||
-          ""
-        )
+        word.word
         + " ";
 
 
-      lyricsPanel.appendChild(
+      span.className =
+        "karaoke-word";
+
+
+      const wordStart =
+        Number(
+          word.start
+        );
+
+
+      const wordEnd =
+        Number(
+          word.end
+        );
+
+
+      if (
+        currentTime >= wordStart
+        &&
+        currentTime < wordEnd
+      ) {
+
+        span.classList.add(
+          "active"
+        );
+
+      }
+
+      else if (
+        currentTime >= wordEnd
+      ) {
+
+        span.classList.add(
+          "past"
+        );
+
+      }
+
+
+      currentBox.appendChild(
         span
       );
 
     }
   );
 
-}
+
+  nextBox.textContent =
+    nextLine
+    ? nextLine.words
+        .map(
+          word =>
+            word.word
+        )
+        .join(" ")
+    : "";
 
 
-function updateLyrics(
-  currentTime
-) {
-
-  if (
-    !lyricsData
-    ||
-    !Array.isArray(
-      lyricsData.words
-    )
-    ||
-    lyricsData.words.length === 0
-  ) {
-
-    return;
-
-  }
-
-
-  let newIndex =
-    -1;
-
-
-  for (
-    let i = 0;
-    i < lyricsData.words.length;
-    i++
-  ) {
-
-    const word =
-      lyricsData.words[
-        i
-      ];
-
-
-    const start =
-      Number(
-        word.start
-      );
-
-
-    const end =
-      Number(
-        word.end
-      );
-
-
-    if (
-      Number.isFinite(start)
-      &&
-      Number.isFinite(end)
-      &&
-      currentTime >= start
-      &&
-      currentTime < end
-    ) {
-
-      newIndex =
-        i;
-
-      break;
-
-    }
-
-  }
-
-
-  if (
-    newIndex === activeLyricsIndex
-  ) {
-
-    return;
-
-  }
-
-
-  const spans =
-    lyricsPanel.querySelectorAll(
-      ".lyrics-word"
-    );
-
-
-  spans.forEach(
-    (span, index) => {
-
-      span.classList.toggle(
-        "active",
-        index === newIndex
-      );
-
-
-      span.classList.toggle(
-        "past",
-        newIndex >= 0
-        &&
-        index < newIndex
-      );
-
-    }
-  );
-
-
-  activeLyricsIndex =
-    newIndex;
-
-
-  if (
-    newIndex >= 0
-    &&
-    spans[
-      newIndex
-    ]
-  ) {
-
-    spans[
-      newIndex
-    ].scrollIntoView({
-      block: "nearest",
-      inline: "nearest"
-    });
-
-  }
+  activeKaraokeLine =
+    lineIndex;
 
 }
 
@@ -10147,6 +10356,11 @@ function updateTimeDisplay() {
 
   const current =
     getCurrentTime();
+
+
+  updateKaraoke(
+    current
+  );
 
 
   updateLyrics(
@@ -11042,19 +11256,7 @@ function resetTransport() {
 
   masterAudio.volume =
     1;
-
-
-  lyricsData = {
-    language: null,
-    text: "",
-    words: []
-  };
-
-
-  renderLyrics();
-
-
-  fragmentStart =
+fragmentStart =
     null;
 
 
@@ -11524,8 +11726,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-lirycs
-   | 3.0.0
+автоматическое разбиение на строки и подсветка текущего слова
+   | 3.1.0
 </div>
 
 <div class="row" id="build-down">
