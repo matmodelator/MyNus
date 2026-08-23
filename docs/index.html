@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.1.0</title>
+  <title>MyNus 4.1.1</title>
 
 
  <style>
@@ -1384,6 +1384,83 @@
       justify-content: flex-end;
       gap: 6px;
       margin-top: 14px;
+    }
+
+
+    /* ========================================
+       LYRICS EDITOR 4.1.1
+    ======================================== */
+
+    .lyrics-editor-header {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .lyrics-editor-title {
+      justify-self: start;
+    }
+
+    .lyrics-editor-status-top {
+      justify-self: center;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .lyrics-editor-header #closeLyricsEditorBtn {
+      justify-self: end;
+    }
+
+    .lyrics-editor-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: nowrap;
+      gap: 10px;
+    }
+
+    .lyrics-editor-toolbar-left,
+    .lyrics-editor-toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .lyrics-editor-toolbar-right {
+      margin-left: auto;
+    }
+
+    .lyrics-editor-footer {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .lyrics-editor-transport {
+      justify-self: start;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .lyrics-master-counter {
+      justify-self: center;
+      min-width: 94px;
+      padding: 6px 10px;
+      background: #ececec;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .lyrics-editor-actions {
+      justify-self: end;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
 
 </style>
@@ -2805,6 +2882,14 @@
   <div class="lyrics-editor-card">
     <div class="lyrics-editor-header">
       <div class="lyrics-editor-title">Lyrics Editor</div>
+
+      <div
+        id="lyricsEditorStatus"
+        class="lyrics-editor-status lyrics-editor-status-top"
+      >
+        Lines: 0 | Selected: 0
+      </div>
+
       <button type="button" id="closeLyricsEditorBtn">Close</button>
     </div>
 
@@ -2815,9 +2900,6 @@
         <button type="button" id="lyricsMergeUpBtn">Merge Up</button>
         <button type="button" id="lyricsMergeDownBtn">Merge Down</button>
         <button type="button" id="lyricsDeleteLineBtn">Delete Line</button>
-        <button type="button" id="lyricsSetStartBtn">Set Start</button>
-        <button type="button" id="lyricsSetEndBtn">Set End</button>
-        <button type="button" id="lyricsPlayLineBtn">Play Line</button>
       </div>
 
       <div class="lyrics-editor-toolbar-right">
@@ -2831,13 +2913,28 @@
     <div id="lyricsEditorRows" class="lyrics-editor-rows"></div>
 
     <div class="lyrics-editor-footer">
-      <div id="lyricsEditorStatus" class="lyrics-editor-status">Select a line</div>
+
+      <div class="lyrics-editor-transport">
+        <button type="button" id="lyricsPlayMasterBtn">Play Master</button>
+        <button type="button" id="lyricsPlayLineBtn">Play Line</button>
+        <button type="button" id="lyricsSetStartBtn">Set Start</button>
+        <button type="button" id="lyricsSetEndBtn">Set End</button>
+      </div>
+
+      <div
+        id="lyricsMasterCounter"
+        class="lyrics-master-counter"
+      >
+        00:00.00
+      </div>
+
       <div class="lyrics-editor-actions">
         <button type="button" id="cancelLyricsEditBtn">Cancel</button>
         <button type="button" id="lyricsLoadBtn">Load</button>
         <button type="button" id="saveLyricsEditBtn">Save</button>
         <button type="button" id="lyricsSaveAsBtn">Save As...</button>
       </div>
+
     </div>
   </div>
 </div>
@@ -3121,6 +3218,12 @@ const lyricsSaveAsName = document.getElementById("lyricsSaveAsName");
 const lyricsSaveAsFormat = document.getElementById("lyricsSaveAsFormat");
 const lyricsSaveAsCancelBtn = document.getElementById("lyricsSaveAsCancelBtn");
 const lyricsSaveAsConfirmBtn = document.getElementById("lyricsSaveAsConfirmBtn");
+
+const lyricsPlayMasterBtn =
+  document.getElementById("lyricsPlayMasterBtn");
+
+const lyricsMasterCounter =
+  document.getElementById("lyricsMasterCounter");
 
 const editLyricsBtn = document.getElementById("editLyricsBtn");
 const lyricsEditorDialog = document.getElementById("lyricsEditorDialog");
@@ -3544,6 +3647,9 @@ let originalWhisperLyrics = {
 };
 
 let originalWhisperKaraokeLines = [];
+
+let masterCursorTime =
+  0;
 
 
 let vocalStartTimeRaw =
@@ -9525,6 +9631,13 @@ function syncAllTo(
     );
 
 
+  masterCursorTime =
+    safeTime;
+
+
+  updateLyricsMasterCounter();
+
+
   originalAudio.currentTime =
     safeTime;
 
@@ -10754,10 +10867,28 @@ function renderLyricsEditor() {
     lyricsEditorRows.appendChild(row);
   });
 
-  lyricsEditorStatus.textContent = lyricsEditorDraft.length
-    ? "Lines: " + lyricsEditorDraft.length + (lyricsEditorSelectedLine >= 0 ? " | Selected: " + (lyricsEditorSelectedLine + 1) : "")
-    : "No lyrics";
+  lyricsEditorStatus.textContent =
+    "Lines: "
+    + lyricsEditorDraft.length
+    + " | Selected: "
+    + (
+        lyricsEditorSelectedLine >= 0
+        ? lyricsEditorSelectedLine + 1
+        : 0
+      );
 }
+
+function updateLyricsMasterCounter() {
+
+  if (!lyricsMasterCounter) return;
+
+  lyricsMasterCounter.textContent =
+    formatTime(
+      masterCursorTime
+    );
+
+}
+
 
 function cloneLyricsEditorDraft() {
   return JSON.parse(JSON.stringify(lyricsEditorDraft));
@@ -10792,6 +10923,7 @@ function openLyricsEditor() {
 
   updateLyricsUndoRedoButtons();
   renderLyricsEditor();
+  updateLyricsMasterCounter();
 
   lyricsEditorDialog.classList.add("open");
 }
@@ -10815,9 +10947,17 @@ lyricsEditorDialog.addEventListener("click", event => {
 
 lyricsSplitLineBtn.addEventListener("click", () => {
   const line = getSelectedLyricsLine();
-  if (!line || line.words.length < 2) return;
 
-  const current = getCurrentTime();
+  if (
+    !line
+    ||
+    line.words.length < 2
+  ) {
+    return;
+  }
+
+  const current =
+    masterCursorTime;
 
   if (
     current <= Number(line.start)
@@ -10825,7 +10965,7 @@ lyricsSplitLineBtn.addEventListener("click", () => {
     current >= Number(line.end)
   ) {
     lyricsEditorStatus.textContent =
-      "Put cursor inside selected line";
+      "Cursor outside selected line";
     return;
   }
 
@@ -10872,11 +11012,6 @@ lyricsSplitLineBtn.addEventListener("click", () => {
 
   renderLyricsEditor();
   updateLyricsUndoRedoButtons();
-
-  lyricsEditorStatus.textContent =
-    "Split at "
-    + current.toFixed(2)
-    + " s";
 });
 
 lyricsMergeUpBtn.addEventListener("click", () => {
@@ -10916,8 +11051,13 @@ lyricsSetStartBtn.addEventListener("click", () => {
 
   pushLyricsHistory();
 
-  line.start = getCurrentTime();
-  if (line.words.length) line.words[0].start = line.start;
+  line.start =
+    masterCursorTime;
+
+  if (line.words.length) {
+    line.words[0].start = line.start;
+  }
+
   renderLyricsEditor();
 });
 
@@ -10927,10 +11067,31 @@ lyricsSetEndBtn.addEventListener("click", () => {
 
   pushLyricsHistory();
 
-  line.end = getCurrentTime();
-  if (line.words.length) line.words[line.words.length - 1].end = line.end;
+  line.end =
+    masterCursorTime;
+
+  if (line.words.length) {
+    line.words[line.words.length - 1].end = line.end;
+  }
+
   renderLyricsEditor();
 });
+
+lyricsPlayMasterBtn.addEventListener("click", () => {
+
+  if (isPlaying) {
+    pauseAll();
+    return;
+  }
+
+  syncAllTo(
+    masterCursorTime
+  );
+
+  playCurrentMode();
+
+});
+
 
 lyricsPlayLineBtn.addEventListener("click", () => {
   const line = getSelectedLyricsLine();
@@ -10940,11 +11101,9 @@ lyricsPlayLineBtn.addEventListener("click", () => {
   fragmentEnd = Number(line.end);
   loopEnabled = false;
 
-  syncAllTo(fragmentStart);
-
-  updatePlayheads();
-  updateMasterCursor();
-  updateTimeDisplay();
+  syncAllTo(
+    fragmentStart
+  );
 
   playCurrentMode();
 });
@@ -11501,7 +11660,6 @@ saveLyricsEditBtn.addEventListener("click", () => {
   lyricsData.text = lyricsData.words.map(word => word.word).join(" ").trim();
   activeKaraokeLine = -1;
   renderLyrics();
-  closeLyricsEditor();
 });
 
 function updateTimeDisplay() {
@@ -11712,6 +11870,11 @@ function startAnimation() {
       updatePlayheads();
 
       updateMasterCursor();
+
+      masterCursorTime =
+        getCurrentTime();
+
+      updateLyricsMasterCounter();
 
       updateTimeDisplay();
 
@@ -12937,8 +13100,16 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-кнопки редактора текстов
-   | 4.1.0
+Save больше не закрывает Lyrics Editor;
+Split работает от отдельной позиции Master Cursor;
+Set Start / Set End тоже работают от Master Cursor;
+Lines: N | Selected: N перенесён в верхний бар по центру между Lyrics Editor и Close;
+нижний левый блок: Play Master | Play Line | Set Start | Set End;
+нижний центральный прямой счётчик Master;
+нижний правый блок: Cancel | Load | Save | Save As...;
+верхний правый блок: Undo | Redo | Reset;
+верхний левый: Split | Merge Up | Merge Down | Delete Line
+   | 4.2.0
 </div>
 
 <div class="row" id="build-down">
