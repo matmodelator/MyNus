@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus</title>
+  <title>MyNus 4.1.0</title>
 
 
  <style>
@@ -1315,6 +1315,76 @@
 
     .lyrics-editor-status { min-width: 0; color: #666; font-size: 11px; }
     .lyrics-editor-actions { display: flex; gap: 6px; }
+
+
+    .lyrics-editor-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: nowrap;
+      gap: 10px;
+    }
+
+    .lyrics-editor-toolbar-left,
+    .lyrics-editor-toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .lyrics-editor-toolbar-left {
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+
+    .lyrics-editor-toolbar-right {
+      flex: 0 0 auto;
+      margin-left: auto;
+    }
+
+    .lyrics-saveas-dialog {
+      position: fixed;
+      inset: 0;
+      z-index: 3200;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,.42);
+    }
+
+    .lyrics-saveas-dialog.open { display: flex; }
+
+    .lyrics-saveas-card {
+      width: min(420px, calc(100vw - 32px));
+      padding: 18px;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 16px 46px rgba(0,0,0,.25);
+    }
+
+    .lyrics-saveas-card label {
+      display: block;
+      margin-top: 10px;
+      margin-bottom: 4px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    .lyrics-saveas-card input,
+    .lyrics-saveas-card select {
+      width: 100%;
+      padding: 7px 8px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    .lyrics-saveas-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+      margin-top: 14px;
+    }
 
 </style>
 
@@ -2739,12 +2809,23 @@
     </div>
 
     <div class="lyrics-editor-toolbar">
-      <button type="button" id="lyricsSplitLineBtn">Split</button>
-      <button type="button" id="lyricsMergeUpBtn">Merge Up</button>
-      <button type="button" id="lyricsMergeDownBtn">Merge Down</button>
-      <button type="button" id="lyricsSetStartBtn">Set Start</button>
-      <button type="button" id="lyricsSetEndBtn">Set End</button>
-      <button type="button" id="lyricsPlayLineBtn">Play Line</button>
+
+      <div class="lyrics-editor-toolbar-left">
+        <button type="button" id="lyricsSplitLineBtn">Split</button>
+        <button type="button" id="lyricsMergeUpBtn">Merge Up</button>
+        <button type="button" id="lyricsMergeDownBtn">Merge Down</button>
+        <button type="button" id="lyricsDeleteLineBtn">Delete Line</button>
+        <button type="button" id="lyricsSetStartBtn">Set Start</button>
+        <button type="button" id="lyricsSetEndBtn">Set End</button>
+        <button type="button" id="lyricsPlayLineBtn">Play Line</button>
+      </div>
+
+      <div class="lyrics-editor-toolbar-right">
+        <button type="button" id="lyricsUndoBtn">Undo</button>
+        <button type="button" id="lyricsRedoBtn">Redo</button>
+        <button type="button" id="lyricsResetBtn">Reset</button>
+      </div>
+
     </div>
 
     <div id="lyricsEditorRows" class="lyrics-editor-rows"></div>
@@ -2753,8 +2834,35 @@
       <div id="lyricsEditorStatus" class="lyrics-editor-status">Select a line</div>
       <div class="lyrics-editor-actions">
         <button type="button" id="cancelLyricsEditBtn">Cancel</button>
+        <button type="button" id="lyricsLoadBtn">Load</button>
         <button type="button" id="saveLyricsEditBtn">Save</button>
+        <button type="button" id="lyricsSaveAsBtn">Save As...</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="lyricsLoadInput" accept=".json,.lrc,.srt,.txt" style="display:none">
+
+<div id="lyricsSaveAsDialog" class="lyrics-saveas-dialog">
+  <div class="lyrics-saveas-card">
+    <div class="lyrics-editor-title">Save Lyrics As</div>
+
+    <label for="lyricsSaveAsName">File name</label>
+    <input type="text" id="lyricsSaveAsName" value="lyrics">
+
+    <label for="lyricsSaveAsFormat">Format</label>
+    <select id="lyricsSaveAsFormat">
+      <option value="json">MyNus Lyrics (*.json)</option>
+      <option value="lrc">LRC Karaoke (*.lrc)</option>
+      <option value="srt">SRT Subtitles (*.srt)</option>
+      <option value="txt">Text (*.txt)</option>
+      <option value="pdf">Print (*.pdf)</option>
+    </select>
+
+    <div class="lyrics-saveas-actions">
+      <button type="button" id="lyricsSaveAsCancelBtn">Cancel</button>
+      <button type="button" id="lyricsSaveAsConfirmBtn">Save</button>
     </div>
   </div>
 </div>
@@ -3000,6 +3108,19 @@ const trackDurationInfo =
 
 const lyricsPanel =
   document.getElementById("lyricsPanel");
+
+const lyricsUndoBtn = document.getElementById("lyricsUndoBtn");
+const lyricsRedoBtn = document.getElementById("lyricsRedoBtn");
+const lyricsResetBtn = document.getElementById("lyricsResetBtn");
+const lyricsDeleteLineBtn = document.getElementById("lyricsDeleteLineBtn");
+const lyricsLoadBtn = document.getElementById("lyricsLoadBtn");
+const lyricsSaveAsBtn = document.getElementById("lyricsSaveAsBtn");
+const lyricsLoadInput = document.getElementById("lyricsLoadInput");
+const lyricsSaveAsDialog = document.getElementById("lyricsSaveAsDialog");
+const lyricsSaveAsName = document.getElementById("lyricsSaveAsName");
+const lyricsSaveAsFormat = document.getElementById("lyricsSaveAsFormat");
+const lyricsSaveAsCancelBtn = document.getElementById("lyricsSaveAsCancelBtn");
+const lyricsSaveAsConfirmBtn = document.getElementById("lyricsSaveAsConfirmBtn");
 
 const editLyricsBtn = document.getElementById("editLyricsBtn");
 const lyricsEditorDialog = document.getElementById("lyricsEditorDialog");
@@ -3412,6 +3533,17 @@ let activeKaraokeLine =
 
 let lyricsEditorDraft = [];
 let lyricsEditorSelectedLine = -1;
+
+let lyricsUndoStack = [];
+let lyricsRedoStack = [];
+
+let originalWhisperLyrics = {
+  language: null,
+  text: "",
+  words: []
+};
+
+let originalWhisperKaraokeLines = [];
 
 
 let vocalStartTimeRaw =
@@ -3935,6 +4067,11 @@ splitBtn.addEventListener(
 
       buildKaraokeLines();
 
+      originalWhisperLyrics =
+        JSON.parse(JSON.stringify(lyricsData));
+
+      originalWhisperKaraokeLines =
+        JSON.parse(JSON.stringify(karaokeLines));
 
       renderLyrics();
 
@@ -10622,10 +10759,40 @@ function renderLyricsEditor() {
     : "No lyrics";
 }
 
+function cloneLyricsEditorDraft() {
+  return JSON.parse(JSON.stringify(lyricsEditorDraft));
+}
+
+function pushLyricsHistory() {
+  lyricsUndoStack.push(cloneLyricsEditorDraft());
+
+  if (lyricsUndoStack.length > 100) {
+    lyricsUndoStack.shift();
+  }
+
+  lyricsRedoStack = [];
+  updateLyricsUndoRedoButtons();
+}
+
+function updateLyricsUndoRedoButtons() {
+  lyricsUndoBtn.disabled =
+    lyricsUndoStack.length === 0;
+
+  lyricsRedoBtn.disabled =
+    lyricsRedoStack.length === 0;
+}
+
 function openLyricsEditor() {
   lyricsEditorDraft = cloneKaraokeLines();
-  lyricsEditorSelectedLine = lyricsEditorDraft.length ? 0 : -1;
+  lyricsEditorSelectedLine =
+    lyricsEditorDraft.length ? 0 : -1;
+
+  lyricsUndoStack = [];
+  lyricsRedoStack = [];
+
+  updateLyricsUndoRedoButtons();
   renderLyricsEditor();
+
   lyricsEditorDialog.classList.add("open");
 }
 
@@ -10651,30 +10818,65 @@ lyricsSplitLineBtn.addEventListener("click", () => {
   if (!line || line.words.length < 2) return;
 
   const current = getCurrentTime();
-  let splitIndex = line.words.findIndex(word => Number(word.start) >= current);
-  if (splitIndex <= 0 || splitIndex >= line.words.length) {
-    splitIndex = Math.ceil(line.words.length / 2);
+
+  if (
+    current <= Number(line.start)
+    ||
+    current >= Number(line.end)
+  ) {
+    lyricsEditorStatus.textContent =
+      "Put cursor inside selected line";
+    return;
   }
 
-  const firstWords = line.words.slice(0, splitIndex);
-  const secondWords = line.words.slice(splitIndex);
+  const splitIndex =
+    line.words.findIndex(
+      word =>
+        Number(word.start) >= current
+    );
+
+  if (
+    splitIndex <= 0
+    ||
+    splitIndex >= line.words.length
+  ) {
+    lyricsEditorStatus.textContent =
+      "No word boundary after cursor";
+    return;
+  }
+
+  pushLyricsHistory();
+
+  const firstWords =
+    line.words.slice(0, splitIndex);
+
+  const secondWords =
+    line.words.slice(splitIndex);
 
   lyricsEditorDraft.splice(
     lyricsEditorSelectedLine,
     1,
     {
-      start: Number(firstWords[0].start),
-      end: Number(firstWords[firstWords.length - 1].end),
+      start: Number(line.start),
+      end: current,
       words: firstWords
     },
     {
-      start: Number(secondWords[0].start),
-      end: Number(secondWords[secondWords.length - 1].end),
+      start: current,
+      end: Number(line.end),
       words: secondWords
     }
   );
 
+  lyricsEditorSelectedLine += 1;
+
   renderLyricsEditor();
+  updateLyricsUndoRedoButtons();
+
+  lyricsEditorStatus.textContent =
+    "Split at "
+    + current.toFixed(2)
+    + " s";
 });
 
 lyricsMergeUpBtn.addEventListener("click", () => {
@@ -10683,6 +10885,9 @@ lyricsMergeUpBtn.addEventListener("click", () => {
 
   const previous = lyricsEditorDraft[index - 1];
   const current = lyricsEditorDraft[index];
+
+  pushLyricsHistory();
+
   previous.words = previous.words.concat(current.words);
   previous.end = current.end;
   lyricsEditorDraft.splice(index, 1);
@@ -10696,6 +10901,9 @@ lyricsMergeDownBtn.addEventListener("click", () => {
 
   const current = lyricsEditorDraft[index];
   const next = lyricsEditorDraft[index + 1];
+
+  pushLyricsHistory();
+
   current.words = current.words.concat(next.words);
   current.end = next.end;
   lyricsEditorDraft.splice(index + 1, 1);
@@ -10705,6 +10913,9 @@ lyricsMergeDownBtn.addEventListener("click", () => {
 lyricsSetStartBtn.addEventListener("click", () => {
   const line = getSelectedLyricsLine();
   if (!line) return;
+
+  pushLyricsHistory();
+
   line.start = getCurrentTime();
   if (line.words.length) line.words[0].start = line.start;
   renderLyricsEditor();
@@ -10713,6 +10924,9 @@ lyricsSetStartBtn.addEventListener("click", () => {
 lyricsSetEndBtn.addEventListener("click", () => {
   const line = getSelectedLyricsLine();
   if (!line) return;
+
+  pushLyricsHistory();
+
   line.end = getCurrentTime();
   if (line.words.length) line.words[line.words.length - 1].end = line.end;
   renderLyricsEditor();
@@ -10725,9 +10939,549 @@ lyricsPlayLineBtn.addEventListener("click", () => {
   fragmentStart = Number(line.start);
   fragmentEnd = Number(line.end);
   loopEnabled = false;
+
   syncAllTo(fragmentStart);
-  playAll();
+
+  updatePlayheads();
+  updateMasterCursor();
+  updateTimeDisplay();
+
+  playCurrentMode();
 });
+
+lyricsUndoBtn.addEventListener("click", () => {
+  if (!lyricsUndoStack.length) return;
+
+  lyricsRedoStack.push(
+    cloneLyricsEditorDraft()
+  );
+
+  lyricsEditorDraft =
+    lyricsUndoStack.pop();
+
+  lyricsEditorSelectedLine =
+    lyricsEditorDraft.length
+    ? Math.min(
+        Math.max(0, lyricsEditorSelectedLine),
+        lyricsEditorDraft.length - 1
+      )
+    : -1;
+
+  renderLyricsEditor();
+  updateLyricsUndoRedoButtons();
+});
+
+
+lyricsRedoBtn.addEventListener("click", () => {
+  if (!lyricsRedoStack.length) return;
+
+  lyricsUndoStack.push(
+    cloneLyricsEditorDraft()
+  );
+
+  lyricsEditorDraft =
+    lyricsRedoStack.pop();
+
+  lyricsEditorSelectedLine =
+    lyricsEditorDraft.length
+    ? Math.min(
+        Math.max(0, lyricsEditorSelectedLine),
+        lyricsEditorDraft.length - 1
+      )
+    : -1;
+
+  renderLyricsEditor();
+  updateLyricsUndoRedoButtons();
+});
+
+
+lyricsResetBtn.addEventListener("click", () => {
+  pushLyricsHistory();
+
+  lyricsEditorDraft =
+    JSON.parse(
+      JSON.stringify(
+        originalWhisperKaraokeLines
+      )
+    );
+
+  lyricsEditorSelectedLine =
+    lyricsEditorDraft.length
+    ? 0
+    : -1;
+
+  renderLyricsEditor();
+  updateLyricsUndoRedoButtons();
+
+  lyricsEditorStatus.textContent =
+    "Reset to WhisperX";
+});
+
+
+lyricsDeleteLineBtn.addEventListener("click", () => {
+  const index =
+    lyricsEditorSelectedLine;
+
+  if (
+    index < 0
+    ||
+    index >= lyricsEditorDraft.length
+  ) {
+    return;
+  }
+
+  pushLyricsHistory();
+
+  lyricsEditorDraft.splice(index, 1);
+
+  if (!lyricsEditorDraft.length) {
+    lyricsEditorSelectedLine = -1;
+  }
+  else if (
+    index >= lyricsEditorDraft.length
+  ) {
+    lyricsEditorSelectedLine =
+      lyricsEditorDraft.length - 1;
+  }
+  else {
+    lyricsEditorSelectedLine = index;
+  }
+
+  renderLyricsEditor();
+  updateLyricsUndoRedoButtons();
+
+  lyricsEditorStatus.textContent =
+    "Line deleted";
+});
+
+
+lyricsLoadBtn.addEventListener("click", () => {
+  lyricsLoadInput.value = "";
+  lyricsLoadInput.click();
+});
+
+
+lyricsLoadInput.addEventListener("change", async () => {
+  const file =
+    lyricsLoadInput.files[0];
+
+  if (!file) return;
+
+  const text =
+    await file.text();
+
+  const extension =
+    file.name
+      .split(".")
+      .pop()
+      .toLowerCase();
+
+  pushLyricsHistory();
+
+  if (extension === "json") {
+    const loaded =
+      JSON.parse(text);
+
+    if (!Array.isArray(loaded.lines)) {
+      throw new Error(
+        "Invalid MyNus Lyrics file"
+      );
+    }
+
+    lyricsEditorDraft =
+      JSON.parse(
+        JSON.stringify(
+          loaded.lines
+        )
+      );
+  }
+
+  else if (extension === "txt") {
+    const sourceLines =
+      text
+        .split(/\r?\n/)
+        .map(value => value.trim())
+        .filter(Boolean);
+
+    lyricsEditorDraft =
+      sourceLines.map(
+        (value, index) => {
+          const source =
+            karaokeLines[
+              Math.min(
+                index,
+                Math.max(
+                  0,
+                  karaokeLines.length - 1
+                )
+              )
+            ];
+
+          const start =
+            source
+            ? Number(source.start)
+            : index;
+
+          const end =
+            source
+            ? Number(source.end)
+            : start + 1;
+
+          const words =
+            value
+              .split(/\s+/)
+              .filter(Boolean);
+
+          const d =
+            Math.max(
+              0.001,
+              end - start
+            );
+
+          return {
+            start,
+            end,
+            words:
+              words.map(
+                (word, wordIndex) => ({
+                  word,
+                  start:
+                    start
+                    +
+                    d
+                    * wordIndex
+                    / words.length,
+                  end:
+                    start
+                    +
+                    d
+                    * (wordIndex + 1)
+                    / words.length
+                })
+              )
+          };
+        }
+      );
+  }
+
+  else {
+    lyricsEditorStatus.textContent =
+      "Load: use MyNus Lyrics JSON or TXT";
+    return;
+  }
+
+  lyricsEditorSelectedLine =
+    lyricsEditorDraft.length
+    ? 0
+    : -1;
+
+  renderLyricsEditor();
+  updateLyricsUndoRedoButtons();
+});
+
+
+lyricsSaveAsBtn.addEventListener("click", () => {
+  const defaultName =
+    currentOriginalFile
+    ? currentOriginalFile.name.replace(
+        /\.[^.]+$/,
+        ""
+      )
+    : "lyrics";
+
+  lyricsSaveAsName.value =
+    defaultName;
+
+  lyricsSaveAsFormat.value =
+    "json";
+
+  lyricsSaveAsDialog.classList.add(
+    "open"
+  );
+});
+
+
+lyricsSaveAsCancelBtn.addEventListener("click", () => {
+  lyricsSaveAsDialog.classList.remove(
+    "open"
+  );
+});
+
+
+lyricsSaveAsConfirmBtn.addEventListener("click", () => {
+  exportLyricsFile(
+    lyricsSaveAsName.value,
+    lyricsSaveAsFormat.value
+  );
+
+  lyricsSaveAsDialog.classList.remove(
+    "open"
+  );
+});
+
+
+function formatLrcTime(seconds) {
+  const minutes =
+    Math.floor(seconds / 60);
+
+  const secs =
+    (seconds % 60)
+      .toFixed(2)
+      .padStart(5, "0");
+
+  return (
+    "["
+    + String(minutes).padStart(2, "0")
+    + ":"
+    + secs
+    + "]"
+  );
+}
+
+
+function formatSrtTime(seconds) {
+  const ms =
+    Math.max(
+      0,
+      Math.round(
+        Number(seconds) * 1000
+      )
+    );
+
+  const hours =
+    Math.floor(ms / 3600000);
+
+  const minutes =
+    Math.floor(
+      (ms % 3600000) / 60000
+    );
+
+  const secs =
+    Math.floor(
+      (ms % 60000) / 1000
+    );
+
+  const millis =
+    ms % 1000;
+
+  return (
+    String(hours).padStart(2, "0")
+    + ":"
+    + String(minutes).padStart(2, "0")
+    + ":"
+    + String(secs).padStart(2, "0")
+    + ","
+    + String(millis).padStart(3, "0")
+  );
+}
+
+
+function exportLyricsFile(rawName, format) {
+  const safeName =
+    (
+      rawName
+      || "lyrics"
+    )
+    .replace(
+      /[\\/:*?"<>|]+/g,
+      "_"
+    )
+    .trim()
+    || "lyrics";
+
+  const lines =
+    lyricsEditorDraft.map(
+      line => ({
+        start: Number(line.start),
+        end: Number(line.end),
+        words:
+          line.words.map(
+            word => ({
+              ...word
+            })
+          )
+      })
+    );
+
+  let content = "";
+  let mime = "text/plain";
+
+  if (format === "json") {
+    mime = "application/json";
+
+    content =
+      JSON.stringify(
+        {
+          language:
+            lyricsData.language,
+          text:
+            lines
+              .map(
+                line =>
+                  line.words
+                    .map(
+                      word =>
+                        word.word
+                    )
+                    .join(" ")
+              )
+              .join(" "),
+          lines
+        },
+        null,
+        2
+      );
+  }
+
+  else if (format === "lrc") {
+    content =
+      lines
+        .map(
+          line =>
+            formatLrcTime(
+              Number(line.start)
+            )
+            +
+            line.words
+              .map(
+                word =>
+                  word.word
+              )
+              .join(" ")
+        )
+        .join("\n");
+  }
+
+  else if (format === "srt") {
+    content =
+      lines
+        .map(
+          (line, index) =>
+            (index + 1)
+            + "\n"
+            + formatSrtTime(line.start)
+            + " --> "
+            + formatSrtTime(line.end)
+            + "\n"
+            + line.words
+                .map(
+                  word =>
+                    word.word
+                )
+                .join(" ")
+        )
+        .join("\n\n");
+  }
+
+  else if (format === "txt") {
+    content =
+      lines
+        .map(
+          line =>
+            line.words
+              .map(
+                word =>
+                  word.word
+              )
+              .join(" ")
+        )
+        .join("\n");
+  }
+
+  else if (format === "pdf") {
+    const printWindow =
+      window.open("", "_blank");
+
+    if (!printWindow) return;
+
+    const body =
+      lines
+        .map(
+          line =>
+            "<p>"
+            +
+            line.words
+              .map(
+                word =>
+                  String(word.word)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+              )
+              .join(" ")
+            +
+            "</p>"
+        )
+        .join("");
+
+    printWindow.document.write(
+      "<!doctype html>"
+      +
+      "<html><head><meta charset='utf-8'>"
+      +
+      "<title>"
+      + safeName
+      + "</title>"
+      +
+      "<style>"
+      +
+      "body{font-family:Arial,sans-serif;padding:40px;line-height:1.5}"
+      +
+      "h1{font-size:22px;margin-bottom:28px}"
+      +
+      "p{margin:0 0 8px}"
+      +
+      "</style></head><body>"
+      +
+      "<h1>"
+      + safeName
+      + "</h1>"
+      +
+      body
+      +
+      "</body></html>"
+    );
+
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+
+    return;
+  }
+
+  else {
+    return;
+  }
+
+  const blob =
+    new Blob(
+      [content],
+      {
+        type:
+          mime
+          + ";charset=utf-8"
+      }
+    );
+
+  const url =
+    URL.createObjectURL(blob);
+
+  const link =
+    document.createElement("a");
+
+  link.href = url;
+  link.download =
+    safeName
+    + "."
+    + format;
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  URL.revokeObjectURL(url);
+}
+
 
 saveLyricsEditBtn.addEventListener("click", () => {
   lyricsEditorDraft.forEach(line => {
@@ -10754,11 +11508,6 @@ function updateTimeDisplay() {
 
   const current =
     getCurrentTime();
-
-
-  updateKaraoke(
-    current
-  );
 
 
   updateKaraoke(
@@ -12188,8 +12937,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-счетчик вокала по тексту
-   | 4.0.1
+кнопки редактора текстов
+   | 4.1.0
 </div>
 
 <div class="row" id="build-down">
