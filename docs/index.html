@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.1.1</title>
+  <title>MyNus 4.1.2</title>
 
 
  <style>
@@ -1282,7 +1282,7 @@
       background: #f0f0f0;
     }
 
-    .lyrics-editor-row input[type="number"] {
+    .lyrics-editor-row input[type="text"] {
       width: 100%;
       padding: 5px 6px;
       border: 1px solid #ccc;
@@ -2916,7 +2916,7 @@
 
       <div class="lyrics-editor-transport">
         <button type="button" id="lyricsPlayMasterBtn">Play Master</button>
-        <button type="button" id="lyricsPlayLineBtn">Play Line</button>
+        <button type="button" id="lyricsPlayLineBtn">Loop Line</button>
         <button type="button" id="lyricsSetStartBtn">Set Start</button>
         <button type="button" id="lyricsSetEndBtn">Set End</button>
       </div>
@@ -3650,6 +3650,14 @@ let originalWhisperKaraokeLines = [];
 
 let masterCursorTime =
   0;
+
+
+let lyricsTransportMode =
+  "master";
+
+
+let lyricsLoopPaused =
+  false;
 
 
 let vocalStartTimeRaw =
@@ -10878,6 +10886,175 @@ function renderLyricsEditor() {
       );
 }
 
+function formatLyricsTime(
+  seconds
+) {
+
+  const safe =
+    Math.max(
+      0,
+      Number(seconds) || 0
+    );
+
+
+  const minutes =
+    Math.floor(
+      safe / 60
+    );
+
+
+  const secs =
+    Math.floor(
+      safe % 60
+    );
+
+
+  const hundredths =
+    Math.floor(
+      (
+        safe
+        -
+        Math.floor(safe)
+      )
+      * 100
+    );
+
+
+  return (
+    String(minutes)
+      .padStart(2, "0")
+    + ":"
+    + String(secs)
+      .padStart(2, "0")
+    + "."
+    + String(hundredths)
+      .padStart(2, "0")
+  );
+
+}
+
+
+function parseLyricsTime(
+  value
+) {
+
+  const text =
+    String(value)
+      .trim();
+
+
+  const match =
+    text.match(
+      /^(\d+):(\d{1,2})(?:\.(\d{1,2}))?$/
+    );
+
+
+  if (!match) {
+
+    return NaN;
+
+  }
+
+
+  const minutes =
+    Number(match[1]);
+
+
+  const seconds =
+    Number(match[2]);
+
+
+  const hundredths =
+    Number(
+      (
+        match[3]
+        || "0"
+      )
+      .padEnd(2, "0")
+      .slice(0, 2)
+    );
+
+
+  if (
+    seconds < 0
+    ||
+    seconds >= 60
+  ) {
+
+    return NaN;
+
+  }
+
+
+  return (
+    minutes * 60
+    + seconds
+    + hundredths / 100
+  );
+
+}
+
+
+function updateLyricsTransportButtons() {
+
+  if (
+    !lyricsEditorDialog
+    ||
+    !lyricsEditorDialog.classList.contains(
+      "open"
+    )
+  ) {
+
+    return;
+
+  }
+
+
+  if (isPlaying) {
+
+    if (
+      lyricsTransportMode ===
+      "line"
+      &&
+      loopEnabled
+    ) {
+
+      lyricsPlayLineBtn.textContent =
+        "Pause";
+
+
+      lyricsPlayMasterBtn.textContent =
+        "Play Master";
+
+    }
+
+    else {
+
+      lyricsPlayMasterBtn.textContent =
+        "Pause";
+
+
+      lyricsPlayLineBtn.textContent =
+        "Loop Line";
+
+    }
+
+  }
+
+  else {
+
+    lyricsPlayMasterBtn.textContent =
+      "Play Master";
+
+
+    lyricsPlayLineBtn.textContent =
+      "Loop Line";
+
+  }
+
+}
+
+
 function updateLyricsMasterCounter() {
 
   if (!lyricsMasterCounter) return;
@@ -10925,12 +11102,112 @@ function openLyricsEditor() {
   renderLyricsEditor();
   updateLyricsMasterCounter();
 
+  lyricsTransportMode =
+    "master";
+
+
+  lyricsLoopPaused =
+    false;
+
+
+  lyricsPlayMasterBtn.textContent =
+    "Play Master";
+
+
+  lyricsPlayLineBtn.textContent =
+    "Loop Line";
+
+
   lyricsEditorDialog.classList.add("open");
 }
 
 function closeLyricsEditor() {
-  lyricsEditorDialog.classList.remove("open");
+
+  const current =
+    getCurrentTime();
+
+
+  pauseAll();
+
+
+  fragmentStart =
+    null;
+
+
+  fragmentEnd =
+    null;
+
+
+  loopEnabled =
+    false;
+
+
+  lyricsTransportMode =
+    "master";
+
+
+  lyricsLoopPaused =
+    false;
+
+
+  syncAllTo(
+    current
+  );
+
+
+  masterCursorTime =
+    current;
+
+
+  updatePlayheads();
+
+  updateMasterCursor();
+
+  updateTimeDisplay();
+
+
+  lyricsPlayMasterBtn.textContent =
+    "Play Master";
+
+
+  lyricsPlayLineBtn.textContent =
+    "Loop Line";
+
+
+  lyricsEditorDialog.classList.remove(
+    "open"
+  );
+
 }
+
+function applyEditedTextToLine(
+  line
+) {
+
+  if (!line) {
+
+    return;
+
+  }
+
+
+  if (
+    typeof line._editedText ===
+    "string"
+  ) {
+
+    setLineText(
+      line,
+      line._editedText
+    );
+
+
+    delete line._editedText;
+
+  }
+
+}
+
 
 function getSelectedLyricsLine() {
   if (lyricsEditorSelectedLine < 0 || lyricsEditorSelectedLine >= lyricsEditorDraft.length) return null;
@@ -10945,105 +11222,381 @@ lyricsEditorDialog.addEventListener("click", event => {
   if (event.target === lyricsEditorDialog) closeLyricsEditor();
 });
 
-lyricsSplitLineBtn.addEventListener("click", () => {
-  const line = getSelectedLyricsLine();
+lyricsSplitLineBtn.addEventListener(
+  "click",
+  () => {
 
-  if (
-    !line
-    ||
-    line.words.length < 2
-  ) {
-    return;
-  }
+    const line =
+      getSelectedLyricsLine();
 
-  const current =
-    masterCursorTime;
 
-  if (
-    current <= Number(line.start)
-    ||
-    current >= Number(line.end)
-  ) {
-    lyricsEditorStatus.textContent =
-      "Cursor outside selected line";
-    return;
-  }
+    if (!line) {
 
-  const splitIndex =
-    line.words.findIndex(
-      word =>
-        Number(word.start) >= current
+      return;
+
+    }
+
+
+    applyEditedTextToLine(
+      line
     );
 
-  if (
-    splitIndex <= 0
-    ||
-    splitIndex >= line.words.length
-  ) {
-    lyricsEditorStatus.textContent =
-      "No word boundary after cursor";
-    return;
-  }
 
-  pushLyricsHistory();
+    const current =
+      masterCursorTime;
 
-  const firstWords =
-    line.words.slice(0, splitIndex);
 
-  const secondWords =
-    line.words.slice(splitIndex);
+    if (
+      !Number.isFinite(current)
+      ||
+      current <= Number(line.start)
+      ||
+      current >= Number(line.end)
+    ) {
 
-  lyricsEditorDraft.splice(
-    lyricsEditorSelectedLine,
-    1,
-    {
-      start: Number(line.start),
-      end: current,
-      words: firstWords
-    },
-    {
-      start: current,
-      end: Number(line.end),
-      words: secondWords
+      lyricsEditorStatus.textContent =
+        "Cursor outside selected line";
+
+      return;
+
     }
-  );
 
-  lyricsEditorSelectedLine += 1;
 
-  renderLyricsEditor();
-  updateLyricsUndoRedoButtons();
-});
+    pushLyricsHistory();
 
-lyricsMergeUpBtn.addEventListener("click", () => {
-  const index = lyricsEditorSelectedLine;
-  if (index <= 0) return;
 
-  const previous = lyricsEditorDraft[index - 1];
-  const current = lyricsEditorDraft[index];
+    const topWords = [];
+    const bottomWords = [];
 
-  pushLyricsHistory();
 
-  previous.words = previous.words.concat(current.words);
-  previous.end = current.end;
-  lyricsEditorDraft.splice(index, 1);
-  lyricsEditorSelectedLine = index - 1;
-  renderLyricsEditor();
-});
+    line.words.forEach(
+      word => {
 
-lyricsMergeDownBtn.addEventListener("click", () => {
-  const index = lyricsEditorSelectedLine;
-  if (index < 0 || index >= lyricsEditorDraft.length - 1) return;
+        const wordStart =
+          Number(
+            word.start
+          );
 
-  const current = lyricsEditorDraft[index];
-  const next = lyricsEditorDraft[index + 1];
 
-  pushLyricsHistory();
+        const wordEnd =
+          Number(
+            word.end
+          );
 
-  current.words = current.words.concat(next.words);
-  current.end = next.end;
-  lyricsEditorDraft.splice(index + 1, 1);
-  renderLyricsEditor();
-});
+
+        const wordMiddle =
+          (
+            wordStart
+            + wordEnd
+          )
+          / 2;
+
+
+        if (
+          wordMiddle < current
+        ) {
+
+          topWords.push({
+            ...word
+          });
+
+        }
+
+        else {
+
+          bottomWords.push({
+            ...word
+          });
+
+        }
+
+      }
+    );
+
+
+    if (
+      topWords.length === 0
+      &&
+      bottomWords.length
+    ) {
+
+      topWords.push(
+        bottomWords.shift()
+      );
+
+    }
+
+
+    if (
+      bottomWords.length === 0
+      &&
+      topWords.length
+    ) {
+
+      bottomWords.unshift(
+        topWords.pop()
+      );
+
+    }
+
+
+    if (
+      topWords.length
+    ) {
+
+      topWords[
+        topWords.length - 1
+      ].end =
+        Math.min(
+          Number(
+            topWords[
+              topWords.length - 1
+            ].end
+          ),
+          current
+        );
+
+    }
+
+
+    if (
+      bottomWords.length
+    ) {
+
+      bottomWords[0].start =
+        Math.max(
+          Number(
+            bottomWords[0].start
+          ),
+          current
+        );
+
+    }
+
+
+    lyricsEditorDraft.splice(
+      lyricsEditorSelectedLine,
+      1,
+      {
+        start:
+          Number(
+            line.start
+          ),
+
+        end:
+          current,
+
+        words:
+          topWords
+      },
+      {
+        start:
+          current,
+
+        end:
+          Number(
+            line.end
+          ),
+
+        words:
+          bottomWords
+      }
+    );
+
+
+    lyricsEditorSelectedLine +=
+      1;
+
+
+    renderLyricsEditor();
+
+    updateLyricsUndoRedoButtons();
+
+  }
+);
+
+lyricsMergeUpBtn.addEventListener(
+  "click",
+  () => {
+
+    const index =
+      lyricsEditorSelectedLine;
+
+
+    if (
+      index <= 0
+    ) {
+
+      return;
+
+    }
+
+
+    const previous =
+      lyricsEditorDraft[
+        index - 1
+      ];
+
+
+    const current =
+      lyricsEditorDraft[
+        index
+      ];
+
+
+    applyEditedTextToLine(
+      previous
+    );
+
+
+    applyEditedTextToLine(
+      current
+    );
+
+
+    pushLyricsHistory();
+
+
+    const merged = {
+
+      start:
+        Number(
+          previous.start
+        ),
+
+      end:
+        Number(
+          current.end
+        ),
+
+      words:
+        previous.words
+          .map(
+            word => ({
+              ...word
+            })
+          )
+          .concat(
+            current.words.map(
+              word => ({
+                ...word
+              })
+            )
+          )
+
+    };
+
+
+    lyricsEditorDraft.splice(
+      index - 1,
+      2,
+      merged
+    );
+
+
+    lyricsEditorSelectedLine =
+      index - 1;
+
+
+    renderLyricsEditor();
+
+    updateLyricsUndoRedoButtons();
+
+  }
+);
+
+lyricsMergeDownBtn.addEventListener(
+  "click",
+  () => {
+
+    const index =
+      lyricsEditorSelectedLine;
+
+
+    if (
+      index < 0
+      ||
+      index >=
+        lyricsEditorDraft.length - 1
+    ) {
+
+      return;
+
+    }
+
+
+    const current =
+      lyricsEditorDraft[
+        index
+      ];
+
+
+    const next =
+      lyricsEditorDraft[
+        index + 1
+      ];
+
+
+    applyEditedTextToLine(
+      current
+    );
+
+
+    applyEditedTextToLine(
+      next
+    );
+
+
+    pushLyricsHistory();
+
+
+    const merged = {
+
+      start:
+        Number(
+          current.start
+        ),
+
+      end:
+        Number(
+          next.end
+        ),
+
+      words:
+        current.words
+          .map(
+            word => ({
+              ...word
+            })
+          )
+          .concat(
+            next.words.map(
+              word => ({
+                ...word
+              })
+            )
+          )
+
+    };
+
+
+    lyricsEditorDraft.splice(
+      index,
+      2,
+      merged
+    );
+
+
+    lyricsEditorSelectedLine =
+      index;
+
+
+    renderLyricsEditor();
+
+    updateLyricsUndoRedoButtons();
+
+  }
+);
 
 lyricsSetStartBtn.addEventListener("click", () => {
   const line = getSelectedLyricsLine();
@@ -11077,36 +11630,125 @@ lyricsSetEndBtn.addEventListener("click", () => {
   renderLyricsEditor();
 });
 
-lyricsPlayMasterBtn.addEventListener("click", () => {
+lyricsPlayMasterBtn.addEventListener(
+  "click",
+  () => {
 
-  if (isPlaying) {
-    pauseAll();
-    return;
+    lyricsTransportMode =
+      "master";
+
+
+    if (isPlaying) {
+
+      pauseAll();
+
+
+      updateLyricsTransportButtons();
+
+
+      return;
+
+    }
+
+
+    fragmentStart =
+      null;
+
+
+    fragmentEnd =
+      null;
+
+
+    loopEnabled =
+      false;
+
+
+    syncAllTo(
+      masterCursorTime
+    );
+
+
+    playCurrentMode();
+
+
+    updateLyricsTransportButtons();
+
   }
-
-  syncAllTo(
-    masterCursorTime
-  );
-
-  playCurrentMode();
-
-});
+);
 
 
-lyricsPlayLineBtn.addEventListener("click", () => {
-  const line = getSelectedLyricsLine();
-  if (!line) return;
+lyricsPlayLineBtn.addEventListener(
+  "click",
+  () => {
 
-  fragmentStart = Number(line.start);
-  fragmentEnd = Number(line.end);
-  loopEnabled = false;
+    const line =
+      getSelectedLyricsLine();
 
-  syncAllTo(
-    fragmentStart
-  );
 
-  playCurrentMode();
-});
+    if (!line) {
+
+      return;
+
+    }
+
+
+    lyricsTransportMode =
+      "line";
+
+
+    if (
+      isPlaying
+      &&
+      loopEnabled
+    ) {
+
+      pauseAll();
+
+
+      lyricsLoopPaused =
+        true;
+
+
+      updateLyricsTransportButtons();
+
+
+      return;
+
+    }
+
+
+    fragmentStart =
+      Number(
+        line.start
+      );
+
+
+    fragmentEnd =
+      Number(
+        line.end
+      );
+
+
+    loopEnabled =
+      true;
+
+
+    lyricsLoopPaused =
+      false;
+
+
+    syncAllTo(
+      fragmentStart
+    );
+
+
+    playCurrentMode();
+
+
+    updateLyricsTransportButtons();
+
+  }
+);
 
 lyricsUndoBtn.addEventListener("click", () => {
   if (!lyricsUndoStack.length) return;
@@ -11642,25 +12284,73 @@ function exportLyricsFile(rawName, format) {
 }
 
 
-saveLyricsEditBtn.addEventListener("click", () => {
-  lyricsEditorDraft.forEach(line => {
-    if (typeof line._editedText === "string") {
-      setLineText(line, line._editedText);
-      delete line._editedText;
-    }
-  });
+saveLyricsEditBtn.addEventListener(
+  "click",
+  () => {
 
-  karaokeLines = lyricsEditorDraft.map(line => ({
-    start: Number(line.start),
-    end: Number(line.end),
-    words: line.words.map(word => ({ ...word }))
-  }));
+    lyricsEditorDraft.forEach(
+      line => {
 
-  lyricsData.words = karaokeLines.flatMap(line => line.words);
-  lyricsData.text = lyricsData.words.map(word => word.word).join(" ").trim();
-  activeKaraokeLine = -1;
-  renderLyrics();
-});
+        applyEditedTextToLine(
+          line
+        );
+
+      }
+    );
+
+
+    karaokeLines =
+      lyricsEditorDraft.map(
+        line => ({
+
+          start:
+            Number(
+              line.start
+            ),
+
+          end:
+            Number(
+              line.end
+            ),
+
+          words:
+            line.words.map(
+              word => ({
+                ...word
+              })
+            )
+
+        })
+      );
+
+
+    lyricsData.words =
+      karaokeLines.flatMap(
+        line =>
+          line.words
+      );
+
+
+    lyricsData.text =
+      lyricsData.words
+        .map(
+          word =>
+            word.word
+        )
+        .join(" ")
+        .trim();
+
+
+    activeKaraokeLine =
+      -1;
+
+
+    renderLyrics();
+
+    renderLyricsEditor();
+
+  }
+);
 
 function updateTimeDisplay() {
 
@@ -11875,6 +12565,8 @@ function startAnimation() {
         getCurrentTime();
 
       updateLyricsMasterCounter();
+
+      updateLyricsTransportButtons();
 
       updateTimeDisplay();
 
@@ -13100,16 +13792,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Save больше не закрывает Lyrics Editor;
-Split работает от отдельной позиции Master Cursor;
-Set Start / Set End тоже работают от Master Cursor;
-Lines: N | Selected: N перенесён в верхний бар по центру между Lyrics Editor и Close;
-нижний левый блок: Play Master | Play Line | Set Start | Set End;
-нижний центральный прямой счётчик Master;
-нижний правый блок: Cancel | Load | Save | Save As...;
-верхний правый блок: Undo | Redo | Reset;
-верхний левый: Split | Merge Up | Merge Down | Delete Line
-   | 4.2.0
+Split без лишних фильтров, исправленные оба Merge, Play Master ↔ Pause, Loop Line ↔ Pause, сохранение караоке-подсветки, Close очищает режимы редактора, но сохраняет позицию, и таймкоды строк показываются как MM:SS.XX.
+   | 4.3.0
 </div>
 
 <div class="row" id="build-down">
