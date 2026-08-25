@@ -1,11 +1,12 @@
 # ========================================
-# lirycs | 3.0.0
+# подчерки - автоисправление текста | 3.1.1
 # ========================================
 
 # ========================================
 # IMPORTS
 # ========================================
 
+import sys
 import os
 import re
 import glob
@@ -22,6 +23,7 @@ from flask import (
     send_file
 )
 from werkzeug.utils import secure_filename
+import language_tool_python
 
 
 # ========================================
@@ -367,7 +369,7 @@ def run_demucs(
 
     command = [
 
-        "python",
+        sys.executable,
         "-m",
         "demucs",
 
@@ -1033,6 +1035,185 @@ def export_audio():
         return jsonify({
             "error":
                 str(error)
+        }), 500
+
+
+
+
+# ========================================
+# LYRICS AUTOFIX
+# ========================================
+
+_language_tools = {}
+
+
+def get_language_tool(language="ru-RU"):
+
+    if language not in _language_tools:
+
+        _language_tools[language] = (
+            language_tool_python.LanguageTool(
+                language
+            )
+        )
+
+    return _language_tools[language]
+
+
+
+@app.route(
+    "/spellcheck",
+    methods=["POST"]
+)
+def spellcheck():
+
+    data = request.get_json(
+        silent=True
+    ) or {}
+
+    text = str(
+        data.get(
+            "text",
+            ""
+        )
+    )
+
+    try:
+
+        tool = get_language_tool(
+            "ru-RU"
+        )
+
+        matches = tool.check(
+            text
+        )
+
+        result = []
+
+        for match in matches:
+
+            replacements = [
+                str(value)
+                for value in (
+                    match.replacements
+                    or []
+                )[:8]
+            ]
+
+            result.append({
+                "offset":
+                    int(match.offset),
+                "length":
+                    int(match.error_length),
+                "message":
+                    str(match.message),
+                "replacements":
+                    replacements
+            })
+
+        return jsonify({
+            "language": "RU",
+            "matches": result
+        })
+
+    except Exception as error:
+
+        print(error)
+
+        return jsonify({
+            "error": str(error)
+        }), 500
+
+
+@app.route(
+    "/autofix",
+    methods=["POST"]
+)
+def autofix():
+
+    data = request.get_json(
+        silent=True
+    ) or {}
+
+    text = str(
+        data.get(
+            "text",
+            ""
+        )
+    )
+
+    try:
+
+        tool = get_language_tool(
+            "ru-RU"
+        )
+
+        corrected = tool.correct(
+            text
+        )
+
+        return jsonify({
+            "language": "RU",
+            "text": corrected
+        })
+
+    except Exception as error:
+
+        print(error)
+
+        return jsonify({
+            "error": str(error)
+        }), 500
+
+
+@app.route(
+    "/autofix-all",
+    methods=["POST"]
+)
+def autofix_all():
+
+    data = request.get_json(
+        silent=True
+    ) or {}
+
+    lines = data.get(
+        "lines",
+        []
+    )
+
+    if not isinstance(
+        lines,
+        list
+    ):
+
+        return jsonify({
+            "error": "Invalid lyrics lines"
+        }), 400
+
+    try:
+
+        tool = get_language_tool(
+            "ru-RU"
+        )
+
+        corrected_lines = [
+            tool.correct(
+                str(line)
+            )
+            for line in lines
+        ]
+
+        return jsonify({
+            "language": "RU",
+            "lines": corrected_lines
+        })
+
+    except Exception as error:
+
+        print(error)
+
+        return jsonify({
+            "error": str(error)
         }), 500
 
 
