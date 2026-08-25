@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.4.0</title>
+  <title>MyNus 4.4.2</title>
 
 
  <style>
@@ -1464,11 +1464,7 @@
     }
 
 
-
-    /* ========================================
-       LYRICS EDITOR — KARAOKE WORDS | 4.4.0
-    ======================================== */
-
+    /* LYRICS EDITOR — KARAOKE WORDS | 4.4.0 */
     .lyrics-editor-text-wrap { position: relative; min-width: 0; }
     .lyrics-editor-karaoke { min-height: 46px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 5px; background: white; font-size: 13px; line-height: 1.35; cursor: text; }
     .lyrics-editor-karaoke-word { display: inline; padding: 1px 2px; border-radius: 3px; }
@@ -1478,6 +1474,57 @@
     .lyrics-editor-text-wrap textarea { display: none; }
     .lyrics-editor-text-wrap.editing textarea { display: block; }
     .lyrics-editor-text-wrap.editing .lyrics-editor-karaoke { display: none; }
+
+
+    .lyrics-editor-toolbar-center {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      flex: 1 1 auto;
+    }
+
+    #lyricsLanguageInfo {
+      font-size: 11px;
+      color: #666;
+      white-space: nowrap;
+    }
+
+
+    .lyrics-editor-karaoke-word.spell-error {
+      text-decoration-line: underline;
+      text-decoration-style: wavy;
+      text-decoration-color: #c00;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+      cursor: pointer;
+    }
+
+    .lyrics-spell-popup {
+      position: absolute;
+      z-index: 5000;
+      display: none;
+      min-width: 150px;
+      max-width: 280px;
+      padding: 6px;
+      background: #fff;
+      border: 1px solid #bbb;
+      border-radius: 7px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.18);
+    }
+
+    .lyrics-spell-popup.open { display: block; }
+
+    .lyrics-spell-popup button {
+      display: block;
+      width: 100%;
+      margin: 0 0 4px;
+      padding: 5px 7px;
+      text-align: left;
+      background: #f3f3f3;
+      color: #222;
+      font-size: 11px;
+    }
 
 </style>
 
@@ -2918,6 +2965,12 @@
         <button type="button" id="lyricsDeleteLineBtn">Delete Line</button>
       </div>
 
+      <div class="lyrics-editor-toolbar-center">
+        <span id="lyricsLanguageInfo">Language: RU</span>
+        <button type="button" id="lyricsAutoLineBtn">AutoLine</button>
+        <button type="button" id="lyricsAutoTextBtn">AutoText</button>
+      </div>
+
       <div class="lyrics-editor-toolbar-right">
         <button type="button" id="lyricsUndoBtn">Undo</button>
         <button type="button" id="lyricsRedoBtn">Redo</button>
@@ -2925,6 +2978,8 @@
       </div>
 
     </div>
+
+    <div id="lyricsSpellPopup" class="lyrics-spell-popup"></div>
 
     <div id="lyricsEditorRows" class="lyrics-editor-rows"></div>
 
@@ -3223,6 +3278,9 @@ const lyricsPanel =
   document.getElementById("lyricsPanel");
 
 const lyricsUndoBtn = document.getElementById("lyricsUndoBtn");
+const lyricsAutoLineBtn = document.getElementById("lyricsAutoLineBtn");
+const lyricsAutoTextBtn = document.getElementById("lyricsAutoTextBtn");
+const lyricsLanguageInfo = document.getElementById("lyricsLanguageInfo");
 const lyricsRedoBtn = document.getElementById("lyricsRedoBtn");
 const lyricsResetBtn = document.getElementById("lyricsResetBtn");
 const lyricsDeleteLineBtn = document.getElementById("lyricsDeleteLineBtn");
@@ -3247,6 +3305,7 @@ const closeLyricsEditorBtn = document.getElementById("closeLyricsEditorBtn");
 const cancelLyricsEditBtn = document.getElementById("cancelLyricsEditBtn");
 const saveLyricsEditBtn = document.getElementById("saveLyricsEditBtn");
 const lyricsEditorRows = document.getElementById("lyricsEditorRows");
+const lyricsSpellPopup = document.getElementById("lyricsSpellPopup");
 const lyricsEditorStatus = document.getElementById("lyricsEditorStatus");
 const lyricsSplitLineBtn = document.getElementById("lyricsSplitLineBtn");
 const lyricsMergeUpBtn = document.getElementById("lyricsMergeUpBtn");
@@ -10638,10 +10697,8 @@ function renderLyrics() {
 function updateKaraoke(
   currentTime
 ) {
+  updateLyricsEditorKaraoke(currentTime);
 
-  updateLyricsEditorKaraoke(
-    currentTime
-  );
 
   const currentBox =
     document.getElementById(
@@ -10847,6 +10904,7 @@ function setLineText(line, text) {
   }));
 }
 
+
 function switchLyricsLoopToLine(index) {
   if (lyricsTransportMode !== "line" || !loopEnabled) return;
   const line = lyricsEditorDraft[index];
@@ -10858,36 +10916,199 @@ function switchLyricsLoopToLine(index) {
 
 function updateLyricsEditorKaraoke(currentTime) {
   if (!lyricsEditorDialog.classList.contains("open")) return;
+
   const currentLineIndex = lyricsEditorDraft.findIndex(
     line => currentTime >= Number(line.start) && currentTime <= Number(line.end)
   );
   if (currentLineIndex < 0) return;
+
   const rows = lyricsEditorRows.querySelectorAll(".lyrics-editor-row");
-  rows.forEach((row,rowIndex) => {
+
+  rows.forEach((row, rowIndex) => {
     row.classList.toggle("karaoke-current-row", rowIndex === currentLineIndex);
+
     const line = lyricsEditorDraft[rowIndex];
     const wordSpans = row.querySelectorAll(".lyrics-editor-karaoke-word");
-    wordSpans.forEach((span,wordIndex) => {
+
+    wordSpans.forEach((span, wordIndex) => {
       const word = line && line.words && line.words[wordIndex];
       if (!word) return;
+
       const start = Number(word.start);
       const end = Number(word.end);
+
       span.classList.toggle("active", currentTime >= start && currentTime <= end);
       span.classList.toggle("past", currentTime > end);
     });
   });
+
   if (lyricsTransportMode === "master" && lyricsEditorSelectedLine !== currentLineIndex) {
     lyricsEditorSelectedLine = currentLineIndex;
-    rows.forEach((row,rowIndex) => row.classList.toggle("selected", rowIndex === currentLineIndex));
-    lyricsEditorStatus.textContent = "Lines: " + lyricsEditorDraft.length + " | Selected: " + (currentLineIndex + 1);
+
+    rows.forEach((row, rowIndex) => {
+      row.classList.toggle("selected", rowIndex === currentLineIndex);
+    });
+
+    lyricsEditorStatus.textContent =
+      "Lines: " + lyricsEditorDraft.length + " | Selected: " + (currentLineIndex + 1);
+
     const currentRow = rows[currentLineIndex];
-    if (currentRow) currentRow.scrollIntoView({block:"nearest"});
+    if (currentRow) currentRow.scrollIntoView({ block: "nearest" });
   }
 }
 
+
+async function requestLyricsSpellcheck(text) {
+  const response = await fetch("/spellcheck", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Spellcheck failed");
+  }
+
+  if (lyricsLanguageInfo) {
+    lyricsLanguageInfo.textContent =
+      "Language: " + String(data.language || "RU").toUpperCase();
+  }
+
+  return Array.isArray(data.matches) ? data.matches : [];
+}
+
+
+function closeLyricsSpellPopup() {
+  if (!lyricsSpellPopup) return;
+  lyricsSpellPopup.classList.remove("open");
+  lyricsSpellPopup.innerHTML = "";
+}
+
+
+function replaceLyricsWordFromSuggestion(lineIndex, wordIndex, replacement) {
+  const line = lyricsEditorDraft[lineIndex];
+  if (!line || !line.words || !line.words[wordIndex]) return;
+
+  pushLyricsHistory();
+
+  line.words[wordIndex].word = String(replacement);
+  delete line._editedText;
+
+  closeLyricsSpellPopup();
+  renderLyricsEditor();
+}
+
+
+function showLyricsSpellPopup(span, lineIndex, wordIndex, replacements) {
+  closeLyricsSpellPopup();
+
+  const list = Array.isArray(replacements) ? replacements.slice(0, 8) : [];
+  if (!list.length) return;
+
+  list.forEach(replacement => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = replacement;
+
+    button.addEventListener("click", event => {
+      event.stopPropagation();
+      replaceLyricsWordFromSuggestion(
+        lineIndex,
+        wordIndex,
+        replacement
+      );
+    });
+
+    lyricsSpellPopup.appendChild(button);
+  });
+
+  const spanRect = span.getBoundingClientRect();
+  const editorRect = lyricsEditorDialog.getBoundingClientRect();
+
+  lyricsSpellPopup.style.left =
+    Math.max(8, spanRect.left - editorRect.left) + "px";
+
+  lyricsSpellPopup.style.top =
+    Math.max(8, spanRect.bottom - editorRect.top + 4) + "px";
+
+  lyricsSpellPopup.classList.add("open");
+}
+
+
+async function updateLyricsLineSpellcheck(line, lineIndex, karaokeBox) {
+  if (!line || !karaokeBox) return;
+
+  const text = line._editedText ?? lineText(line);
+
+  let matches;
+
+  try {
+    matches = await requestLyricsSpellcheck(text);
+  }
+  catch (error) {
+    return;
+  }
+
+  const spans = Array.from(
+    karaokeBox.querySelectorAll(".lyrics-editor-karaoke-word")
+  );
+
+  spans.forEach(span => {
+    span.classList.remove("spell-error");
+    span.removeAttribute("title");
+    span.oncontextmenu = null;
+  });
+
+  let cursor = 0;
+
+  const wordRanges = line.words.map((word, wordIndex) => {
+    const wordText = String(word.word ?? "");
+    const found = text.indexOf(wordText, cursor);
+    const start = found >= 0 ? found : cursor;
+    const end = start + wordText.length;
+    cursor = end;
+
+    return { wordIndex, start, end };
+  });
+
+  matches.forEach(match => {
+    const errorStart = Number(match.offset);
+    const errorEnd = errorStart + Number(match.length);
+    const replacements = Array.isArray(match.replacements)
+      ? match.replacements
+      : [];
+
+    wordRanges.forEach(range => {
+      if (range.end > errorStart && range.start < errorEnd) {
+        const span = spans[range.wordIndex];
+        if (!span) return;
+
+        span.classList.add("spell-error");
+        span.title = replacements.length
+          ? replacements.join(" / ")
+          : String(match.message || "LanguageTool");
+
+        span.oncontextmenu = event => {
+          event.preventDefault();
+          showLyricsSpellPopup(
+            span,
+            lineIndex,
+            range.wordIndex,
+            replacements
+          );
+        };
+      }
+    });
+  });
+}
+
+
 function renderLyricsEditor() {
   lyricsEditorRows.innerHTML = "";
-  lyricsEditorDraft.forEach((line,index) => {
+
+  lyricsEditorDraft.forEach((line, index) => {
     const row = document.createElement("div");
     row.className = "lyrics-editor-row";
     if (index === lyricsEditorSelectedLine) row.classList.add("selected");
@@ -10906,6 +11127,7 @@ function renderLyricsEditor() {
 
     const karaokeBox = document.createElement("div");
     karaokeBox.className = "lyrics-editor-karaoke";
+
     line.words.forEach(word => {
       const span = document.createElement("span");
       span.className = "lyrics-editor-karaoke-word";
@@ -10915,6 +11137,14 @@ function renderLyricsEditor() {
 
     const textArea = document.createElement("textarea");
     textArea.value = line._editedText ?? lineText(line);
+    textArea.spellcheck = true;
+    textArea.lang = "ru";
+
+    updateLyricsLineSpellcheck(
+      line,
+      index,
+      karaokeBox
+    );
 
     startInput.addEventListener("change", event => {
       const value = parseLyricsTime(event.target.value);
@@ -10931,14 +11161,16 @@ function renderLyricsEditor() {
     karaokeBox.addEventListener("click", event => {
       event.stopPropagation();
       lyricsEditorSelectedLine = index;
-      document.querySelectorAll(".lyrics-editor-row").forEach((item,itemIndex) => {
+
+      document.querySelectorAll(".lyrics-editor-row").forEach((item, itemIndex) => {
         item.classList.toggle("selected", itemIndex === index);
       });
+
       switchLyricsLoopToLine(index);
       textWrap.classList.add("editing");
       textArea.value = line._editedText ?? lineText(line);
       textArea.focus();
-      textArea.setSelectionRange(textArea.value.length,textArea.value.length);
+      textArea.setSelectionRange(textArea.value.length, textArea.value.length);
     });
 
     textArea.addEventListener("input", event => {
@@ -10949,22 +11181,35 @@ function renderLyricsEditor() {
       applyEditedTextToLine(line);
       textWrap.classList.remove("editing");
       karaokeBox.innerHTML = "";
+
       line.words.forEach(word => {
         const span = document.createElement("span");
         span.className = "lyrics-editor-karaoke-word";
         span.textContent = word.word + " ";
         karaokeBox.appendChild(span);
       });
+
       updateLyricsEditorKaraoke(getCurrentTime());
+
+      updateLyricsLineSpellcheck(
+        line,
+        index,
+        karaokeBox
+      );
     });
 
     row.addEventListener("click", event => {
       if (event.target === startInput || event.target === endInput || event.target === textArea) return;
+
       lyricsEditorSelectedLine = index;
-      document.querySelectorAll(".lyrics-editor-row").forEach((item,itemIndex) => {
+
+      document.querySelectorAll(".lyrics-editor-row").forEach((item, itemIndex) => {
         item.classList.toggle("selected", itemIndex === index);
       });
-      lyricsEditorStatus.textContent = "Lines: " + lyricsEditorDraft.length + " | Selected: " + (index + 1);
+
+      lyricsEditorStatus.textContent =
+        "Lines: " + lyricsEditorDraft.length + " | Selected: " + (index + 1);
+
       switchLyricsLoopToLine(index);
     });
 
@@ -10976,7 +11221,10 @@ function renderLyricsEditor() {
     lyricsEditorRows.appendChild(row);
   });
 
-  lyricsEditorStatus.textContent = "Lines: " + lyricsEditorDraft.length + " | Selected: " + (lyricsEditorSelectedLine >= 0 ? lyricsEditorSelectedLine + 1 : 0);
+  lyricsEditorStatus.textContent =
+    "Lines: " + lyricsEditorDraft.length + " | Selected: " +
+    (lyricsEditorSelectedLine >= 0 ? lyricsEditorSelectedLine + 1 : 0);
+
   updateLyricsEditorKaraoke(getCurrentTime());
 }
 
@@ -11311,6 +11559,17 @@ function getSelectedLyricsLine() {
 editLyricsBtn.addEventListener("click", openLyricsEditor);
 closeLyricsEditorBtn.addEventListener("click", closeLyricsEditor);
 cancelLyricsEditBtn.addEventListener("click", closeLyricsEditor);
+
+document.addEventListener("click", event => {
+  if (
+    lyricsSpellPopup
+    &&
+    !lyricsSpellPopup.contains(event.target)
+  ) {
+    closeLyricsSpellPopup();
+  }
+});
+
 
 lyricsEditorDialog.addEventListener("click", event => {
   if (event.target === lyricsEditorDialog) closeLyricsEditor();
@@ -11843,6 +12102,224 @@ lyricsPlayLineBtn.addEventListener(
 
   }
 );
+
+
+async function requestLyricsAutofix(text) {
+
+  const response = await fetch(
+    "/autofix",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        text: text
+      })
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.error || "Autofix failed"
+    );
+  }
+
+  if (lyricsLanguageInfo) {
+    lyricsLanguageInfo.textContent =
+      "Language: "
+      + String(
+          data.language || "RU"
+        ).toUpperCase();
+  }
+
+  return String(
+    data.text ?? text
+  );
+}
+
+
+lyricsAutoLineBtn.addEventListener(
+  "click",
+  async () => {
+
+    const line =
+      getSelectedLyricsLine();
+
+    if (!line) {
+      return;
+    }
+
+    applyEditedTextToLine(
+      line
+    );
+
+    const originalText =
+      lineText(
+        line
+      );
+
+    try {
+
+      lyricsAutoLineBtn.disabled =
+        true;
+
+      const correctedText =
+        await requestLyricsAutofix(
+          originalText
+        );
+
+      if (
+        correctedText !==
+        originalText
+      ) {
+
+        pushLyricsHistory();
+
+        setLineText(
+          line,
+          correctedText
+        );
+
+        renderLyricsEditor();
+
+      }
+
+    }
+    catch (error) {
+
+      lyricsEditorStatus.textContent =
+        "Autofix error: "
+        + error.message;
+
+    }
+    finally {
+
+      lyricsAutoLineBtn.disabled =
+        false;
+
+    }
+
+  }
+);
+
+
+lyricsAutoTextBtn.addEventListener(
+  "click",
+  async () => {
+
+    if (
+      !lyricsEditorDraft.length
+    ) {
+      return;
+    }
+
+    lyricsEditorDraft.forEach(
+      line => {
+        applyEditedTextToLine(
+          line
+        );
+      }
+    );
+
+    const originalTexts =
+      lyricsEditorDraft.map(
+        line => lineText(line)
+      );
+
+    try {
+
+      lyricsAutoTextBtn.disabled =
+        true;
+
+      const response =
+        await fetch(
+          "/autofix-all",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json"
+            },
+            body: JSON.stringify({
+              lines: originalTexts
+            })
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          "Autofix failed"
+        );
+      }
+
+      if (lyricsLanguageInfo) {
+        lyricsLanguageInfo.textContent =
+          "Language: "
+          + String(
+              data.language || "RU"
+            ).toUpperCase();
+      }
+
+      const correctedLines =
+        Array.isArray(data.lines)
+        ? data.lines
+        : originalTexts;
+
+      const changed =
+        correctedLines.some(
+          (text, index) =>
+            String(text) !==
+            originalTexts[index]
+        );
+
+      if (changed) {
+
+        pushLyricsHistory();
+
+        lyricsEditorDraft.forEach(
+          (line, index) => {
+
+            setLineText(
+              line,
+              String(
+                correctedLines[index]
+                ??
+                originalTexts[index]
+              )
+            );
+
+          }
+        );
+
+        renderLyricsEditor();
+
+      }
+
+    }
+    catch (error) {
+
+      lyricsEditorStatus.textContent =
+        "Autofix error: "
+        + error.message;
+
+    }
+    finally {
+
+      lyricsAutoTextBtn.disabled =
+        false;
+
+    }
+
+  }
+);
+
 
 lyricsUndoBtn.addEventListener("click", () => {
   if (!lyricsUndoStack.length) return;
@@ -13590,14 +14067,26 @@ window.addEventListener(
 
 
     if (
-      code === "Space"
-    ) {
+  code === "Space"
+) {
 
-      event.preventDefault();
+  event.preventDefault();
 
-      playBtn.click();
 
-    }
+  playBtn.click();
+
+
+  if (
+    lyricsEditorDialog.classList.contains(
+      "open"
+    )
+  ) {
+
+    updateLyricsTransportButtons();
+
+  }
+
+}
 
     else if (
       code === "Backspace"
@@ -13908,8 +14397,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-подсветка Lyrics Editor и автоматическое переключение активного Loop Line на выбранную строку.
-   | 4.4.0
+подчерки - автоисправление текста
+   | 4.5.1
 </div>
 
 <div class="row" id="build-down">
