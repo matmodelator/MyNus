@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.4.2</title>
+  <title>MyNus 4.4.3</title>
 
 
  <style>
@@ -12149,43 +12149,63 @@ lyricsAutoLineBtn.addEventListener(
       getSelectedLyricsLine();
 
     if (!line) {
+
+      lyricsEditorStatus.textContent =
+        "AutoLine: no line selected";
+
       return;
+
     }
 
-    applyEditedTextToLine(
-      line
-    );
 
     const originalText =
-      lineText(
-        line
-      );
+      typeof line._editedText === "string"
+      ? line._editedText
+      : lineText(line);
+
 
     try {
 
       lyricsAutoLineBtn.disabled =
         true;
 
+
       const correctedText =
         await requestLyricsAutofix(
           originalText
         );
 
+
       if (
-        correctedText !==
+        correctedText ===
         originalText
       ) {
 
-        pushLyricsHistory();
+        lyricsEditorStatus.textContent =
+          "AutoLine: no corrections";
 
-        setLineText(
-          line,
-          correctedText
-        );
-
-        renderLyricsEditor();
+        return;
 
       }
+
+
+      pushLyricsHistory();
+
+
+      setLineText(
+        line,
+        correctedText
+      );
+
+
+      delete line._editedText;
+
+
+      renderLyricsEditor();
+
+
+      lyricsEditorStatus.textContent =
+        "AutoLine: corrected";
 
     }
     catch (error) {
@@ -12213,94 +12233,153 @@ lyricsAutoTextBtn.addEventListener(
     if (
       !lyricsEditorDraft.length
     ) {
+
+      lyricsEditorStatus.textContent =
+        "AutoText: no text";
+
       return;
+
     }
 
-    lyricsEditorDraft.forEach(
-      line => {
-        applyEditedTextToLine(
-          line
-        );
-      }
-    );
 
     const originalTexts =
       lyricsEditorDraft.map(
-        line => lineText(line)
+        line =>
+          typeof line._editedText === "string"
+          ? line._editedText
+          : lineText(line)
       );
+
 
     try {
 
       lyricsAutoTextBtn.disabled =
         true;
 
+
       const response =
         await fetch(
           "/autofix-all",
           {
-            method: "POST",
+            method:
+              "POST",
+
             headers: {
               "Content-Type":
                 "application/json"
             },
-            body: JSON.stringify({
-              lines: originalTexts
-            })
+
+            body:
+              JSON.stringify({
+                lines:
+                  originalTexts
+              })
           }
         );
+
 
       const data =
         await response.json();
 
+
       if (!response.ok) {
+
         throw new Error(
-          data.error ||
+          data.error
+          ||
           "Autofix failed"
         );
+
       }
 
-      if (lyricsLanguageInfo) {
+
+      if (
+        lyricsLanguageInfo
+      ) {
+
         lyricsLanguageInfo.textContent =
           "Language: "
           + String(
-              data.language || "RU"
+              data.language
+              ||
+              "RU"
             ).toUpperCase();
+
       }
 
+
       const correctedLines =
-        Array.isArray(data.lines)
+        Array.isArray(
+          data.lines
+        )
         ? data.lines
         : originalTexts;
 
+
       const changed =
         correctedLines.some(
-          (text, index) =>
-            String(text) !==
-            originalTexts[index]
+          (
+            text,
+            index
+          ) =>
+            String(text)
+            !==
+            String(
+              originalTexts[
+                index
+              ]
+            )
         );
 
-      if (changed) {
 
-        pushLyricsHistory();
+      if (!changed) {
 
-        lyricsEditorDraft.forEach(
-          (line, index) => {
+        lyricsEditorStatus.textContent =
+          "AutoText: no corrections";
 
-            setLineText(
-              line,
-              String(
-                correctedLines[index]
-                ??
-                originalTexts[index]
-              )
-            );
-
-          }
-        );
-
-        renderLyricsEditor();
+        return;
 
       }
+
+
+      pushLyricsHistory();
+
+
+      lyricsEditorDraft.forEach(
+        (
+          line,
+          index
+        ) => {
+
+          const correctedText =
+            String(
+              correctedLines[
+                index
+              ]
+              ??
+              originalTexts[
+                index
+              ]
+            );
+
+
+          setLineText(
+            line,
+            correctedText
+          );
+
+
+          delete line._editedText;
+
+        }
+      );
+
+
+      renderLyricsEditor();
+
+
+      lyricsEditorStatus.textContent =
+        "AutoText: corrected";
 
     }
     catch (error) {
@@ -14397,8 +14476,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-подчерки - автоисправление текста
-   | 4.5.1
+AutoLine&AutoText
+   | 4.5.2
 </div>
 
 <div class="row" id="build-down">
