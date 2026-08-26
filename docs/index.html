@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.4.3</title>
+  <title>MyNus 4.6.0</title>
 
 
  <style>
@@ -1526,6 +1526,13 @@
       font-size: 11px;
     }
 
+
+    /* ========================================
+       GENERATED VOCAL TRACKS | 4.6.0
+    ======================================== */
+    .generated-track { display: none; }
+    .fx-create-button { width: 100%; margin-top: 4px; padding: 6px 7px; font-size: 10px; }
+
 </style>
 
 </head>
@@ -1825,6 +1832,34 @@
 
     </div>
 <!-- ========================================
+         PITCH CORRECTION TRACK | 4.6.0
+    ======================================== -->
+    <div class="track generated-track" id="pitchCorrectionTrackRow">
+      <div class="track-controls">
+        <div class="track-title">Pitch Correct</div>
+        <div class="track-buttons"><button id="pitchCorrectionMuteBtn">Mute</button><button id="pitchCorrectionSoloBtn">Solo</button></div>
+        <div class="volume-row"><input type="range" id="pitchCorrectionVolume" min="0" max="100" value="100"><span id="pitchCorrectionVolumeValue" class="volume-value">100%</span></div>
+        <div class="track-save-row"><button data-export-track="pitchCorrection" data-export-scope="full">Save As...</button><button data-export-track="pitchCorrection" data-export-scope="selection">Save Selection</button></div>
+        <div class="track-save-row crop-row"><button id="pitchCorrectionCropInBtn">Crop In</button><button id="pitchCorrectionCropOutBtn">Crop Out</button></div>
+      </div>
+      <div class="timeline-scroll" data-track="pitchCorrection"><div class="timeline-inner" id="pitchCorrectionTimeline"><canvas id="pitchCorrectionCanvas"></canvas><div id="pitchCorrectionCropMaskLeft" class="crop-mask"></div><div id="pitchCorrectionCropMaskRight" class="crop-mask"></div><div class="playhead" id="pitchCorrectionPlayhead"></div></div></div>
+    </div>
+
+    <!-- ========================================
+         VOCAL HARMONIZER TRACK | 4.6.0
+    ======================================== -->
+    <div class="track generated-track" id="harmonizerTrackRow">
+      <div class="track-controls">
+        <div class="track-title">Harmonizer</div>
+        <div class="track-buttons"><button id="harmonizerMuteBtn">Mute</button><button id="harmonizerSoloBtn">Solo</button></div>
+        <div class="volume-row"><input type="range" id="harmonizerVolume" min="0" max="100" value="100"><span id="harmonizerVolumeValue" class="volume-value">100%</span></div>
+        <div class="track-save-row"><button data-export-track="harmonizer" data-export-scope="full">Save As...</button><button data-export-track="harmonizer" data-export-scope="selection">Save Selection</button></div>
+        <div class="track-save-row crop-row"><button id="harmonizerCropInBtn">Crop In</button><button id="harmonizerCropOutBtn">Crop Out</button></div>
+      </div>
+      <div class="timeline-scroll" data-track="harmonizer"><div class="timeline-inner" id="harmonizerTimeline"><canvas id="harmonizerCanvas"></canvas><div id="harmonizerCropMaskLeft" class="crop-mask"></div><div id="harmonizerCropMaskRight" class="crop-mask"></div><div class="playhead" id="harmonizerPlayhead"></div></div></div>
+    </div>
+
+    <!-- ========================================
          DRUMS TRACK
     ======================================== -->
 
@@ -2881,6 +2916,11 @@
           </div>
 
 
+          <div class="fx-toggle-row"><span>Pitch Correction</span></div>
+          <button id="createPitchCorrectionBtn" class="fx-create-button">Create new track</button>
+          <div class="fx-toggle-row" style="margin-top:6px"><span>Vocal Harmonizer</span></div>
+          <button id="createHarmonizerBtn" class="fx-create-button">Create new track</button>
+
           <div class="fx-control-row">
             <label>Output</label>
             <input
@@ -3041,6 +3081,8 @@
 
 <audio id="originalAudio"></audio>
 <audio id="vocalsAudio"></audio>
+<audio id="pitchCorrectionAudio"></audio>
+<audio id="harmonizerAudio"></audio>
 <audio id="drumsAudio"></audio>
 <audio id="bassAudio"></audio>
 <audio id="guitarAudio"></audio>
@@ -3339,6 +3381,19 @@ const vocalsVolume =
 const vocalsVolumeValue =
   document.getElementById("vocalsVolumeValue");
 
+const pitchCorrectionAudio = document.getElementById("pitchCorrectionAudio");
+const pitchCorrectionMuteBtn = document.getElementById("pitchCorrectionMuteBtn");
+const pitchCorrectionSoloBtn = document.getElementById("pitchCorrectionSoloBtn");
+const pitchCorrectionVolume = document.getElementById("pitchCorrectionVolume");
+const pitchCorrectionVolumeValue = document.getElementById("pitchCorrectionVolumeValue");
+const harmonizerAudio = document.getElementById("harmonizerAudio");
+const harmonizerMuteBtn = document.getElementById("harmonizerMuteBtn");
+const harmonizerSoloBtn = document.getElementById("harmonizerSoloBtn");
+const harmonizerVolume = document.getElementById("harmonizerVolume");
+const harmonizerVolumeValue = document.getElementById("harmonizerVolumeValue");
+const createPitchCorrectionBtn = document.getElementById("createPitchCorrectionBtn");
+const createHarmonizerBtn = document.getElementById("createHarmonizerBtn");
+
 const drumsAudio =
   document.getElementById("drumsAudio");
 
@@ -3428,6 +3483,10 @@ const vocalsCropInBtn =
 
 const vocalsCropOutBtn =
   document.getElementById("vocalsCropOutBtn");
+const pitchCorrectionCropInBtn = document.getElementById("pitchCorrectionCropInBtn");
+const pitchCorrectionCropOutBtn = document.getElementById("pitchCorrectionCropOutBtn");
+const harmonizerCropInBtn = document.getElementById("harmonizerCropInBtn");
+const harmonizerCropOutBtn = document.getElementById("harmonizerCropOutBtn");
 
 const drumsCropInBtn =
   document.getElementById("drumsCropInBtn");
@@ -3464,6 +3523,10 @@ const vocalsCropMaskLeft =
 
 const vocalsCropMaskRight =
   document.getElementById("vocalsCropMaskRight");
+const pitchCorrectionCropMaskLeft = document.getElementById("pitchCorrectionCropMaskLeft");
+const pitchCorrectionCropMaskRight = document.getElementById("pitchCorrectionCropMaskRight");
+const harmonizerCropMaskLeft = document.getElementById("harmonizerCropMaskLeft");
+const harmonizerCropMaskRight = document.getElementById("harmonizerCropMaskRight");
 
 const drumsCropMaskLeft =
   document.getElementById("drumsCropMaskLeft");
@@ -3530,6 +3593,8 @@ const canvases = {
 
   vocals:
     document.getElementById("vocalsCanvas"),
+  pitchCorrection: document.getElementById("pitchCorrectionCanvas"),
+  harmonizer: document.getElementById("harmonizerCanvas"),
 
   drums:
     document.getElementById("drumsCanvas"),
@@ -3559,6 +3624,8 @@ const timelines = {
 
   vocals:
     document.getElementById("vocalsTimeline"),
+  pitchCorrection: document.getElementById("pitchCorrectionTimeline"),
+  harmonizer: document.getElementById("harmonizerTimeline"),
 
   drums:
     document.getElementById("drumsTimeline"),
@@ -3588,6 +3655,12 @@ const playheads = {
 
   vocals:
     document.getElementById("vocalsPlayhead"),
+
+  pitchCorrection:
+    document.getElementById("pitchCorrectionPlayhead"),
+
+  harmonizer:
+    document.getElementById("harmonizerPlayhead"),
 
   drums:
     document.getElementById("drumsPlayhead"),
@@ -3638,6 +3711,8 @@ let waveformData = {
   original: null,
 
   vocals: null,
+  pitchCorrection: null,
+  harmonizer: null,
   drums: null,
   bass: null,
   guitar: null,
@@ -3651,6 +3726,8 @@ let waveformData = {
 
 const stemIds = [
   "vocals",
+  "pitchCorrection",
+  "harmonizer",
   "drums",
   "bass",
   "guitar",
@@ -3660,6 +3737,8 @@ const stemIds = [
 
 
 const instrumentalStemIds = [
+  "pitchCorrection",
+  "harmonizer",
   "drums",
   "bass",
   "guitar",
@@ -3681,6 +3760,9 @@ const stemState =
       ]
     )
   );
+
+stemState.pitchCorrection.muted = true;
+stemState.harmonizer.muted = true;
 
 const stemCrop = Object.fromEntries(
   stemIds.map(
@@ -3843,6 +3925,14 @@ const defaultFxSettings = {
 const fxSettings = {
 
   vocals: {
+    ...defaultFxSettings
+  },
+
+  pitchCorrection: {
+    ...defaultFxSettings
+  },
+
+  harmonizer: {
     ...defaultFxSettings
   },
 
@@ -4187,20 +4277,61 @@ splitBtn.addEventListener(
       stemIds.forEach(
         stemId => {
 
-          stemAudio[
-            stemId
-          ].src =
+          const stemURL =
             data[
               stemId
             ];
+
+
+          /*
+          ========================================
+          GENERATED TRACKS | 4.6.0 FIX 2
+
+          Demucs returns only separated stems.
+          Pitch Correction / Vocal Harmonizer
+          are generated later and therefore have
+          no URL at this stage.
+          ========================================
+          */
+
+          if (!stemURL) {
+
+            currentStemURLs[
+              stemId
+            ] =
+              null;
+
+
+            if (
+              stemAudio[
+                stemId
+              ]
+            ) {
+
+              stemAudio[
+                stemId
+              ].removeAttribute(
+                "src"
+              );
+
+            }
+
+
+            return;
+
+          }
+
+
+          stemAudio[
+            stemId
+          ].src =
+            stemURL;
 
 
           currentStemURLs[
             stemId
           ] =
-            data[
-              stemId
-            ];
+            stemURL;
 
         }
       );
@@ -4279,14 +4410,23 @@ splitBtn.addEventListener(
           originalAudio
         ),
 
-        ...stemIds.map(
-          stemId =>
-            waitForMetadata(
-              stemAudio[
-                stemId
-              ]
-            )
-        )
+        ...stemIds
+          .filter(
+            stemId =>
+              Boolean(
+                data[
+                  stemId
+                ]
+              )
+          )
+          .map(
+            stemId =>
+              waitForMetadata(
+                stemAudio[
+                  stemId
+                ]
+              )
+          )
 
       ]);
 
@@ -4561,11 +4701,32 @@ async function loadWaveforms(
     of stemIds
   ) {
 
+    const stemURL =
+      data[
+        stemId
+      ];
+
+
+    /*
+    ========================================
+    GENERATED TRACKS | 4.6.0 FIX
+
+    Pitch Correction and Vocal Harmonizer
+    are not returned by Demucs. They are
+    created later from the Vocals track.
+    ========================================
+    */
+
+    if (!stemURL) {
+
+      continue;
+
+    }
+
+
     const stemBuffer =
       await fetch(
-        data[
-          stemId
-        ]
+        stemURL
       )
       .then(
         response =>
@@ -5165,9 +5326,43 @@ function playCurrentMode() {
     stemIds.forEach(
       stemId => {
 
-        stemAudio[
-          stemId
-        ].play();
+        if (
+          !stemTrackIsAvailable(
+            stemId
+          )
+        ) {
+
+          return;
+
+        }
+
+
+        const playPromise =
+          stemAudio[
+            stemId
+          ].play();
+
+
+        if (
+          playPromise
+          &&
+          typeof playPromise.catch ===
+            "function"
+        ) {
+
+          playPromise.catch(
+            error => {
+
+              console.warn(
+                "Track play skipped:",
+                stemId,
+                error
+              );
+
+            }
+          );
+
+        }
 
       }
     );
@@ -5331,6 +5526,8 @@ endBtn.addEventListener(
 
 const stemAudio = {
   vocals: vocalsAudio,
+  pitchCorrection: pitchCorrectionAudio,
+  harmonizer: harmonizerAudio,
   drums: drumsAudio,
   bass: bassAudio,
   guitar: guitarAudio,
@@ -5341,6 +5538,8 @@ const stemAudio = {
 
 const stemMuteButtons = {
   vocals: vocalsMuteBtn,
+  pitchCorrection: pitchCorrectionMuteBtn,
+  harmonizer: harmonizerMuteBtn,
   drums: drumsMuteBtn,
   bass: bassMuteBtn,
   guitar: guitarMuteBtn,
@@ -5351,6 +5550,8 @@ const stemMuteButtons = {
 
 const stemSoloButtons = {
   vocals: vocalsSoloBtn,
+  pitchCorrection: pitchCorrectionSoloBtn,
+  harmonizer: harmonizerSoloBtn,
   drums: drumsSoloBtn,
   bass: bassSoloBtn,
   guitar: guitarSoloBtn,
@@ -5361,6 +5562,8 @@ const stemSoloButtons = {
 
 const stemVolumeControls = {
   vocals: vocalsVolume,
+  pitchCorrection: pitchCorrectionVolume,
+  harmonizer: harmonizerVolume,
   drums: drumsVolume,
   bass: bassVolume,
   guitar: guitarVolume,
@@ -5371,6 +5574,8 @@ const stemVolumeControls = {
 
 const stemVolumeValues = {
   vocals: vocalsVolumeValue,
+  pitchCorrection: pitchCorrectionVolumeValue,
+  harmonizer: harmonizerVolumeValue,
   drums: drumsVolumeValue,
   bass: bassVolumeValue,
   guitar: guitarVolumeValue,
@@ -5380,6 +5585,8 @@ const stemVolumeValues = {
 
 const stemCropInButtons = {
   vocals: vocalsCropInBtn,
+  pitchCorrection: pitchCorrectionCropInBtn,
+  harmonizer: harmonizerCropInBtn,
   drums: drumsCropInBtn,
   bass: bassCropInBtn,
   guitar: guitarCropInBtn,
@@ -5389,6 +5596,8 @@ const stemCropInButtons = {
 
 const stemCropOutButtons = {
   vocals: vocalsCropOutBtn,
+  pitchCorrection: pitchCorrectionCropOutBtn,
+  harmonizer: harmonizerCropOutBtn,
   drums: drumsCropOutBtn,
   bass: bassCropOutBtn,
   guitar: guitarCropOutBtn,
@@ -5398,6 +5607,8 @@ const stemCropOutButtons = {
 
 const stemCropMaskLeft = {
   vocals: vocalsCropMaskLeft,
+  pitchCorrection: pitchCorrectionCropMaskLeft,
+  harmonizer: harmonizerCropMaskLeft,
   drums: drumsCropMaskLeft,
   bass: bassCropMaskLeft,
   guitar: guitarCropMaskLeft,
@@ -5407,6 +5618,8 @@ const stemCropMaskLeft = {
 
 const stemCropMaskRight = {
   vocals: vocalsCropMaskRight,
+  pitchCorrection: pitchCorrectionCropMaskRight,
+  harmonizer: harmonizerCropMaskRight,
   drums: drumsCropMaskRight,
   bass: bassCropMaskRight,
   guitar: guitarCropMaskRight,
@@ -9659,6 +9872,251 @@ async function exportTrack(
 
 
 // ========================================
+// GENERATED VOCAL EFFECT TRACKS | 4.6.0
+// ========================================
+let generatedTrackURLs = { pitchCorrection: null, harmonizer: null };
+
+function audioBufferToWaveBlob(buffer) {
+  return audioBufferToWavBlob(buffer);
+}
+
+async function decodeVocalsBuffer() {
+  const sourceURL = currentStemURLs.vocals || vocalsAudio.src;
+  if (!sourceURL) throw new Error("Vocals track is not available");
+  const response = await fetch(sourceURL);
+  const arrayBuffer = await response.arrayBuffer();
+  const context = new (window.AudioContext || window.webkitAudioContext)();
+  try { return await context.decodeAudioData(arrayBuffer.slice(0)); }
+  finally { await context.close(); }
+}
+
+function resampleChannelPitchPreserveLength(input, ratio) {
+  const n = input.length;
+  const out = new Float32Array(n);
+  const grain = 2048;
+  const hop = 512;
+  const window = new Float32Array(grain);
+  for (let i = 0; i < grain; i++) window[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (grain - 1));
+  const norm = new Float32Array(n);
+  for (let outPos = 0; outPos < n; outPos += hop) {
+    const srcCenter = outPos;
+    for (let j = 0; j < grain; j++) {
+      const dst = outPos + j - (grain >> 1);
+      if (dst < 0 || dst >= n) continue;
+      const src = srcCenter + (j - (grain >> 1)) * ratio;
+      const i0 = Math.floor(src);
+      const frac = src - i0;
+      if (i0 < 0 || i0 + 1 >= n) continue;
+      const sample = input[i0] * (1 - frac) + input[i0 + 1] * frac;
+      const w = window[j];
+      out[dst] += sample * w;
+      norm[dst] += w;
+    }
+  }
+  for (let i = 0; i < n; i++) if (norm[i] > 1e-6) out[i] /= norm[i];
+  return out;
+}
+
+async function makeShiftedBuffer(source, semitones) {
+  const ratio = Math.pow(2, semitones / 12);
+  const ctx = new OfflineAudioContext(source.numberOfChannels, source.length, source.sampleRate);
+  const out = ctx.createBuffer(source.numberOfChannels, source.length, source.sampleRate);
+  for (let ch = 0; ch < source.numberOfChannels; ch++) out.copyToChannel(resampleChannelPitchPreserveLength(source.getChannelData(ch), ratio), ch);
+  return out;
+}
+
+async function makeHarmonizerBuffer(source) {
+  const third = await makeShiftedBuffer(source, 4);
+  const fifth = await makeShiftedBuffer(source, 7);
+  const ctx = new OfflineAudioContext(source.numberOfChannels, source.length, source.sampleRate);
+  const out = ctx.createBuffer(source.numberOfChannels, source.length, source.sampleRate);
+  for (let ch = 0; ch < source.numberOfChannels; ch++) {
+    const dst = out.getChannelData(ch), a = third.getChannelData(ch), b = fifth.getChannelData(ch);
+    for (let i = 0; i < dst.length; i++) dst[i] = Math.max(-1, Math.min(1, a[i] * 0.58 + b[i] * 0.42));
+  }
+  return out;
+}
+
+async function installGeneratedTrack(
+  trackId,
+  buffer
+) {
+
+  const blob =
+    audioBufferToWaveBlob(
+      buffer
+    );
+
+
+  if (
+    generatedTrackURLs[
+      trackId
+    ]
+  ) {
+
+    URL.revokeObjectURL(
+      generatedTrackURLs[
+        trackId
+      ]
+    );
+
+  }
+
+
+  const url =
+    URL.createObjectURL(
+      blob
+    );
+
+
+  generatedTrackURLs[
+    trackId
+  ] =
+    url;
+
+
+  currentStemURLs[
+    trackId
+  ] =
+    url;
+
+
+  const audio =
+    stemAudio[
+      trackId
+    ];
+
+
+  audio.src =
+    url;
+
+
+  audio.load();
+
+
+  await waitForMetadata(
+    audio
+  );
+
+
+  waveformData[
+    trackId
+  ] =
+    buffer;
+
+
+  stemState[
+    trackId
+  ].muted =
+    false;
+
+
+  document.getElementById(
+    trackId
+    + "TrackRow"
+  ).style.display =
+    "grid";
+
+
+  drawWaveform(
+    canvases[
+      trackId
+    ],
+    timelines[
+      trackId
+    ],
+    waveformData[
+      trackId
+    ]
+  );
+
+
+  updateMixButtons();
+
+  applyMix();
+
+
+  syncAllTo(
+    getCurrentTime()
+  );
+
+
+  updatePlayheads();
+
+}
+
+createPitchCorrectionBtn.addEventListener("click", async () => {
+  try {
+    createPitchCorrectionBtn.disabled = true; status.textContent = "Creating Pitch Correction track...";
+    const source = await decodeVocalsBuffer();
+    const mono = source.getChannelData(0);
+    const sampleRate = source.sampleRate;
+    const offsets = [];
+    const frame = 4096;
+    const step = 8192;
+    for (let start = 0; start + frame < mono.length && offsets.length < 160; start += step) {
+      let rms = 0;
+      for (let i = 0; i < frame; i++) rms += mono[start + i] * mono[start + i];
+      rms = Math.sqrt(rms / frame);
+      if (rms < 0.015) continue;
+      let bestLag = 0, best = 0;
+      const minLag = Math.floor(sampleRate / 1000);
+      const maxLag = Math.min(frame - 2, Math.floor(sampleRate / 70));
+      for (let lag = minLag; lag <= maxLag; lag++) {
+        let sum = 0, a2 = 0, b2 = 0;
+        for (let i = 0; i < frame - lag; i += 2) {
+          const a = mono[start + i], b = mono[start + i + lag];
+          sum += a * b; a2 += a * a; b2 += b * b;
+        }
+        const corr = sum / Math.sqrt(a2 * b2 + 1e-12);
+        if (corr > best) { best = corr; bestLag = lag; }
+      }
+      if (best > 0.72 && bestLag) {
+        const hz = sampleRate / bestLag;
+        const midi = 69 + 12 * Math.log2(hz / 440);
+        offsets.push(Math.round(midi) - midi);
+      }
+    }
+    offsets.sort((a,b) => a-b);
+    const correction = offsets.length ? offsets[Math.floor(offsets.length / 2)] : 0;
+    const corrected = await makeShiftedBuffer(source, Math.max(-0.5, Math.min(0.5, correction)));
+    await installGeneratedTrack("pitchCorrection", corrected);
+    status.textContent = "Pitch Correction track created";
+  } catch (error) { console.error(error); status.textContent = "Pitch Correction error: " + error.message; }
+  finally { createPitchCorrectionBtn.disabled = false; }
+});
+
+createHarmonizerBtn.addEventListener("click", async () => {
+  try {
+    createHarmonizerBtn.disabled = true; status.textContent = "Creating Vocal Harmonizer track...";
+    const source = await decodeVocalsBuffer();
+    const harmony = await makeHarmonizerBuffer(source);
+    await installGeneratedTrack("harmonizer", harmony);
+    status.textContent = "Vocal Harmonizer track created";
+  } catch (error) { console.error(error); status.textContent = "Vocal Harmonizer error: " + error.message; }
+  finally { createHarmonizerBtn.disabled = false; }
+});
+
+function stemTrackIsAvailable(
+  stemId
+) {
+
+  return Boolean(
+    currentStemURLs[
+      stemId
+    ]
+    ||
+    stemAudio[
+      stemId
+    ].getAttribute(
+      "src"
+    )
+  );
+
+}
+
+
+// ========================================
 // COMMON TIME
 // ========================================
 
@@ -9728,10 +10186,62 @@ function syncAllTo(
   stemIds.forEach(
     stemId => {
 
-      stemAudio[
-        stemId
-      ].currentTime =
-        safeTime;
+      if (
+        !stemTrackIsAvailable(
+          stemId
+        )
+      ) {
+
+        return;
+
+      }
+
+
+      const audio =
+        stemAudio[
+          stemId
+        ];
+
+
+      const trackDuration =
+        Number(
+          audio.duration
+        );
+
+
+      const targetTime =
+        Number.isFinite(
+          trackDuration
+        )
+        &&
+        trackDuration > 0
+        ? Math.min(
+            safeTime,
+            Math.max(
+              0,
+              trackDuration
+              - 0.001
+            )
+          )
+        : safeTime;
+
+
+      try {
+
+        audio.currentTime =
+          targetTime;
+
+      }
+
+      catch (error) {
+
+        console.warn(
+          "Track sync skipped:",
+          stemId,
+          error
+        );
+
+      }
 
     }
   );
@@ -14476,8 +14986,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-AutoLine&AutoText
-   | 4.5.2
+Vocal FX Tracks
+   | 4.6.0
 </div>
 
 <div class="row" id="build-down">
