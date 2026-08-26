@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.6.0</title>
+  <title>MyNus 4.7.0</title>
 
 
  <style>
@@ -11468,11 +11468,26 @@ function updateLyricsEditorKaraoke(currentTime) {
 }
 
 
+function detectLyricsLanguage(text) {
+  const value = String(text || "");
+  const cyrillic = (value.match(/[А-Яа-яЁё]/g) || []).length;
+  const latin = (value.match(/[A-Za-z]/g) || []).length;
+  return latin > cyrillic ? "en-US" : "ru-RU";
+}
+
+function languageLabel(language) {
+  return String(language || "ru-RU").toLowerCase().startsWith("en")
+    ? "EN"
+    : "RU";
+}
+
 async function requestLyricsSpellcheck(text) {
+  const language = detectLyricsLanguage(text);
+
   const response = await fetch("/spellcheck", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text })
+    body: JSON.stringify({ text, language })
   });
 
   const data = await response.json();
@@ -11483,7 +11498,7 @@ async function requestLyricsSpellcheck(text) {
 
   if (lyricsLanguageInfo) {
     lyricsLanguageInfo.textContent =
-      "Language: " + String(data.language || "RU").toUpperCase();
+      "Language: " + languageLabel(data.language || language);
   }
 
   return Array.isArray(data.matches) ? data.matches : [];
@@ -11617,6 +11632,18 @@ async function updateLyricsLineSpellcheck(line, lineIndex, karaokeBox) {
 
 function renderLyricsEditor() {
   lyricsEditorRows.innerHTML = "";
+
+  if (lyricsLanguageInfo) {
+    lyricsLanguageInfo.textContent =
+      "Language: "
+      + languageLabel(
+          detectLyricsLanguage(
+            lyricsEditorDraft
+              .map(line => line._editedText ?? lineText(line))
+              .join("\n")
+          )
+        );
+  }
 
   lyricsEditorDraft.forEach((line, index) => {
     const row = document.createElement("div");
@@ -12624,7 +12651,8 @@ async function requestLyricsAutofix(text) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        text: text
+        text: text,
+        language: detectLyricsLanguage(text)
       })
     }
   );
@@ -12640,9 +12668,9 @@ async function requestLyricsAutofix(text) {
   if (lyricsLanguageInfo) {
     lyricsLanguageInfo.textContent =
       "Language: "
-      + String(
-          data.language || "RU"
-        ).toUpperCase();
+      + languageLabel(
+          data.language || detectLyricsLanguage(text)
+        );
   }
 
   return String(
@@ -12782,7 +12810,11 @@ lyricsAutoTextBtn.addEventListener(
             body:
               JSON.stringify({
                 lines:
-                  originalTexts
+                  originalTexts,
+                language:
+                  detectLyricsLanguage(
+                    originalTexts.join("\n")
+                  )
               })
           }
         );
@@ -12809,11 +12841,13 @@ lyricsAutoTextBtn.addEventListener(
 
         lyricsLanguageInfo.textContent =
           "Language: "
-          + String(
+          + languageLabel(
               data.language
               ||
-              "RU"
-            ).toUpperCase();
+              detectLyricsLanguage(
+                originalTexts.join("\n")
+              )
+            );
 
       }
 
@@ -14986,8 +15020,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Vocal FX Tracks
-   | 4.6.0
+Нормализация субтитров Eng
+   | 4.7.0
 </div>
 
 <div class="row" id="build-down">
