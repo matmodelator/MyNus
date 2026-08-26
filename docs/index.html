@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.7.0</title>
+  <title>MyNus 4.9.0</title>
 
 
  <style>
@@ -1533,6 +1533,17 @@
     .generated-track { display: none; }
     .fx-create-button { width: 100%; margin-top: 4px; padding: 6px 7px; font-size: 10px; }
 
+
+.lyrics-editor-row { position: relative; }
+.lyrics-line-language {
+  position: absolute;
+  right: 8px;
+  top: 6px;
+  font-size: 10px;
+  opacity: 0.65;
+  pointer-events: none;
+  user-select: none;
+}
 </style>
 
 </head>
@@ -3007,8 +3018,9 @@
 
       <div class="lyrics-editor-toolbar-center">
         <span id="lyricsLanguageInfo">Language: RU</span>
-        <button type="button" id="lyricsAutoLineBtn">AutoLine</button>
-        <button type="button" id="lyricsAutoTextBtn">AutoText</button>
+        <button type="button" id="lyricsTranscriptionBtn" disabled>
+          RU Transcription
+        </button>
       </div>
 
       <div class="lyrics-editor-toolbar-right">
@@ -3320,8 +3332,7 @@ const lyricsPanel =
   document.getElementById("lyricsPanel");
 
 const lyricsUndoBtn = document.getElementById("lyricsUndoBtn");
-const lyricsAutoLineBtn = document.getElementById("lyricsAutoLineBtn");
-const lyricsAutoTextBtn = document.getElementById("lyricsAutoTextBtn");
+const lyricsTranscriptionBtn = document.getElementById("lyricsTranscriptionBtn");
 const lyricsLanguageInfo = document.getElementById("lyricsLanguageInfo");
 const lyricsRedoBtn = document.getElementById("lyricsRedoBtn");
 const lyricsResetBtn = document.getElementById("lyricsResetBtn");
@@ -11470,15 +11481,16 @@ function updateLyricsEditorKaraoke(currentTime) {
 
 function detectLyricsLanguage(text) {
   const value = String(text || "");
-  const cyrillic = (value.match(/[А-Яа-яЁё]/g) || []).length;
-  const latin = (value.match(/[A-Za-z]/g) || []).length;
-  return latin > cyrillic ? "en-US" : "ru-RU";
+  if (/[ІіЇїЄєҐґ]/.test(value)) return "uk";
+  if (/[А-Яа-яЁё]/.test(value)) return "ru";
+  return "en";
 }
 
 function languageLabel(language) {
-  return String(language || "ru-RU").toLowerCase().startsWith("en")
-    ? "EN"
-    : "RU";
+  const code = String(language || "ru").toLowerCase().split("-")[0];
+  return ["ru","en","es","it","fr","uk"].includes(code)
+    ? code.toUpperCase()
+    : "EN";
 }
 
 async function requestLyricsSpellcheck(text) {
@@ -11564,6 +11576,7 @@ function showLyricsSpellPopup(span, lineIndex, wordIndex, replacements) {
 
 async function updateLyricsLineSpellcheck(line, lineIndex, karaokeBox) {
   if (!line || !karaokeBox) return;
+  if (lyricsTranscriptionMode) return;
 
   const text = line._editedText ?? lineText(line);
 
@@ -11630,19 +11643,143 @@ async function updateLyricsLineSpellcheck(line, lineIndex, karaokeBox) {
 }
 
 
+
+let lyricsTranscriptionMode = false;
+let lyricsOriginalDraftForTranscription = null;
+let lyricsLineLanguages = [];
+let lyricsOriginalLanguages = [];
+
+async function detectLyricsLineLanguages(lines) {
+  const response = await fetch("/detect-lyrics-languages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lines })
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Language detection failed");
+  return Array.isArray(data.languages) ? data.languages : [];
+}
+
+function uniqueLyricsLanguages(languages) {
+  const result = [];
+  languages.forEach(language => {
+    const code = String(language || "").toLowerCase();
+    if (code && !result.includes(code)) result.push(code);
+  });
+  return result;
+}
+
+function originalLyricsLanguageText() {
+  const source = lyricsOriginalLanguages.length
+    ? lyricsOriginalLanguages
+    : lyricsLineLanguages;
+  const languages = uniqueLyricsLanguages(source);
+  return languages.length
+    ? languages.map(languageLabel).join("/")
+    : "RU";
+}
+
+async function refreshLyricsLanguages() {
+  if (lyricsTranscriptionMode) return;
+  const lines = lyricsEditorDraft.map(
+    line => line._editedText ?? lineText(line)
+  );
+  try {
+    lyricsLineLanguages = await detectLyricsLineLanguages(lines);
+  } catch (error) {
+    lyricsLineLanguages = lines.map(detectLyricsLanguage);
+  }
+  lyricsOriginalLanguages = [...lyricsLineLanguages];
+  renderLyricsEditor();
+}
+
+function updateLyricsTranscriptionButton() {
+  if (!lyricsTranscriptionBtn) return;
+  const source = lyricsOriginalLanguages.length
+    ? lyricsOriginalLanguages
+    : lyricsLineLanguages;
+  const enabled = source.some(
+    language => ["en","es","it","fr","uk"].includes(
+      String(language || "").toLowerCase()
+    )
+  );
+  lyricsTranscriptionBtn.disabled = !lyricsTranscriptionMode && !enabled;
+  lyricsTranscriptionBtn.textContent =
+    lyricsTranscriptionMode ? "Original" : "RU Transcription";
+}
+
+async function requestLyricsTranscription(lines, languages) {
+  const response = await fetch("/transcribe-to-ru", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lines, languages })
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Transcription failed");
+  return Array.isArray(data.lines) ? data.lines : [];
+}
+
+lyricsTranscriptionBtn.addEventListener("click", async () => {
+  if (lyricsTranscriptionMode) {
+    lyricsEditorDraft = JSON.parse(
+      JSON.stringify(lyricsOriginalDraftForTranscription || [])
+    );
+    lyricsLineLanguages = [...lyricsOriginalLanguages];
+    lyricsTranscriptionMode = false;
+    renderLyricsEditor();
+    lyricsEditorStatus.textContent = "Original";
+    return;
+  }
+
+  const originalDraft = cloneLyricsEditorDraft();
+  const originalLines = originalDraft.map(
+    line => line._editedText ?? lineText(line)
+  );
+
+  try {
+    let languages = [...lyricsLineLanguages];
+    if (languages.length !== originalLines.length) {
+      languages = await detectLyricsLineLanguages(originalLines);
+    }
+
+    lyricsTranscriptionBtn.disabled = true;
+    const transcribedLines =
+      await requestLyricsTranscription(originalLines, languages);
+
+    lyricsOriginalDraftForTranscription = originalDraft;
+    lyricsOriginalLanguages = [...languages];
+
+    lyricsEditorDraft = originalDraft.map((line,index) => {
+      const clone = JSON.parse(JSON.stringify(line));
+      setLineText(
+        clone,
+        String(transcribedLines[index] ?? lineText(line))
+      );
+      delete clone._editedText;
+      return clone;
+    });
+
+    lyricsLineLanguages = originalLines.map(() => "ru");
+    lyricsTranscriptionMode = true;
+    renderLyricsEditor();
+    lyricsEditorStatus.textContent = "RU Transcription";
+  } catch (error) {
+    lyricsEditorStatus.textContent =
+      "Transcription error: " + error.message;
+  } finally {
+    updateLyricsTranscriptionButton();
+  }
+});
+
 function renderLyricsEditor() {
   lyricsEditorRows.innerHTML = "";
 
   if (lyricsLanguageInfo) {
+    const originalLanguage = originalLyricsLanguageText();
     lyricsLanguageInfo.textContent =
-      "Language: "
-      + languageLabel(
-          detectLyricsLanguage(
-            lyricsEditorDraft
-              .map(line => line._editedText ?? lineText(line))
-              .join("\n")
-          )
-        );
+      lyricsTranscriptionMode
+      ? "Language: " + originalLanguage + " → RU"
+      : "Language: " + originalLanguage;
   }
 
   lyricsEditorDraft.forEach((line, index) => {
@@ -11675,7 +11812,13 @@ function renderLyricsEditor() {
     const textArea = document.createElement("textarea");
     textArea.value = line._editedText ?? lineText(line);
     textArea.spellcheck = true;
-    textArea.lang = "ru";
+    textArea.lang =
+      lyricsTranscriptionMode
+      ? "ru"
+      : (
+          lyricsLineLanguages[index]
+          || detectLyricsLanguage(textArea.value)
+        );
 
     updateLyricsLineSpellcheck(
       line,
@@ -11755,6 +11898,24 @@ function renderLyricsEditor() {
     row.appendChild(startInput);
     row.appendChild(endInput);
     row.appendChild(textWrap);
+
+    const lineLanguageBadge =
+      document.createElement("span");
+    lineLanguageBadge.className =
+      "lyrics-line-language";
+    lineLanguageBadge.textContent =
+      languageLabel(
+        lyricsTranscriptionMode
+        ? "ru"
+        : (
+            lyricsLineLanguages[index]
+            || detectLyricsLanguage(
+              line._editedText ?? lineText(line)
+            )
+          )
+      );
+    row.appendChild(lineLanguageBadge);
+
     lyricsEditorRows.appendChild(row);
   });
 
@@ -11763,6 +11924,7 @@ function renderLyricsEditor() {
     (lyricsEditorSelectedLine >= 0 ? lyricsEditorSelectedLine + 1 : 0);
 
   updateLyricsEditorKaraoke(getCurrentTime());
+  updateLyricsTranscriptionButton();
 }
 
 function formatLyricsTime(
@@ -11970,6 +12132,10 @@ function updateLyricsUndoRedoButtons() {
 }
 
 function openLyricsEditor() {
+  lyricsTranscriptionMode = false;
+  lyricsOriginalDraftForTranscription = null;
+  lyricsLineLanguages = [];
+  lyricsOriginalLanguages = [];
   lyricsEditorDraft = cloneKaraokeLines();
   lyricsEditorSelectedLine =
     lyricsEditorDraft.length ? 0 : -1;
@@ -11979,6 +12145,7 @@ function openLyricsEditor() {
 
   updateLyricsUndoRedoButtons();
   renderLyricsEditor();
+  refreshLyricsLanguages();
   updateLyricsMasterCounter();
 
   lyricsTransportMode =
@@ -12641,307 +12808,13 @@ lyricsPlayLineBtn.addEventListener(
 );
 
 
-async function requestLyricsAutofix(text) {
 
-  const response = await fetch(
-    "/autofix",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        text: text,
-        language: detectLyricsLanguage(text)
-      })
-    }
-  );
 
-  const data = await response.json();
 
-  if (!response.ok) {
-    throw new Error(
-      data.error || "Autofix failed"
-    );
-  }
 
-  if (lyricsLanguageInfo) {
-    lyricsLanguageInfo.textContent =
-      "Language: "
-      + languageLabel(
-          data.language || detectLyricsLanguage(text)
-        );
-  }
 
-  return String(
-    data.text ?? text
-  );
-}
 
 
-lyricsAutoLineBtn.addEventListener(
-  "click",
-  async () => {
-
-    const line =
-      getSelectedLyricsLine();
-
-    if (!line) {
-
-      lyricsEditorStatus.textContent =
-        "AutoLine: no line selected";
-
-      return;
-
-    }
-
-
-    const originalText =
-      typeof line._editedText === "string"
-      ? line._editedText
-      : lineText(line);
-
-
-    try {
-
-      lyricsAutoLineBtn.disabled =
-        true;
-
-
-      const correctedText =
-        await requestLyricsAutofix(
-          originalText
-        );
-
-
-      if (
-        correctedText ===
-        originalText
-      ) {
-
-        lyricsEditorStatus.textContent =
-          "AutoLine: no corrections";
-
-        return;
-
-      }
-
-
-      pushLyricsHistory();
-
-
-      setLineText(
-        line,
-        correctedText
-      );
-
-
-      delete line._editedText;
-
-
-      renderLyricsEditor();
-
-
-      lyricsEditorStatus.textContent =
-        "AutoLine: corrected";
-
-    }
-    catch (error) {
-
-      lyricsEditorStatus.textContent =
-        "Autofix error: "
-        + error.message;
-
-    }
-    finally {
-
-      lyricsAutoLineBtn.disabled =
-        false;
-
-    }
-
-  }
-);
-
-
-lyricsAutoTextBtn.addEventListener(
-  "click",
-  async () => {
-
-    if (
-      !lyricsEditorDraft.length
-    ) {
-
-      lyricsEditorStatus.textContent =
-        "AutoText: no text";
-
-      return;
-
-    }
-
-
-    const originalTexts =
-      lyricsEditorDraft.map(
-        line =>
-          typeof line._editedText === "string"
-          ? line._editedText
-          : lineText(line)
-      );
-
-
-    try {
-
-      lyricsAutoTextBtn.disabled =
-        true;
-
-
-      const response =
-        await fetch(
-          "/autofix-all",
-          {
-            method:
-              "POST",
-
-            headers: {
-              "Content-Type":
-                "application/json"
-            },
-
-            body:
-              JSON.stringify({
-                lines:
-                  originalTexts,
-                language:
-                  detectLyricsLanguage(
-                    originalTexts.join("\n")
-                  )
-              })
-          }
-        );
-
-
-      const data =
-        await response.json();
-
-
-      if (!response.ok) {
-
-        throw new Error(
-          data.error
-          ||
-          "Autofix failed"
-        );
-
-      }
-
-
-      if (
-        lyricsLanguageInfo
-      ) {
-
-        lyricsLanguageInfo.textContent =
-          "Language: "
-          + languageLabel(
-              data.language
-              ||
-              detectLyricsLanguage(
-                originalTexts.join("\n")
-              )
-            );
-
-      }
-
-
-      const correctedLines =
-        Array.isArray(
-          data.lines
-        )
-        ? data.lines
-        : originalTexts;
-
-
-      const changed =
-        correctedLines.some(
-          (
-            text,
-            index
-          ) =>
-            String(text)
-            !==
-            String(
-              originalTexts[
-                index
-              ]
-            )
-        );
-
-
-      if (!changed) {
-
-        lyricsEditorStatus.textContent =
-          "AutoText: no corrections";
-
-        return;
-
-      }
-
-
-      pushLyricsHistory();
-
-
-      lyricsEditorDraft.forEach(
-        (
-          line,
-          index
-        ) => {
-
-          const correctedText =
-            String(
-              correctedLines[
-                index
-              ]
-              ??
-              originalTexts[
-                index
-              ]
-            );
-
-
-          setLineText(
-            line,
-            correctedText
-          );
-
-
-          delete line._editedText;
-
-        }
-      );
-
-
-      renderLyricsEditor();
-
-
-      lyricsEditorStatus.textContent =
-        "AutoText: corrected";
-
-    }
-    catch (error) {
-
-      lyricsEditorStatus.textContent =
-        "Autofix error: "
-        + error.message;
-
-    }
-    finally {
-
-      lyricsAutoTextBtn.disabled =
-        false;
-
-    }
-
-  }
-);
 
 
 lyricsUndoBtn.addEventListener("click", () => {
@@ -13184,8 +13057,27 @@ lyricsSaveAsBtn.addEventListener("click", () => {
       )
     : "lyrics";
 
+  const originalLanguages =
+    uniqueLyricsLanguages(
+      lyricsOriginalLanguages.length
+      ? lyricsOriginalLanguages
+      : lyricsLineLanguages
+    );
+
+  const originalSuffix =
+    (originalLanguages.length ? originalLanguages : ["ru"])
+      .map(languageLabel)
+      .join("_");
+
+  const languageSuffix =
+    lyricsTranscriptionMode
+    ? originalSuffix + "-RU"
+    : originalSuffix;
+
   lyricsSaveAsName.value =
-    defaultName;
+    defaultName
+    + "_"
+    + languageSuffix;
 
   lyricsSaveAsFormat.value =
     "json";
@@ -13448,9 +13340,26 @@ function exportLyricsFile(rawName, format) {
     return;
   }
 
+  /*
+  ========================================
+  UTF-8 EXPORT | 4.7.1
+
+  TXT / LRC / SRT with Cyrillic need an
+  explicit UTF-8 BOM for Windows editors
+  that otherwise may open the file as ANSI.
+  JSON stays plain UTF-8.
+  ========================================
+  */
+
+  const exportContent =
+    format === "json"
+    ? content
+    : "\uFEFF" + content;
+
+
   const blob =
     new Blob(
-      [content],
+      [exportContent],
       {
         type:
           mime
@@ -15020,8 +14929,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Нормализация субтитров Eng
-   | 4.7.0
+многоязычная модель
+   | 4.9.0
 </div>
 
 <div class="row" id="build-down">
