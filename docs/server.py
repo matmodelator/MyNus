@@ -1,5 +1,5 @@
 # ========================================
-# подчерки - автоисправление текста | 3.1.1
+# English | 3.2.0
 # ========================================
 
 # ========================================
@@ -1046,6 +1046,13 @@ def export_audio():
 
 _language_tools = {}
 
+def normalize_language(language):
+    value = str(language or "ru-RU").lower()
+    if value.startswith("en"):
+        return "en-US"
+    return "ru-RU"
+
+
 
 def get_language_tool(language="ru-RU"):
 
@@ -1080,8 +1087,15 @@ def spellcheck():
 
     try:
 
+        language = normalize_language(
+            data.get(
+                "language",
+                "ru-RU"
+            )
+        )
+
         tool = get_language_tool(
-            "ru-RU"
+            language
         )
 
         matches = tool.check(
@@ -1112,7 +1126,7 @@ def spellcheck():
             })
 
         return jsonify({
-            "language": "RU",
+            "language": language,
             "matches": result
         })
 
@@ -1144,8 +1158,15 @@ def autofix():
 
     try:
 
+        language = normalize_language(
+            data.get(
+                "language",
+                "ru-RU"
+            )
+        )
+
         tool = get_language_tool(
-            "ru-RU"
+            language
         )
 
         corrected = tool.correct(
@@ -1153,7 +1174,7 @@ def autofix():
         )
 
         return jsonify({
-            "language": "RU",
+            "language": language,
             "text": corrected
         })
 
@@ -1192,8 +1213,15 @@ def autofix_all():
 
     try:
 
+        language = normalize_language(
+            data.get(
+                "language",
+                "ru-RU"
+            )
+        )
+
         tool = get_language_tool(
-            "ru-RU"
+            language
         )
 
         corrected_lines = [
@@ -1204,7 +1232,7 @@ def autofix_all():
         ]
 
         return jsonify({
-            "language": "RU",
+            "language": language,
             "lines": corrected_lines
         })
 
