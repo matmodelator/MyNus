@@ -1,5 +1,5 @@
 # ========================================
-# English | 3.2.0
+# Нормализация субтитров Eng  | 3.2.1
 # ========================================
 
 # ========================================
@@ -271,8 +271,7 @@ def detect_lyrics(vocal_path):
     model = whisperx.load_model(
         "small",
         device,
-        compute_type=compute_type,
-        language="ru"
+        compute_type=compute_type
     )
 
     result = model.transcribe(
@@ -281,9 +280,8 @@ def detect_lyrics(vocal_path):
     )
 
     language = result.get(
-        "language",
-        "ru"
-    )
+        "language"
+    ) or "ru"
 
     align_model, metadata = (
         whisperx.load_align_model(
