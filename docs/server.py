@@ -1,5 +1,5 @@
 # ========================================
-# Нормализация субтитров Eng  | 3.2.1
+# полиязычность | 3.3.0
 # ========================================
 
 # ========================================
@@ -9,6 +9,7 @@
 import sys
 import os
 import re
+import unicodedata
 import glob
 import shutil
 import subprocess
@@ -283,12 +284,26 @@ def detect_lyrics(vocal_path):
         "language"
     ) or "ru"
 
+
+    if language not in {
+        "ru",
+        "en",
+        "es",
+        "it",
+        "fr",
+        "uk"
+    }:
+
+        language = "en"
+
+
     align_model, metadata = (
         whisperx.load_align_model(
             language_code=language,
             device=device
         )
     )
+
 
     result = whisperx.align(
         result["segments"],
@@ -1137,110 +1152,146 @@ def spellcheck():
         }), 500
 
 
-@app.route(
-    "/autofix",
-    methods=["POST"]
-)
-def autofix():
 
-    data = request.get_json(
-        silent=True
-    ) or {}
+# ========================================
+# LYRICS LANGUAGE + RU TRANSCRIPTION
+# ========================================
 
-    text = str(
-        data.get(
-            "text",
-            ""
-        )
-    )
+SUPPORTED_LYRICS_LANGUAGES = {"ru","en","es","it","fr","uk"}
 
+def _fallback_language(text):
+    value = str(text or "").strip()
+    if re.search(r"[ІіЇїЄєҐґ]", value):
+        return "uk"
+    if re.search(r"[А-Яа-яЁё]", value):
+        return "ru"
+
+    lower = " " + value.lower() + " "
+    markers = {
+        "it":[" che "," non "," per "," sono "," amore "," mio "," mia "],
+        "es":[" que "," para "," soy "," amor "," corazón "," eres "],
+        "fr":[" je "," pas "," pour "," avec "," amour "," suis "," mon "],
+        "en":[" the "," i "," you "," and "," with "," love "," my "," is "]
+    }
+    scores = {
+        lang: sum(lower.count(x) for x in words)
+        for lang,words in markers.items()
+    }
+    return max(scores,key=scores.get) if max(scores.values()) else "en"
+
+def detect_lyrics_line_language(text):
+    value = str(text or "").strip()
+    if not value:
+        return "ru"
+    if re.search(r"[ІіЇїЄєҐґ]", value):
+        return "uk"
+    if re.search(r"[А-Яа-яЁё]", value):
+        return "ru"
     try:
+        from langdetect import detect
+        language = detect(value)
+        if language in SUPPORTED_LYRICS_LANGUAGES:
+            return language
+    except Exception:
+        pass
+    return _fallback_language(value)
 
-        language = normalize_language(
-            data.get(
-                "language",
-                "ru-RU"
-            )
-        )
+@app.route("/detect-lyrics-languages", methods=["POST"])
+def detect_lyrics_languages():
+    data = request.get_json(silent=True) or {}
+    lines = data.get("lines", [])
+    if not isinstance(lines,list):
+        return jsonify({"error":"Invalid lyrics lines"}),400
+    return jsonify({
+        "languages":[detect_lyrics_line_language(line) for line in lines]
+    })
 
-        tool = get_language_tool(
-            language
-        )
+_WORDS = {
+"en":{"i":"ай","you":"ю","your":"йор","me":"ми","my":"май","we":"уи",
+"they":"зэй","he":"хи","she":"ши","the":"зэ","and":"энд","with":"уиз",
+"love":"лав","baby":"бэйби","heart":"харт","night":"найт","day":"дэй",
+"time":"тайм","life":"лайф","world":"уёрлд","never":"нэвэр","want":"уонт",
+"know":"ноу","think":"синк","feel":"фил","see":"си","go":"гоу",
+"come":"кам","stay":"стэй","leave":"лив","lose":"луз","home":"хоум",
+"don't":"доунт","can't":"кэнт","won't":"воунт"},
+"it":{"io":"ио","tu":"ту","non":"нон","che":"кэ","per":"пэр","con":"кон",
+"amore":"аморэ","mio":"мио","mia":"миа","sono":"соно","sei":"сэй",
+"vita":"вита","cuore":"куорэ","notte":"ноттэ","giorno":"джорно"},
+"es":{"yo":"йо","tu":"ту","no":"но","que":"кэ","para":"пара","con":"кон",
+"amor":"амор","mi":"ми","soy":"сой","eres":"эрэс","vida":"вида",
+"corazón":"корасон","noche":"ночэ","día":"диа"},
+"fr":{"je":"жё","tu":"тю","il":"иль","elle":"эль","nous":"ну","vous":"ву",
+"pas":"па","que":"кё","pour":"пур","avec":"авэк","amour":"амур",
+"mon":"мон","ma":"ма","suis":"сюи","vie":"ви","cœur":"кёр",
+"nuit":"нюи","jour":"жур"}
+}
 
-        corrected = tool.correct(
-            text
-        )
+_RULES = {
+"en":[("tion","шн"),("igh","ай"),("oo","у"),("ee","и"),("ea","и"),
+("ai","эй"),("ay","эй"),("oa","оу"),("ow","оу"),("ou","ау"),
+("ch","ч"),("sh","ш"),("th","з"),("ph","ф"),("ng","нг")],
+"it":[("gli","льи"),("gn","нь"),("chi","ки"),("che","ке"),
+("ci","чи"),("ce","че"),("gi","джи"),("ge","дже")],
+"es":[("ll","й"),("ñ","нь"),("ch","ч"),("qu","к"),("j","х")],
+"fr":[("eau","о"),("au","о"),("ou","у"),("oi","уа"),("ch","ш"),
+("gn","нь"),("ph","ф"),("qu","к"),("ai","э")]
+}
 
-        return jsonify({
-            "language": language,
-            "text": corrected
-        })
+_CHARS = {
+"a":"а","à":"а","á":"а","â":"а","ä":"а","b":"б","c":"к","ç":"с",
+"d":"д","e":"э","è":"э","é":"э","ê":"э","ë":"э","f":"ф","g":"г",
+"h":"х","i":"и","ì":"и","í":"и","î":"и","ï":"и","j":"ж","k":"к",
+"l":"л","m":"м","n":"н","o":"о","ò":"о","ó":"о","ô":"о","ö":"о",
+"p":"п","q":"к","r":"р","s":"с","t":"т","u":"у","ù":"у","ú":"у",
+"û":"у","ü":"у","v":"в","w":"у","x":"кс","y":"й","z":"з"
+}
 
-    except Exception as error:
+def _latin_word(word,language):
+    original=word
+    value=word.lower()
+    dictionary=_WORDS.get(language,{})
+    if value in dictionary:
+        result=dictionary[value]
+    else:
+        result=value
+        for source,target in _RULES.get(language,[]):
+            result=result.replace(source,target)
+        result="".join(_CHARS.get(ch,ch) for ch in result)
+    if original.isupper(): return result.upper()
+    if original[:1].isupper(): return result[:1].upper()+result[1:]
+    return result
 
-        print(error)
+def _uk_to_ru(text):
+    result=str(text or "")
+    for a,b in [("ї","йи"),("Ї","Йи"),("є","йэ"),("Є","Йэ"),
+                ("і","и"),("І","И"),("ґ","г"),("Ґ","Г"),
+                ("и","ы"),("И","Ы")]:
+        result=result.replace(a,b)
+    return result
 
-        return jsonify({
-            "error": str(error)
-        }), 500
+def transcribe_line_to_ru(text,language):
+    value=str(text or "")
+    language=str(language or "").lower()
+    if language=="ru": return value
+    if language=="uk": return _uk_to_ru(value)
+    pattern=re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ]+(?:['’][A-Za-zÀ-ÖØ-öø-ÿ]+)?")
+    return pattern.sub(lambda m:_latin_word(m.group(0),language),value)
 
-
-@app.route(
-    "/autofix-all",
-    methods=["POST"]
-)
-def autofix_all():
-
-    data = request.get_json(
-        silent=True
-    ) or {}
-
-    lines = data.get(
-        "lines",
-        []
-    )
-
-    if not isinstance(
-        lines,
-        list
-    ):
-
-        return jsonify({
-            "error": "Invalid lyrics lines"
-        }), 400
-
-    try:
-
-        language = normalize_language(
-            data.get(
-                "language",
-                "ru-RU"
-            )
-        )
-
-        tool = get_language_tool(
-            language
-        )
-
-        corrected_lines = [
-            tool.correct(
-                str(line)
-            )
-            for line in lines
-        ]
-
-        return jsonify({
-            "language": language,
-            "lines": corrected_lines
-        })
-
-    except Exception as error:
-
-        print(error)
-
-        return jsonify({
-            "error": str(error)
-        }), 500
+@app.route("/transcribe-to-ru", methods=["POST"])
+def transcribe_to_ru():
+    data=request.get_json(silent=True) or {}
+    lines=data.get("lines",[])
+    languages=data.get("languages",[])
+    if not isinstance(lines,list):
+        return jsonify({"error":"Invalid lyrics lines"}),400
+    result=[]
+    for i,line in enumerate(lines):
+        language=(languages[i] if isinstance(languages,list) and i<len(languages)
+                  else detect_lyrics_line_language(line))
+        if language not in SUPPORTED_LYRICS_LANGUAGES:
+            language=detect_lyrics_line_language(line)
+        result.append(transcribe_line_to_ru(line,language))
+    return jsonify({"lines":result})
 
 
 # ========================================
