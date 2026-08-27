@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.9.0</title>
+  <title>MyNus 4.7.6</title>
 
 
  <style>
@@ -1533,17 +1533,6 @@
     .generated-track { display: none; }
     .fx-create-button { width: 100%; margin-top: 4px; padding: 6px 7px; font-size: 10px; }
 
-
-.lyrics-editor-row { position: relative; }
-.lyrics-line-language {
-  position: absolute;
-  right: 8px;
-  top: 6px;
-  font-size: 10px;
-  opacity: 0.65;
-  pointer-events: none;
-  user-select: none;
-}
 </style>
 
 </head>
@@ -3080,6 +3069,12 @@
       <option value="pdf">Print (*.pdf)</option>
     </select>
 
+    <label for="lyricsSaveAsEncoding">Encoding</label>
+    <select id="lyricsSaveAsEncoding">
+      <option value="utf8" selected>UTF-8</option>
+      <option value="cp1251">Windows-1251</option>
+    </select>
+
     <div class="lyrics-saveas-actions">
       <button type="button" id="lyricsSaveAsCancelBtn">Cancel</button>
       <button type="button" id="lyricsSaveAsConfirmBtn">Save</button>
@@ -3343,6 +3338,7 @@ const lyricsLoadInput = document.getElementById("lyricsLoadInput");
 const lyricsSaveAsDialog = document.getElementById("lyricsSaveAsDialog");
 const lyricsSaveAsName = document.getElementById("lyricsSaveAsName");
 const lyricsSaveAsFormat = document.getElementById("lyricsSaveAsFormat");
+const lyricsSaveAsEncoding = document.getElementById("lyricsSaveAsEncoding");
 const lyricsSaveAsCancelBtn = document.getElementById("lyricsSaveAsCancelBtn");
 const lyricsSaveAsConfirmBtn = document.getElementById("lyricsSaveAsConfirmBtn");
 
@@ -11480,15 +11476,43 @@ function updateLyricsEditorKaraoke(currentTime) {
 
 
 function detectLyricsLanguage(text) {
+  const supported = ["ru", "en", "it", "es", "fr", "uk"];
+
+  const whisperLanguage =
+    (
+      lyricsData
+      &&
+      lyricsData.language
+    )
+    ? String(lyricsData.language)
+        .toLowerCase()
+        .split("-")[0]
+    : "";
+
+  if (supported.includes(whisperLanguage)) {
+    return whisperLanguage;
+  }
+
   const value = String(text || "");
-  if (/[ІіЇїЄєҐґ]/.test(value)) return "uk";
-  if (/[А-Яа-яЁё]/.test(value)) return "ru";
+
+  if (/[ІіЇїЄєҐґ]/.test(value)) {
+    return "uk";
+  }
+
+  if (/[А-Яа-яЁё]/.test(value)) {
+    return "ru";
+  }
+
   return "en";
 }
 
 function languageLabel(language) {
-  const code = String(language || "ru").toLowerCase().split("-")[0];
-  return ["ru","en","es","it","fr","uk"].includes(code)
+  const code =
+    String(language || "ru")
+      .toLowerCase()
+      .split("-")[0];
+
+  return ["ru","en","it","es","fr","uk"].includes(code)
     ? code.toUpperCase()
     : "EN";
 }
@@ -11646,85 +11670,73 @@ async function updateLyricsLineSpellcheck(line, lineIndex, karaokeBox) {
 
 let lyricsTranscriptionMode = false;
 let lyricsOriginalDraftForTranscription = null;
-let lyricsLineLanguages = [];
-let lyricsOriginalLanguages = [];
-
-async function detectLyricsLineLanguages(lines) {
-  const response = await fetch("/detect-lyrics-languages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ lines })
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Language detection failed");
-  return Array.isArray(data.languages) ? data.languages : [];
-}
-
-function uniqueLyricsLanguages(languages) {
-  const result = [];
-  languages.forEach(language => {
-    const code = String(language || "").toLowerCase();
-    if (code && !result.includes(code)) result.push(code);
-  });
-  return result;
-}
-
-function originalLyricsLanguageText() {
-  const source = lyricsOriginalLanguages.length
-    ? lyricsOriginalLanguages
-    : lyricsLineLanguages;
-  const languages = uniqueLyricsLanguages(source);
-  return languages.length
-    ? languages.map(languageLabel).join("/")
-    : "RU";
-}
-
-async function refreshLyricsLanguages() {
-  if (lyricsTranscriptionMode) return;
-  const lines = lyricsEditorDraft.map(
-    line => line._editedText ?? lineText(line)
-  );
-  try {
-    lyricsLineLanguages = await detectLyricsLineLanguages(lines);
-  } catch (error) {
-    lyricsLineLanguages = lines.map(detectLyricsLanguage);
-  }
-  lyricsOriginalLanguages = [...lyricsLineLanguages];
-  renderLyricsEditor();
-}
 
 function updateLyricsTranscriptionButton() {
   if (!lyricsTranscriptionBtn) return;
-  const source = lyricsOriginalLanguages.length
-    ? lyricsOriginalLanguages
-    : lyricsLineLanguages;
-  const enabled = source.some(
-    language => ["en","es","it","fr","uk"].includes(
-      String(language || "").toLowerCase()
-    )
-  );
-  lyricsTranscriptionBtn.disabled = !lyricsTranscriptionMode && !enabled;
+
+  const sourceDraft =
+    lyricsTranscriptionMode
+    &&
+    lyricsOriginalDraftForTranscription
+    ? lyricsOriginalDraftForTranscription
+    : lyricsEditorDraft;
+
+  const language =
+    detectLyricsLanguage(
+      sourceDraft
+        .map(
+          line =>
+            line._editedText
+            ??
+            lineText(line)
+        )
+        .join("\n")
+    );
+
+  const transcribable =
+    ["en","it","es","fr","uk"]
+      .includes(language);
+
+  lyricsTranscriptionBtn.disabled =
+    !lyricsTranscriptionMode
+    &&
+    !transcribable;
+
   lyricsTranscriptionBtn.textContent =
-    lyricsTranscriptionMode ? "Original" : "RU Transcription";
+    lyricsTranscriptionMode
+    ? "Original"
+    : "RU Transcription";
 }
 
-async function requestLyricsTranscription(lines, languages) {
+async function requestLyricsTranscription(lines) {
+  const language =
+    detectLyricsLanguage(
+      lines.join("\n")
+    );
+
   const response = await fetch("/transcribe-to-ru", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ lines, languages })
+    body: JSON.stringify({
+      lines,
+      language
+    })
   });
+
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Transcription failed");
+
+  if (!response.ok) {
+    throw new Error(data.error || "Transcription failed");
+  }
+
   return Array.isArray(data.lines) ? data.lines : [];
 }
 
 lyricsTranscriptionBtn.addEventListener("click", async () => {
   if (lyricsTranscriptionMode) {
-    lyricsEditorDraft = JSON.parse(
-      JSON.stringify(lyricsOriginalDraftForTranscription || [])
-    );
-    lyricsLineLanguages = [...lyricsOriginalLanguages];
+    lyricsEditorDraft =
+      JSON.parse(JSON.stringify(lyricsOriginalDraftForTranscription || []));
+
     lyricsTranscriptionMode = false;
     renderLyricsEditor();
     lyricsEditorStatus.textContent = "Original";
@@ -11732,54 +11744,69 @@ lyricsTranscriptionBtn.addEventListener("click", async () => {
   }
 
   const originalDraft = cloneLyricsEditorDraft();
-  const originalLines = originalDraft.map(
-    line => line._editedText ?? lineText(line)
-  );
+  const originalLines =
+    originalDraft.map(line => line._editedText ?? lineText(line));
 
   try {
-    let languages = [...lyricsLineLanguages];
-    if (languages.length !== originalLines.length) {
-      languages = await detectLyricsLineLanguages(originalLines);
-    }
-
     lyricsTranscriptionBtn.disabled = true;
+
     const transcribedLines =
-      await requestLyricsTranscription(originalLines, languages);
+      await requestLyricsTranscription(originalLines);
 
     lyricsOriginalDraftForTranscription = originalDraft;
-    lyricsOriginalLanguages = [...languages];
 
-    lyricsEditorDraft = originalDraft.map((line,index) => {
-      const clone = JSON.parse(JSON.stringify(line));
-      setLineText(
-        clone,
-        String(transcribedLines[index] ?? lineText(line))
-      );
-      delete clone._editedText;
-      return clone;
-    });
+    lyricsEditorDraft =
+      originalDraft.map((line, index) => {
+        const clone = JSON.parse(JSON.stringify(line));
+        setLineText(clone, String(transcribedLines[index] ?? lineText(line)));
+        delete clone._editedText;
+        return clone;
+      });
 
-    lyricsLineLanguages = originalLines.map(() => "ru");
     lyricsTranscriptionMode = true;
     renderLyricsEditor();
     lyricsEditorStatus.textContent = "RU Transcription";
-  } catch (error) {
+  }
+  catch (error) {
     lyricsEditorStatus.textContent =
       "Transcription error: " + error.message;
-  } finally {
+  }
+  finally {
     updateLyricsTranscriptionButton();
   }
 });
+
 
 function renderLyricsEditor() {
   lyricsEditorRows.innerHTML = "";
 
   if (lyricsLanguageInfo) {
-    const originalLanguage = originalLyricsLanguageText();
+    const languageSource =
+      lyricsTranscriptionMode
+      &&
+      lyricsOriginalDraftForTranscription
+      ? lyricsOriginalDraftForTranscription
+      : lyricsEditorDraft;
+
+    const sourceLanguage =
+      detectLyricsLanguage(
+        languageSource
+          .map(
+            line =>
+              line._editedText
+              ??
+              lineText(line)
+          )
+          .join("\n")
+      );
+
     lyricsLanguageInfo.textContent =
       lyricsTranscriptionMode
-      ? "Language: " + originalLanguage + " → RU"
-      : "Language: " + originalLanguage;
+      ? "Language: "
+        + languageLabel(sourceLanguage)
+        + " → RU"
+      : "Language: "
+        + languageLabel(sourceLanguage);
   }
 
   lyricsEditorDraft.forEach((line, index) => {
@@ -11813,12 +11840,9 @@ function renderLyricsEditor() {
     textArea.value = line._editedText ?? lineText(line);
     textArea.spellcheck = true;
     textArea.lang =
-      lyricsTranscriptionMode
-      ? "ru"
-      : (
-          lyricsLineLanguages[index]
-          || detectLyricsLanguage(textArea.value)
-        );
+      detectLyricsLanguage(
+        textArea.value
+      );
 
     updateLyricsLineSpellcheck(
       line,
@@ -11898,24 +11922,6 @@ function renderLyricsEditor() {
     row.appendChild(startInput);
     row.appendChild(endInput);
     row.appendChild(textWrap);
-
-    const lineLanguageBadge =
-      document.createElement("span");
-    lineLanguageBadge.className =
-      "lyrics-line-language";
-    lineLanguageBadge.textContent =
-      languageLabel(
-        lyricsTranscriptionMode
-        ? "ru"
-        : (
-            lyricsLineLanguages[index]
-            || detectLyricsLanguage(
-              line._editedText ?? lineText(line)
-            )
-          )
-      );
-    row.appendChild(lineLanguageBadge);
-
     lyricsEditorRows.appendChild(row);
   });
 
@@ -12134,8 +12140,6 @@ function updateLyricsUndoRedoButtons() {
 function openLyricsEditor() {
   lyricsTranscriptionMode = false;
   lyricsOriginalDraftForTranscription = null;
-  lyricsLineLanguages = [];
-  lyricsOriginalLanguages = [];
   lyricsEditorDraft = cloneKaraokeLines();
   lyricsEditorSelectedLine =
     lyricsEditorDraft.length ? 0 : -1;
@@ -12145,7 +12149,6 @@ function openLyricsEditor() {
 
   updateLyricsUndoRedoButtons();
   renderLyricsEditor();
-  refreshLyricsLanguages();
   updateLyricsMasterCounter();
 
   lyricsTransportMode =
@@ -13057,22 +13060,34 @@ lyricsSaveAsBtn.addEventListener("click", () => {
       )
     : "lyrics";
 
-  const originalLanguages =
-    uniqueLyricsLanguages(
-      lyricsOriginalLanguages.length
-      ? lyricsOriginalLanguages
-      : lyricsLineLanguages
+  const languageSource =
+    lyricsTranscriptionMode
+    &&
+    lyricsOriginalDraftForTranscription
+    ? lyricsOriginalDraftForTranscription
+    : lyricsEditorDraft;
+
+  const detectedLanguage =
+    detectLyricsLanguage(
+      languageSource
+        .map(
+          line =>
+            line._editedText
+            ??
+            lineText(line)
+        )
+        .join("\n")
     );
 
-  const originalSuffix =
-    (originalLanguages.length ? originalLanguages : ["ru"])
-      .map(languageLabel)
-      .join("_");
+  const sourceSuffix =
+    languageLabel(
+      detectedLanguage
+    );
 
   const languageSuffix =
     lyricsTranscriptionMode
-    ? originalSuffix + "-RU"
-    : originalSuffix;
+    ? sourceSuffix + "-RU"
+    : sourceSuffix;
 
   lyricsSaveAsName.value =
     defaultName
@@ -13082,10 +13097,41 @@ lyricsSaveAsBtn.addEventListener("click", () => {
   lyricsSaveAsFormat.value =
     "json";
 
+  lyricsSaveAsEncoding.value =
+    "utf8";
+
   lyricsSaveAsDialog.classList.add(
     "open"
   );
 });
+
+
+
+lyricsSaveAsFormat.addEventListener(
+  "change",
+  () => {
+
+    const disabled =
+      lyricsSaveAsFormat.value === "pdf"
+      ||
+      lyricsSaveAsFormat.value === "json";
+
+
+    lyricsSaveAsEncoding.disabled =
+      disabled;
+
+
+    if (
+      lyricsSaveAsFormat.value === "json"
+    ) {
+
+      lyricsSaveAsEncoding.value =
+        "utf8";
+
+    }
+
+  }
+);
 
 
 lyricsSaveAsCancelBtn.addEventListener("click", () => {
@@ -13098,7 +13144,8 @@ lyricsSaveAsCancelBtn.addEventListener("click", () => {
 lyricsSaveAsConfirmBtn.addEventListener("click", () => {
   exportLyricsFile(
     lyricsSaveAsName.value,
-    lyricsSaveAsFormat.value
+    lyricsSaveAsFormat.value,
+    lyricsSaveAsEncoding.value
   );
 
   lyricsSaveAsDialog.classList.remove(
@@ -13163,7 +13210,7 @@ function formatSrtTime(seconds) {
 }
 
 
-function exportLyricsFile(rawName, format) {
+function exportLyricsFile(rawName, format, encoding = "utf8") {
   const safeName =
     (
       rawName
@@ -13351,21 +13398,165 @@ function exportLyricsFile(rawName, format) {
   ========================================
   */
 
-  const exportContent =
+  let blob;
+
+
+  if (
     format === "json"
-    ? content
-    : "\uFEFF" + content;
+  ) {
+
+    /*
+    JSON is always UTF-8.
+    */
+    const utf8 =
+      new TextEncoder()
+        .encode(
+          content
+        );
 
 
-  const blob =
-    new Blob(
-      [exportContent],
-      {
-        type:
-          mime
-          + ";charset=utf-8"
+    blob =
+      new Blob(
+        [utf8],
+        {
+          type:
+            "application/json;charset=utf-8"
+        }
+      );
+
+  }
+
+  else if (
+    encoding === "cp1251"
+  ) {
+
+    /*
+    Windows-1251 is optional and explicit.
+    Use only for legacy Windows programs.
+    */
+
+    const cp1251Extra = {
+      0x0402:0x80,0x0403:0x81,0x201A:0x82,0x0453:0x83,
+      0x201E:0x84,0x2026:0x85,0x2020:0x86,0x2021:0x87,
+      0x20AC:0x88,0x2030:0x89,0x0409:0x8A,0x2039:0x8B,
+      0x040A:0x8C,0x040C:0x8D,0x040B:0x8E,0x040F:0x8F,
+      0x0452:0x90,0x2018:0x91,0x2019:0x92,0x201C:0x93,
+      0x201D:0x94,0x2022:0x95,0x2013:0x96,0x2014:0x97,
+      0x2122:0x99,0x0459:0x9A,0x203A:0x9B,0x045A:0x9C,
+      0x045C:0x9D,0x045B:0x9E,0x045F:0x9F,0x00A0:0xA0,
+      0x040E:0xA1,0x045E:0xA2,0x0408:0xA3,0x00A4:0xA4,
+      0x0490:0xA5,0x00A6:0xA6,0x00A7:0xA7,0x0401:0xA8,
+      0x00A9:0xA9,0x0404:0xAA,0x00AB:0xAB,0x00AC:0xAC,
+      0x00AD:0xAD,0x00AE:0xAE,0x0407:0xAF,0x00B0:0xB0,
+      0x00B1:0xB1,0x0406:0xB2,0x0456:0xB3,0x0491:0xB4,
+      0x00B5:0xB5,0x00B6:0xB6,0x00B7:0xB7,0x0451:0xB8,
+      0x2116:0xB9,0x0454:0xBA,0x00BB:0xBB,0x0458:0xBC,
+      0x0405:0xBD,0x0455:0xBE,0x0457:0xBF
+    };
+
+
+    function encodeWindows1251(text) {
+
+      const bytes = [];
+
+      for (
+        let i = 0;
+        i < text.length;
+        i++
+      ) {
+
+        const code =
+          text.charCodeAt(i);
+
+
+        if (code <= 0x7F) {
+          bytes.push(code);
+          continue;
+        }
+
+
+        if (
+          code >= 0x0410
+          &&
+          code <= 0x044F
+        ) {
+
+          bytes.push(
+            code - 0x0410 + 0xC0
+          );
+
+          continue;
+        }
+
+
+        if (
+          Object.prototype.hasOwnProperty.call(
+            cp1251Extra,
+            code
+          )
+        ) {
+
+          bytes.push(
+            cp1251Extra[code]
+          );
+
+          continue;
+        }
+
+
+        bytes.push(0x3F);
+
       }
-    );
+
+
+      return new Uint8Array(
+        bytes
+      );
+
+    }
+
+
+    blob =
+      new Blob(
+        [
+          encodeWindows1251(
+            content
+          )
+        ],
+        {
+          type:
+            "text/plain;charset=windows-1251"
+        }
+      );
+
+  }
+
+  else {
+
+    /*
+    UTF-8 is the default and cross-platform format.
+    TextEncoder writes the actual UTF-8 bytes directly.
+    No BOM is added.
+    */
+
+    const utf8 =
+      new TextEncoder()
+        .encode(
+          content
+        );
+
+
+    blob =
+      new Blob(
+        [utf8],
+        {
+          type:
+            mime
+            + ";charset=utf-8"
+        }
+      );
+
+  }
 
   const url =
     URL.createObjectURL(blob);
@@ -14929,8 +15120,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-многоязычная модель
-   | 4.9.0
+КИРРИЛИЦА
+   | 4.7.6
 </div>
 
 <div class="row" id="build-down">
