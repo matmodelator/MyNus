@@ -1,5 +1,5 @@
 # ========================================
-# полиязычность | 3.3.0
+# падение на la | (4.7.4) 4.7.6
 # ========================================
 
 # ========================================
@@ -9,7 +9,6 @@
 import sys
 import os
 import re
-import unicodedata
 import glob
 import shutil
 import subprocess
@@ -280,21 +279,169 @@ def detect_lyrics(vocal_path):
         batch_size=4
     )
 
-    language = result.get(
-        "language"
-    ) or "ru"
+    language = (
+        result.get(
+            "language"
+        )
+        or
+        "ru"
+    )
 
 
-    if language not in {
+    supported_languages = {
         "ru",
         "en",
-        "es",
         "it",
+        "es",
         "fr",
         "uk"
-    }:
+    }
 
-        language = "en"
+
+    if (
+        language
+        not in supported_languages
+    ):
+
+        raw_text = " ".join(
+            str(
+                segment.get(
+                    "text",
+                    ""
+                )
+                or
+                ""
+            )
+
+            for segment
+            in result.get(
+                "segments",
+                []
+            )
+        ).lower()
+
+
+        if re.search(
+            r"[ІіЇїЄєҐґ]",
+            raw_text
+        ):
+
+            language = "uk"
+
+
+        elif re.search(
+            r"[А-Яа-яЁё]",
+            raw_text
+        ):
+
+            language = "ru"
+
+
+        else:
+
+            padded_text = (
+                " "
+                + raw_text
+                + " "
+            )
+
+
+            language_markers = {
+
+                "it": [
+                    " che ",
+                    " non ",
+                    " per ",
+                    " con ",
+                    " sono ",
+                    " sei ",
+                    " amore ",
+                    " mio ",
+                    " mia ",
+                    " come ",
+                    " una ",
+                    " il ",
+                    " gli "
+                ],
+
+                "es": [
+                    " que ",
+                    " para ",
+                    " con ",
+                    " soy ",
+                    " eres ",
+                    " amor ",
+                    " mi ",
+                    " como ",
+                    " una ",
+                    " el ",
+                    " los "
+                ],
+
+                "fr": [
+                    " je ",
+                    " tu ",
+                    " pas ",
+                    " pour ",
+                    " avec ",
+                    " suis ",
+                    " amour ",
+                    " mon ",
+                    " ma ",
+                    " une ",
+                    " le ",
+                    " les "
+                ],
+
+                "en": [
+                    " the ",
+                    " i ",
+                    " you ",
+                    " and ",
+                    " with ",
+                    " my ",
+                    " love ",
+                    " is ",
+                    " are ",
+                    " to ",
+                    " of ",
+                    " for "
+                ]
+            }
+
+
+            language_scores = {
+
+                code:
+                    sum(
+                        padded_text.count(
+                            marker
+                        )
+
+                        for marker
+                        in markers
+                    )
+
+                for code, markers
+                in language_markers.items()
+            }
+
+
+            language = max(
+                language_scores,
+                key=language_scores.get
+            )
+
+
+            if (
+                language_scores[
+                    language
+                ]
+                ==
+                0
+            ):
+
+                language = "en"
 
 
     align_model, metadata = (
@@ -303,7 +450,6 @@ def detect_lyrics(vocal_path):
             device=device
         )
     )
-
 
     result = whisperx.align(
         result["segments"],
@@ -1060,11 +1206,25 @@ def export_audio():
 _language_tools = {}
 
 def normalize_language(language):
-    value = str(language or "ru-RU").lower()
-    if value.startswith("en"):
-        return "en-US"
-    return "ru-RU"
+    code = str(
+        language
+        or
+        "ru"
+    ).lower().split("-")[0]
 
+    mapping = {
+        "ru": "ru-RU",
+        "en": "en-US",
+        "it": "it",
+        "es": "es",
+        "fr": "fr",
+        "uk": "uk-UA"
+    }
+
+    return mapping.get(
+        code,
+        "en-US"
+    )
 
 
 def get_language_tool(language="ru-RU"):
@@ -1154,144 +1314,280 @@ def spellcheck():
 
 
 # ========================================
-# LYRICS LANGUAGE + RU TRANSCRIPTION
+# RU TRANSCRIPTION
+# EN / IT / ES / FR / UK
 # ========================================
 
-SUPPORTED_LYRICS_LANGUAGES = {"ru","en","es","it","fr","uk"}
+_TRANSCRIPTION_WORDS = {
+    "en": {
+        "i":"ай","you":"ю","your":"йор","me":"ми","my":"май",
+        "we":"уи","they":"зэй","he":"хи","she":"ши","it":"ит",
+        "is":"из","are":"ар","am":"эм","was":"уоз","were":"уэр",
+        "the":"зэ","a":"э","an":"эн","and":"энд","or":"ор","but":"бат",
+        "to":"ту","too":"ту","of":"ов","for":"фор","from":"фром",
+        "in":"ин","on":"он","at":"эт","by":"бай","with":"уиз",
+        "not":"нот","no":"ноу","yes":"йес","love":"лав",
+        "baby":"бэйби","heart":"харт","night":"найт","day":"дэй",
+        "time":"тайм","life":"лайф","world":"уёрлд","want":"уонт",
+        "know":"ноу","think":"синк","feel":"фил","see":"си",
+        "go":"гоу","come":"кам","stay":"стэй","leave":"лив",
+        "lose":"луз","home":"хоум","don't":"доунт",
+        "can't":"кэнт","won't":"воунт"
+    },
 
-def _fallback_language(text):
-    value = str(text or "").strip()
-    if re.search(r"[ІіЇїЄєҐґ]", value):
-        return "uk"
-    if re.search(r"[А-Яа-яЁё]", value):
-        return "ru"
+    "it": {
+        "io":"ио","tu":"ту","lui":"луи","lei":"лэй","noi":"ной",
+        "voi":"вой","non":"нон","che":"кэ","per":"пэр","con":"кон",
+        "amore":"аморэ","mio":"мио","mia":"миа","sono":"соно",
+        "sei":"сэй","vita":"вита","cuore":"куорэ","notte":"ноттэ",
+        "giorno":"джорно","sempre":"сэмпрэ","come":"комэ"
+    },
 
-    lower = " " + value.lower() + " "
-    markers = {
-        "it":[" che "," non "," per "," sono "," amore "," mio "," mia "],
-        "es":[" que "," para "," soy "," amor "," corazón "," eres "],
-        "fr":[" je "," pas "," pour "," avec "," amour "," suis "," mon "],
-        "en":[" the "," i "," you "," and "," with "," love "," my "," is "]
+    "es": {
+        "yo":"йо","tú":"ту","tu":"ту","él":"эль","ella":"эйя",
+        "no":"но","que":"кэ","para":"пара","con":"кон",
+        "amor":"амор","mi":"ми","soy":"сой","eres":"эрэс",
+        "vida":"вида","corazón":"корасон","noche":"ночэ",
+        "día":"диа","siempre":"сьемпрэ","como":"комо"
+    },
+
+    "fr": {
+        "je":"жё","tu":"тю","il":"иль","elle":"эль","nous":"ну",
+        "vous":"ву","ne":"нё","pas":"па","que":"кё","pour":"пур",
+        "avec":"авэк","amour":"амур","mon":"мон","ma":"ма",
+        "suis":"сюи","vie":"ви","coeur":"кёр","cœur":"кёр",
+        "nuit":"нюи","jour":"жур","toujours":"тужур"
     }
-    scores = {
-        lang: sum(lower.count(x) for x in words)
-        for lang,words in markers.items()
-    }
-    return max(scores,key=scores.get) if max(scores.values()) else "en"
-
-def detect_lyrics_line_language(text):
-    value = str(text or "").strip()
-    if not value:
-        return "ru"
-    if re.search(r"[ІіЇїЄєҐґ]", value):
-        return "uk"
-    if re.search(r"[А-Яа-яЁё]", value):
-        return "ru"
-    try:
-        from langdetect import detect
-        language = detect(value)
-        if language in SUPPORTED_LYRICS_LANGUAGES:
-            return language
-    except Exception:
-        pass
-    return _fallback_language(value)
-
-@app.route("/detect-lyrics-languages", methods=["POST"])
-def detect_lyrics_languages():
-    data = request.get_json(silent=True) or {}
-    lines = data.get("lines", [])
-    if not isinstance(lines,list):
-        return jsonify({"error":"Invalid lyrics lines"}),400
-    return jsonify({
-        "languages":[detect_lyrics_line_language(line) for line in lines]
-    })
-
-_WORDS = {
-"en":{"i":"ай","you":"ю","your":"йор","me":"ми","my":"май","we":"уи",
-"they":"зэй","he":"хи","she":"ши","the":"зэ","and":"энд","with":"уиз",
-"love":"лав","baby":"бэйби","heart":"харт","night":"найт","day":"дэй",
-"time":"тайм","life":"лайф","world":"уёрлд","never":"нэвэр","want":"уонт",
-"know":"ноу","think":"синк","feel":"фил","see":"си","go":"гоу",
-"come":"кам","stay":"стэй","leave":"лив","lose":"луз","home":"хоум",
-"don't":"доунт","can't":"кэнт","won't":"воунт"},
-"it":{"io":"ио","tu":"ту","non":"нон","che":"кэ","per":"пэр","con":"кон",
-"amore":"аморэ","mio":"мио","mia":"миа","sono":"соно","sei":"сэй",
-"vita":"вита","cuore":"куорэ","notte":"ноттэ","giorno":"джорно"},
-"es":{"yo":"йо","tu":"ту","no":"но","que":"кэ","para":"пара","con":"кон",
-"amor":"амор","mi":"ми","soy":"сой","eres":"эрэс","vida":"вида",
-"corazón":"корасон","noche":"ночэ","día":"диа"},
-"fr":{"je":"жё","tu":"тю","il":"иль","elle":"эль","nous":"ну","vous":"ву",
-"pas":"па","que":"кё","pour":"пур","avec":"авэк","amour":"амур",
-"mon":"мон","ma":"ма","suis":"сюи","vie":"ви","cœur":"кёр",
-"nuit":"нюи","jour":"жур"}
 }
 
-_RULES = {
-"en":[("tion","шн"),("igh","ай"),("oo","у"),("ee","и"),("ea","и"),
-("ai","эй"),("ay","эй"),("oa","оу"),("ow","оу"),("ou","ау"),
-("ch","ч"),("sh","ш"),("th","з"),("ph","ф"),("ng","нг")],
-"it":[("gli","льи"),("gn","нь"),("chi","ки"),("che","ке"),
-("ci","чи"),("ce","че"),("gi","джи"),("ge","дже")],
-"es":[("ll","й"),("ñ","нь"),("ch","ч"),("qu","к"),("j","х")],
-"fr":[("eau","о"),("au","о"),("ou","у"),("oi","уа"),("ch","ш"),
-("gn","нь"),("ph","ф"),("qu","к"),("ai","э")]
+
+_TRANSCRIPTION_RULES = {
+    "en": [
+        ("tion","шн"),("sion","жн"),("igh","ай"),("oo","у"),
+        ("ee","и"),("ea","и"),("ai","эй"),("ay","эй"),
+        ("oa","оу"),("ow","оу"),("ou","ау"),("oi","ой"),
+        ("oy","ой"),("ch","ч"),("sh","ш"),("th","з"),
+        ("ph","ф"),("wh","у"),("ck","к"),("ng","нг")
+    ],
+
+    "it": [
+        ("gli","льи"),("gn","нь"),("chi","ки"),("che","ке"),
+        ("ci","чи"),("ce","че"),("gi","джи"),("ge","дже"),
+        ("sc","ш")
+    ],
+
+    "es": [
+        ("ll","й"),("ñ","нь"),("ch","ч"),("qu","к"),
+        ("gue","ге"),("gui","ги"),("j","х")
+    ],
+
+    "fr": [
+        ("eau","о"),("au","о"),("ou","у"),("oi","уа"),
+        ("ch","ш"),("gn","нь"),("ph","ф"),("qu","к"),
+        ("ai","э"),("ei","э")
+    ]
 }
 
-_CHARS = {
-"a":"а","à":"а","á":"а","â":"а","ä":"а","b":"б","c":"к","ç":"с",
-"d":"д","e":"э","è":"э","é":"э","ê":"э","ë":"э","f":"ф","g":"г",
-"h":"х","i":"и","ì":"и","í":"и","î":"и","ï":"и","j":"ж","k":"к",
-"l":"л","m":"м","n":"н","o":"о","ò":"о","ó":"о","ô":"о","ö":"о",
-"p":"п","q":"к","r":"р","s":"с","t":"т","u":"у","ù":"у","ú":"у",
-"û":"у","ü":"у","v":"в","w":"у","x":"кс","y":"й","z":"з"
+
+_TRANSCRIPTION_CHARS = {
+    "a":"а","à":"а","á":"а","â":"а","ä":"а",
+    "b":"б","c":"к","ç":"с","d":"д",
+    "e":"э","è":"э","é":"э","ê":"э","ë":"э",
+    "f":"ф","g":"г","h":"х",
+    "i":"и","ì":"и","í":"и","î":"и","ï":"и",
+    "j":"ж","k":"к","l":"л","m":"м","n":"н",
+    "o":"о","ò":"о","ó":"о","ô":"о","ö":"о",
+    "p":"п","q":"к","r":"р","s":"с","t":"т",
+    "u":"у","ù":"у","ú":"у","û":"у","ü":"у",
+    "v":"в","w":"у","x":"кс","y":"й","z":"з"
 }
 
-def _latin_word(word,language):
-    original=word
-    value=word.lower()
-    dictionary=_WORDS.get(language,{})
+
+def _preserve_case(source, result):
+    if source.isupper():
+        return result.upper()
+
+    if source[:1].isupper():
+        return (
+            result[:1].upper()
+            + result[1:]
+        )
+
+    return result
+
+
+def _latin_word_to_ru(word, language):
+    original = word
+    value = word.lower()
+
+    dictionary = (
+        _TRANSCRIPTION_WORDS.get(
+            language,
+            {}
+        )
+    )
+
     if value in dictionary:
-        result=dictionary[value]
-    else:
-        result=value
-        for source,target in _RULES.get(language,[]):
-            result=result.replace(source,target)
-        result="".join(_CHARS.get(ch,ch) for ch in result)
-    if original.isupper(): return result.upper()
-    if original[:1].isupper(): return result[:1].upper()+result[1:]
+        return _preserve_case(
+            original,
+            dictionary[value]
+        )
+
+    result = value
+
+    for source, target in (
+        _TRANSCRIPTION_RULES.get(
+            language,
+            []
+        )
+    ):
+        result = result.replace(
+            source,
+            target
+        )
+
+    result = "".join(
+        _TRANSCRIPTION_CHARS.get(
+            char,
+            char
+        )
+        for char in result
+    )
+
+    return _preserve_case(
+        original,
+        result
+    )
+
+
+def _ukrainian_to_ru(text):
+    result = str(
+        text
+        or
+        ""
+    )
+
+    replacements = [
+        ("ї","йи"),("Ї","Йи"),
+        ("є","йэ"),("Є","Йэ"),
+        ("і","и"),("І","И"),
+        ("ґ","г"),("Ґ","Г"),
+        ("и","ы"),("И","Ы")
+    ]
+
+    for source, target in replacements:
+        result = result.replace(
+            source,
+            target
+        )
+
     return result
 
-def _uk_to_ru(text):
-    result=str(text or "")
-    for a,b in [("ї","йи"),("Ї","Йи"),("є","йэ"),("Є","Йэ"),
-                ("і","и"),("І","И"),("ґ","г"),("Ґ","Г"),
-                ("и","ы"),("И","Ы")]:
-        result=result.replace(a,b)
-    return result
 
-def transcribe_line_to_ru(text,language):
-    value=str(text or "")
-    language=str(language or "").lower()
-    if language=="ru": return value
-    if language=="uk": return _uk_to_ru(value)
-    pattern=re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ]+(?:['’][A-Za-zÀ-ÖØ-öø-ÿ]+)?")
-    return pattern.sub(lambda m:_latin_word(m.group(0),language),value)
+def transcribe_line_to_ru(
+    text,
+    language
+):
+    language = str(
+        language
+        or
+        "en"
+    ).lower().split("-")[0]
 
-@app.route("/transcribe-to-ru", methods=["POST"])
+    value = str(
+        text
+        or
+        ""
+    )
+
+    if language == "ru":
+        return value
+
+    if language == "uk":
+        return _ukrainian_to_ru(
+            value
+        )
+
+    pattern = re.compile(
+        r"[A-Za-zÀ-ÖØ-öø-ÿ]+(?:['’][A-Za-zÀ-ÖØ-öø-ÿ]+)?"
+    )
+
+    return pattern.sub(
+        lambda match:
+            _latin_word_to_ru(
+                match.group(0),
+                language
+            ),
+        value
+    )
+
+
+@app.route(
+    "/transcribe-to-ru",
+    methods=["POST"]
+)
 def transcribe_to_ru():
-    data=request.get_json(silent=True) or {}
-    lines=data.get("lines",[])
-    languages=data.get("languages",[])
-    if not isinstance(lines,list):
-        return jsonify({"error":"Invalid lyrics lines"}),400
-    result=[]
-    for i,line in enumerate(lines):
-        language=(languages[i] if isinstance(languages,list) and i<len(languages)
-                  else detect_lyrics_line_language(line))
-        if language not in SUPPORTED_LYRICS_LANGUAGES:
-            language=detect_lyrics_line_language(line)
-        result.append(transcribe_line_to_ru(line,language))
-    return jsonify({"lines":result})
+
+    data = request.get_json(
+        silent=True
+    ) or {}
+
+    lines = data.get(
+        "lines",
+        []
+    )
+
+    language = str(
+        data.get(
+            "language",
+            "en"
+        )
+        or
+        "en"
+    ).lower().split("-")[0]
+
+    if language not in {
+        "ru",
+        "en",
+        "it",
+        "es",
+        "fr",
+        "uk"
+    }:
+        language = "en"
+
+    if not isinstance(
+        lines,
+        list
+    ):
+        return jsonify({
+            "error":
+                "Invalid lyrics lines"
+        }), 400
+
+    try:
+        result = [
+            transcribe_line_to_ru(
+                line,
+                language
+            )
+            for line in lines
+        ]
+
+        return jsonify({
+            "language":
+                language,
+            "lines":
+                result
+        })
+
+    except Exception as error:
+        print(error)
+
+        return jsonify({
+            "error":
+                str(error)
+        }), 500
 
 
 # ========================================
