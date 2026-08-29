@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.8.8</title>
+  <title>MyNus 4.8.7</title>
 
 
  <style>
@@ -1729,15 +1729,39 @@
       box-shadow: 0 8px 24px rgba(0,0,0,.18);
     }
     .recent-audio-menu.open { display: block; }
-    .recent-audio-menu-item, .recent-audio-menu-empty {
-      display: block; width: 100%; box-sizing: border-box; padding: 7px 9px;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-      border: 0; border-radius: 5px; background: transparent; text-align: left;
-      font: inherit; font-size: 12px;
-    }
-    .recent-audio-menu-item { cursor: pointer; }
-    .recent-audio-menu-item:hover { background: #f0f0f0; }
-    .recent-audio-menu-empty { opacity: .6; }
+    .recent-audio-menu-item,
+.recent-audio-menu-empty {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+}
+
+.recent-audio-menu-item {
+  cursor: pointer;
+  color: #111;
+  font-weight: 600;
+  opacity: 1;
+}
+
+.recent-audio-menu-item:hover {
+  background: #e8e8e8;
+  color: #000;
+}
+
+.recent-audio-menu-empty {
+  color: #555;
+  opacity: 1;
+}
 
 </style>
 
@@ -16198,7 +16222,7 @@ updateMasterHistoryButtons();
 
 <div id="service-console">
 масштабирование редактирование и недавние
-   | 4.8.8
+   | 4.8.7
 </div>
 
 <div class="row" id="build-down">
