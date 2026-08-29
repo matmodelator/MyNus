@@ -1,10 +1,11 @@
-# ========================================
-# БЕЗ ЛАТЫНИ la | RAW WHISPERX DIAGNOSTICS 4.7.8
-# ========================================
 
-# ========================================
-# IMPORTS
-# ========================================
+
+========================================
+FILTER абракадабра подряд символы 4.7.13
+========================================
+========================================
+IMPORTS
+========================================
 
 import sys
 import os
@@ -17,23 +18,22 @@ import threading
 import uuid
 
 from flask import (
-    Flask,
-    request,
-    jsonify,
-    send_from_directory,
-    send_file
+Flask,
+request,
+jsonify,
+send_from_directory,
+send_file
 )
 from werkzeug.utils import secure_filename
 import language_tool_python
 
+========================================
+APPLICATION
+========================================
 
-# ========================================
-# APPLICATION
-# ========================================
+app = Flask(name)
 
-app = Flask(__name__)
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.abspath(file))
 
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 RESULT_DIR = os.path.join(BASE_DIR, "results")
@@ -43,424 +43,353 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(RESULT_DIR, exist_ok=True)
 os.makedirs(EXPORT_DIR, exist_ok=True)
 
-
-# ========================================
-# JOB STATE
-# ========================================
+========================================
+JOB STATE
+========================================
 
 jobs = {}
 
-
-# ========================================
-# INDEX
-# ========================================
+========================================
+INDEX
+========================================
 
 @app.route("/")
 def index():
 
-    return send_from_directory(
-        BASE_DIR,
-        "index.html"
-    )
-
-
-# ========================================
-# START SEPARATION
-# ========================================
+return send_from_directory(
+    BASE_DIR,
+    "index.html"
+)
+========================================
+START SEPARATION
+========================================
 
 @app.route("/separate", methods=["POST"])
 def separate():
 
-    if "audio" not in request.files:
-
-        return jsonify({
-            "error": "Audio file not received"
-        }), 400
-
-
-    audio = request.files["audio"]
-
-    if audio.filename == "":
-
-        return jsonify({
-            "error": "Audio file not selected"
-        }), 400
-
-
-    job_id = str(uuid.uuid4())
-
-
-    job_upload_dir = os.path.join(
-        UPLOAD_DIR,
-        job_id
-    )
-
-    job_result_dir = os.path.join(
-        RESULT_DIR,
-        job_id
-    )
-
-    os.makedirs(
-        job_upload_dir,
-        exist_ok=True
-    )
-
-    os.makedirs(
-        job_result_dir,
-        exist_ok=True
-    )
-
-
-    filename = secure_filename(
-        audio.filename
-    )
-
-    if not filename:
-        filename = "audio.mp3"
-
-
-    input_path = os.path.join(
-        job_upload_dir,
-        filename
-    )
-
-    audio.save(
-        input_path
-    )
-
-
-    jobs[job_id] = {
-        "progress": 0,
-        "status": "processing",
-        "vocals": None,
-        "drums": None,
-        "bass": None,
-        "guitar": None,
-        "piano": None,
-        "other": None,
-        "vocal_start": None,
-        "vocal_end": None,
-        "error": None
-    }
-
-
-    thread = threading.Thread(
-        target=run_demucs,
-        args=(
-            job_id,
-            input_path,
-            job_result_dir
-        ),
-        daemon=True
-    )
-
-    thread.start()
-
+if "audio" not in request.files:
 
     return jsonify({
-        "job_id": job_id
-    })
+        "error": "Audio file not received"
+    }), 400
 
 
-# ========================================
-# VOCAL START\END DETECTION
-# ========================================
+audio = request.files["audio"]
+
+if audio.filename == "":
+
+    return jsonify({
+        "error": "Audio file not selected"
+    }), 400
+
+
+job_id = str(uuid.uuid4())
+
+
+job_upload_dir = os.path.join(
+    UPLOAD_DIR,
+    job_id
+)
+
+job_result_dir = os.path.join(
+    RESULT_DIR,
+    job_id
+)
+
+os.makedirs(
+    job_upload_dir,
+    exist_ok=True
+)
+
+os.makedirs(
+    job_result_dir,
+    exist_ok=True
+)
+
+
+filename = secure_filename(
+    audio.filename
+)
+
+if not filename:
+    filename = "audio.mp3"
+
+
+input_path = os.path.join(
+    job_upload_dir,
+    filename
+)
+
+audio.save(
+    input_path
+)
+
+
+jobs[job_id] = {
+    "progress": 0,
+    "status": "processing",
+    "vocals": None,
+    "drums": None,
+    "bass": None,
+    "guitar": None,
+    "piano": None,
+    "other": None,
+    "vocal_start": None,
+    "vocal_end": None,
+    "error": None
+}
+
+
+thread = threading.Thread(
+    target=run_demucs,
+    args=(
+        job_id,
+        input_path,
+        job_result_dir
+    ),
+    daemon=True
+)
+
+thread.start()
+
+
+return jsonify({
+    "job_id": job_id
+})
+========================================
+VOCAL START\END DETECTION
+========================================
 
 def detect_vocal_range(
-    vocals_path
+vocals_path
 ):
 
-    command = [
-        "ffmpeg",
-        "-hide_banner",
-        "-i",
-        vocals_path,
-        "-af",
-        "silencedetect=noise=-38dB:d=0.35",
-        "-f",
-        "null",
-        "-"
-    ]
+command = [
+    "ffmpeg",
+    "-hide_banner",
+    "-i",
+    vocals_path,
+    "-af",
+    "silencedetect=noise=-38dB:d=0.35",
+    "-f",
+    "null",
+    "-"
+]
 
-    process = subprocess.run(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        errors="replace"
+process = subprocess.run(
+    command,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    text=True,
+    errors="replace"
+)
+
+output = (
+    process.stdout
+    + "\n"
+    + process.stderr
+)
+
+
+silence_ends = [
+    float(value)
+    for value in re.findall(
+        r"silence_end:\s*([0-9.]+)",
+        output
     )
+]
 
-    output = (
-        process.stdout
-        + "\n"
-        + process.stderr
+
+silence_starts = [
+    float(value)
+    for value in re.findall(
+        r"silence_start:\s*([0-9.]+)",
+        output
     )
+]
 
 
-    silence_ends = [
-        float(value)
-        for value in re.findall(
-            r"silence_end:\s*([0-9.]+)",
-            output
-        )
-    ]
+vocal_start = (
+    silence_ends[0]
+    if silence_ends
+    else 0.0
+)
 
 
-    silence_starts = [
-        float(value)
-        for value in re.findall(
-            r"silence_start:\s*([0-9.]+)",
-            output
-        )
-    ]
+vocal_end = None
 
 
-    vocal_start = (
-        silence_ends[0]
-        if silence_ends
-        else 0.0
-    )
+for value in silence_starts:
+
+    if value > vocal_start:
+        vocal_end = value
 
 
-    vocal_end = None
-
-
-    for value in silence_starts:
-
-        if value > vocal_start:
-            vocal_end = value
-
-
-    return (
-        max(
-            0.0,
-            vocal_start
-        ),
-        vocal_end
-    )
-
-
-# ========================================
-# WHISPERX LYRICS
-# ========================================
+return (
+    max(
+        0.0,
+        vocal_start
+    ),
+    vocal_end
+)
+========================================
+WHISPERX LYRICS
+========================================
 
 def detect_lyrics(vocal_path):
 
-    import whisperx
-    import torch
+import whisperx
+import torch
+import unicodedata
 
-    device = (
-        "cuda"
-        if torch.cuda.is_available()
-        else "cpu"
+device = (
+    "cuda"
+    if torch.cuda.is_available()
+    else "cpu"
+)
+
+compute_type = (
+    "float16"
+    if device == "cuda"
+    else "int8"
+)
+
+print(
+    f"WhisperX: {device}, "
+    f"{compute_type}"
+)
+
+audio = whisperx.load_audio(
+    vocal_path
+)
+
+model = whisperx.load_model(
+    "small",
+    device,
+    compute_type=compute_type
+)
+
+# ========================================
+# TRANSCRIBE IN SHORT WINDOWS
+# ========================================
+
+sample_rate = 16000
+
+window_seconds = 12.0
+overlap_seconds = 2.0
+
+window_samples = int(
+    window_seconds
+    * sample_rate
+)
+
+overlap_samples = int(
+    overlap_seconds
+    * sample_rate
+)
+
+step_samples = (
+    window_samples
+    - overlap_samples
+)
+
+all_segments = []
+detected_languages = []
+
+audio_length = len(audio)
+start_sample = 0
+
+while start_sample < audio_length:
+
+    end_sample = min(
+        start_sample
+        + window_samples,
+        audio_length
     )
 
-    compute_type = (
-        "float16"
-        if device == "cuda"
-        else "int8"
+    audio_chunk = audio[
+        start_sample:end_sample
+    ]
+
+    chunk_result = model.transcribe(
+        audio_chunk,
+        batch_size=4
+    )
+
+    # ========================================
+    # RAW WHISPERX CHUNK DIAGNOSTICS
+    # ========================================
+
+    print()
+    print(
+        "========================================"
+    )
+    print(
+        "WHISPERX RAW CHUNK"
+    )
+    print(
+        "========================================"
     )
 
     print(
-        f"WhisperX: {device}, "
-        f"{compute_type}"
+        "WINDOW:",
+        f"{start_sample / sample_rate:.2f}",
+        "-",
+        f"{end_sample / sample_rate:.2f}"
     )
 
-    audio = whisperx.load_audio(
-        vocal_path
+    print(
+        "LANGUAGE:",
+        chunk_result.get(
+            "language"
+        )
     )
 
-    model = whisperx.load_model(
-        "small",
-        device,
-        compute_type=compute_type
+    for index, segment in enumerate(
+        chunk_result.get(
+            "segments",
+            []
+        )
+    ):
+
+        print(
+            f"{index:03d}",
+            f"{float(segment.get('start', 0)):.2f}",
+            "-",
+            f"{float(segment.get('end', 0)):.2f}",
+            repr(
+                segment.get(
+                    "text",
+                    ""
+                )
+            )
+        )
+
+    print(
+        "========================================"
+    )
+    print()
+
+    chunk_language = (
+        chunk_result.get(
+            "language"
+        )
+        or
+        None
     )
 
     # ========================================
-    # TRANSCRIBE IN SHORT WINDOWS
+    # DROP NN CHUNKS
     # ========================================
 
-    sample_rate = 16000
-
-    window_seconds = 12.0
-    overlap_seconds = 2.0
-
-    window_samples = int(
-        window_seconds
-        * sample_rate
-    )
-
-    overlap_samples = int(
-        overlap_seconds
-        * sample_rate
-    )
-
-    step_samples = (
-        window_samples
-        - overlap_samples
-    )
-
-    all_segments = []
-    detected_languages = []
-
-    audio_length = len(audio)
-    start_sample = 0
-
-    while start_sample < audio_length:
-
-        end_sample = min(
-            start_sample
-            + window_samples,
-            audio_length
-        )
-
-        audio_chunk = audio[
-            start_sample:end_sample
-        ]
-
-        chunk_result = model.transcribe(
-            audio_chunk,
-            batch_size=4
-        )
-
-        # ========================================
-        # RAW WHISPERX CHUNK DIAGNOSTICS
-        # ========================================
-
-        print()
-        print(
-            "========================================"
-        )
-        print(
-            "WHISPERX RAW CHUNK"
-        )
-        print(
-            "========================================"
-        )
+    if chunk_language == "nn":
 
         print(
-            "WINDOW:",
-            f"{start_sample / sample_rate:.2f}",
+            "SKIP LANGUAGE NN:",
+            f"WINDOW {start_sample / sample_rate:.2f}",
             "-",
             f"{end_sample / sample_rate:.2f}"
         )
-
-        print(
-            "LANGUAGE:",
-            chunk_result.get(
-                "language"
-            )
-        )
-
-        for index, segment in enumerate(
-            chunk_result.get(
-                "segments",
-                []
-            )
-        ):
-
-            print(
-                f"{index:03d}",
-                f"{float(segment.get('start', 0)):.2f}",
-                "-",
-                f"{float(segment.get('end', 0)):.2f}",
-                repr(
-                    segment.get(
-                        "text",
-                        ""
-                    )
-                )
-            )
-
-        print(
-            "========================================"
-        )
-        print()
-
-        chunk_language = (
-            chunk_result.get(
-                "language"
-            )
-            or
-            None
-        )
-
-        if chunk_language:
-
-            detected_languages.append(
-                chunk_language
-            )
-
-        offset_seconds = (
-            start_sample
-            / sample_rate
-        )
-
-        core_start = (
-            offset_seconds
-            if start_sample == 0
-            else
-            offset_seconds
-            + overlap_seconds / 2
-        )
-
-        core_end = (
-            end_sample
-            / sample_rate
-        )
-
-        if end_sample < audio_length:
-
-            core_end -= (
-                overlap_seconds
-                / 2
-            )
-
-        for segment in chunk_result.get(
-            "segments",
-            []
-        ):
-
-            segment_start = (
-                float(
-                    segment.get(
-                        "start",
-                        0
-                    )
-                )
-                + offset_seconds
-            )
-
-            segment_end = (
-                float(
-                    segment.get(
-                        "end",
-                        0
-                    )
-                )
-                + offset_seconds
-            )
-
-            midpoint = (
-                segment_start
-                + segment_end
-            ) / 2
-
-            if midpoint < core_start:
-                continue
-
-            if midpoint >= core_end:
-                continue
-
-            all_segments.append({
-                **segment,
-
-                "start":
-                    segment_start,
-
-                "end":
-                    segment_end
-            })
 
         if end_sample >= audio_length:
             break
@@ -469,32 +398,20 @@ def detect_lyrics(vocal_path):
             step_samples
         )
 
+        continue
+
     # ========================================
-    # MERGE OVERLAPPING WINDOWS
+    # DROP SYMBOL-GARBAGE SEGMENTS
     # ========================================
 
-    all_segments.sort(
-        key=lambda item: (
-            float(
-                item.get(
-                    "start",
-                    0
-                )
-            ),
-            float(
-                item.get(
-                    "end",
-                    0
-                )
-            )
-        )
-    )
+    filtered_segments = []
 
-    cleaned_segments = []
+    for segment in chunk_result.get(
+        "segments",
+        []
+    ):
 
-    for segment in all_segments:
-
-        text_value = str(
+        segment_text = str(
             segment.get(
                 "text",
                 ""
@@ -503,449 +420,594 @@ def detect_lyrics(vocal_path):
             ""
         ).strip()
 
-        if not text_value:
+        if not segment_text:
             continue
 
-        segment_start = float(
-            segment.get(
+        # ----------------------------------------
+        # RULE 1:
+        # SAME UNICODE SYMBOL REPEATED 2+ TIMES,
+        # IGNORING SPACES / PUNCTUATION
+        # ----------------------------------------
+
+        content_symbols = "".join(
+            char
+            for char in segment_text
+            if (
+                not char.isspace()
+                and
+                not unicodedata.category(
+                    char
+                ).startswith("P")
+            )
+        )
+
+        same_symbol_repetition = (
+            len(content_symbols) >= 2
+            and
+            len(set(content_symbols)) == 1
+        )
+
+        # ----------------------------------------
+        # RULE 2:
+        # SEQUENCE OF DIACRITIC UNICODE SYMBOLS.
+        # THEY MAY BE ADJACENT OR SEPARATED BY
+        # SPACES / PUNCTUATION.
+        # DIACRITICS INSIDE NORMAL WORDS STAY.
+        # ----------------------------------------
+
+        non_separator_symbols = [
+            char
+            for char in segment_text
+            if (
+                not char.isspace()
+                and
+                not unicodedata.category(
+                    char
+                ).startswith("P")
+            )
+        ]
+
+        single_diacritic_sequence = False
+
+        if len(non_separator_symbols) >= 2:
+
+            all_diacritic = all(
+                len(
+                    unicodedata.normalize(
+                        "NFD",
+                        char
+                    )
+                ) > 1
+                for char in non_separator_symbols
+            )
+
+            if all_diacritic:
+                single_diacritic_sequence = True
+
+        if (
+            same_symbol_repetition
+            or
+            single_diacritic_sequence
+        ):
+
+            print(
+                "SKIP SYMBOL GARBAGE:",
+                repr(
+                    segment_text
+                )
+            )
+
+            continue
+
+        filtered_segments.append(
+            segment
+        )
+
+    chunk_result["segments"] = (
+        filtered_segments
+    )
+
+    detected_languages.append(
+        chunk_language
+    )
+
+    offset_seconds = (
+        start_sample
+        / sample_rate
+    )
+
+    core_start = (
+        offset_seconds
+        if start_sample == 0
+        else
+        offset_seconds
+        + overlap_seconds / 2
+    )
+
+    core_end = (
+        end_sample
+        / sample_rate
+    )
+
+    if end_sample < audio_length:
+
+        core_end -= (
+            overlap_seconds
+            / 2
+        )
+
+    for segment in chunk_result.get(
+        "segments",
+        []
+    ):
+
+        segment_start = (
+            float(
+                segment.get(
+                    "start",
+                    0
+                )
+            )
+            + offset_seconds
+        )
+
+        segment_end = (
+            float(
+                segment.get(
+                    "end",
+                    0
+                )
+            )
+            + offset_seconds
+        )
+
+        midpoint = (
+            segment_start
+            + segment_end
+        ) / 2
+
+        if midpoint < core_start:
+            continue
+
+        if midpoint >= core_end:
+            continue
+
+        all_segments.append({
+            **segment,
+
+            "start":
+                segment_start,
+
+            "end":
+                segment_end
+        })
+
+    if end_sample >= audio_length:
+        break
+
+    start_sample += (
+        step_samples
+    )
+
+# ========================================
+# MERGE OVERLAPPING WINDOWS
+# ========================================
+
+all_segments.sort(
+    key=lambda item: (
+        float(
+            item.get(
+                "start",
+                0
+            )
+        ),
+        float(
+            item.get(
+                "end",
+                0
+            )
+        )
+    )
+)
+
+cleaned_segments = []
+
+for segment in all_segments:
+
+    text_value = str(
+        segment.get(
+            "text",
+            ""
+        )
+        or
+        ""
+    ).strip()
+
+    if not text_value:
+        continue
+
+    segment_start = float(
+        segment.get(
+            "start",
+            0
+        )
+    )
+
+    segment_end = float(
+        segment.get(
+            "end",
+            segment_start
+        )
+    )
+
+    if segment_end <= segment_start:
+        continue
+
+    if cleaned_segments:
+
+        previous = cleaned_segments[-1]
+
+        previous_start = float(
+            previous.get(
                 "start",
                 0
             )
         )
 
-        segment_end = float(
-            segment.get(
+        previous_end = float(
+            previous.get(
                 "end",
-                segment_start
+                previous_start
             )
         )
 
-        if segment_end <= segment_start:
+        previous_text = str(
+            previous.get(
+                "text",
+                ""
+            )
+            or
+            ""
+        ).strip()
+
+        # Полный повтор того же сегмента
+        # из соседнего окна.
+        if (
+            text_value == previous_text
+            and
+            abs(
+                segment_start
+                - previous_start
+            ) < 3.0
+        ):
             continue
 
-        if cleaned_segments:
+        # Сегмент целиком оказался внутри
+        # уже принятого временного участка.
+        if (
+            segment_start
+            < previous_end
+            and
+            segment_end
+            <= previous_end
+        ):
+            continue
 
-            previous = cleaned_segments[-1]
+        # Частичное перекрытие двух окон.
+        # Не даём следующему сегменту
+        # начинаться раньше предыдущего.
+        if segment_start < previous_end:
 
-            previous_start = float(
-                previous.get(
-                    "start",
-                    0
-                )
-            )
-
-            previous_end = float(
-                previous.get(
-                    "end",
-                    previous_start
-                )
-            )
-
-            previous_text = str(
-                previous.get(
-                    "text",
-                    ""
-                )
-                or
-                ""
-            ).strip()
-
-            # Полный повтор того же сегмента
-            # из соседнего окна.
-            if (
-                text_value == previous_text
-                and
-                abs(
-                    segment_start
-                    - previous_start
-                ) < 3.0
-            ):
-                continue
-
-            # Сегмент целиком оказался внутри
-            # уже принятого временного участка.
-            if (
-                segment_start
-                < previous_end
-                and
-                segment_end
-                <= previous_end
-            ):
-                continue
-
-            # Частичное перекрытие двух окон.
-            # Не даём следующему сегменту
-            # начинаться раньше предыдущего.
-            if segment_start < previous_end:
-
-                segment = {
-                    **segment,
-                    "start":
-                        previous_end
-                }
-
-                segment_start = (
+            segment = {
+                **segment,
+                "start":
                     previous_end
-                )
+            }
 
-                if (
-                    segment_end
-                    <= segment_start
-                ):
-                    continue
+            segment_start = (
+                previous_end
+            )
 
-        cleaned_segments.append(
-            segment
+            if (
+                segment_end
+                <= segment_start
+            ):
+                continue
+
+    cleaned_segments.append(
+        segment
+    )
+
+# ========================================
+# LANGUAGE
+# ========================================
+
+if detected_languages:
+
+    language = max(
+        set(
+            detected_languages
+        ),
+        key=detected_languages.count
+    )
+
+else:
+
+    language = "en"
+
+
+supported_languages = {
+    "ru",
+    "en",
+    "it",
+    "es",
+    "fr",
+    "uk"
+}
+
+
+raw_result = {
+    "language":
+        language,
+
+    "segments":
+        cleaned_segments
+}
+
+
+if language not in supported_languages:
+
+    raw_text = " ".join(
+        str(
+            segment.get(
+                "text",
+                ""
+            )
+            or
+            ""
         )
-
-    # ========================================
-    # LANGUAGE
-    # ========================================
-
-    if detected_languages:
-
-        language = max(
-            set(
-                detected_languages
-            ),
-            key=detected_languages.count
+        for segment
+        in raw_result.get(
+            "segments",
+            []
         )
+    ).lower()
+
+    if re.search(
+        r"[ІіЇїЄєҐґ]",
+        raw_text
+    ):
+
+        language = "uk"
+
+    elif re.search(
+        r"[А-Яа-яЁё]",
+        raw_text
+    ):
+
+        language = "ru"
 
     else:
 
-        language = "en"
+        padded_text = (
+            " "
+            + raw_text
+            + " "
+        )
 
+        language_markers = {
 
-    supported_languages = {
-        "ru",
-        "en",
-        "it",
-        "es",
-        "fr",
-        "uk"
-    }
+            "it": [
+                " che ",
+                " non ",
+                " per ",
+                " con ",
+                " sono ",
+                " sei ",
+                " amore ",
+                " mio ",
+                " mia ",
+                " come ",
+                " una ",
+                " il ",
+                " gli "
+            ],
 
+            "es": [
+                " que ",
+                " para ",
+                " con ",
+                " soy ",
+                " eres ",
+                " amor ",
+                " mi ",
+                " como ",
+                " una ",
+                " el ",
+                " los "
+            ],
 
-    raw_result = {
-        "language":
-            language,
+            "fr": [
+                " je ",
+                " tu ",
+                " pas ",
+                " pour ",
+                " avec ",
+                " suis ",
+                " amour ",
+                " mon ",
+                " ma ",
+                " une ",
+                " le ",
+                " les "
+            ],
 
-        "segments":
-            cleaned_segments
-    }
+            "en": [
+                " the ",
+                " i ",
+                " you ",
+                " and ",
+                " with ",
+                " my ",
+                " love ",
+                " is ",
+                " are ",
+                " to ",
+                " of ",
+                " for "
+            ]
+        }
 
-
-    if language not in supported_languages:
-
-        raw_text = " ".join(
-            str(
-                segment.get(
-                    "text",
-                    ""
+        language_scores = {
+            code:
+                sum(
+                    padded_text.count(
+                        marker
+                    )
+                    for marker
+                    in markers
                 )
-                or
+            for code, markers
+            in language_markers.items()
+        }
+
+        language = max(
+            language_scores,
+            key=language_scores.get
+        )
+
+        if (
+            language_scores[
+                language
+            ]
+            == 0
+        ):
+            language = "en"
+
+raw_result["language"] = (
+    language
+)
+
+# ========================================
+# RAW DIAGNOSTICS
+# ========================================
+
+print()
+print(
+    "========================================"
+)
+print(
+    "RAW WHISPER"
+)
+print(
+    "========================================"
+)
+
+for index, segment in enumerate(
+    raw_result.get(
+        "segments",
+        []
+    )
+):
+
+    print(
+        f"{index:03d}",
+        f"{float(segment.get('start', 0)):.2f}",
+        "-",
+        f"{float(segment.get('end', 0)):.2f}",
+        repr(
+            segment.get(
+                "text",
                 ""
             )
-            for segment
-            in raw_result.get(
-                "segments",
-                []
-            )
-        ).lower()
-
-        if re.search(
-            r"[ІіЇїЄєҐґ]",
-            raw_text
-        ):
-
-            language = "uk"
-
-        elif re.search(
-            r"[А-Яа-яЁё]",
-            raw_text
-        ):
-
-            language = "ru"
-
-        else:
-
-            padded_text = (
-                " "
-                + raw_text
-                + " "
-            )
-
-            language_markers = {
-
-                "it": [
-                    " che ",
-                    " non ",
-                    " per ",
-                    " con ",
-                    " sono ",
-                    " sei ",
-                    " amore ",
-                    " mio ",
-                    " mia ",
-                    " come ",
-                    " una ",
-                    " il ",
-                    " gli "
-                ],
-
-                "es": [
-                    " que ",
-                    " para ",
-                    " con ",
-                    " soy ",
-                    " eres ",
-                    " amor ",
-                    " mi ",
-                    " como ",
-                    " una ",
-                    " el ",
-                    " los "
-                ],
-
-                "fr": [
-                    " je ",
-                    " tu ",
-                    " pas ",
-                    " pour ",
-                    " avec ",
-                    " suis ",
-                    " amour ",
-                    " mon ",
-                    " ma ",
-                    " une ",
-                    " le ",
-                    " les "
-                ],
-
-                "en": [
-                    " the ",
-                    " i ",
-                    " you ",
-                    " and ",
-                    " with ",
-                    " my ",
-                    " love ",
-                    " is ",
-                    " are ",
-                    " to ",
-                    " of ",
-                    " for "
-                ]
-            }
-
-            language_scores = {
-                code:
-                    sum(
-                        padded_text.count(
-                            marker
-                        )
-                        for marker
-                        in markers
-                    )
-                for code, markers
-                in language_markers.items()
-            }
-
-            language = max(
-                language_scores,
-                key=language_scores.get
-            )
-
-            if (
-                language_scores[
-                    language
-                ]
-                == 0
-            ):
-                language = "en"
-
-    raw_result["language"] = (
-        language
-    )
-
-    # ========================================
-    # RAW DIAGNOSTICS
-    # ========================================
-
-    print()
-    print(
-        "========================================"
-    )
-    print(
-        "RAW WHISPER"
-    )
-    print(
-        "========================================"
-    )
-
-    for index, segment in enumerate(
-        raw_result.get(
-            "segments",
-            []
-        )
-    ):
-
-        print(
-            f"{index:03d}",
-            f"{float(segment.get('start', 0)):.2f}",
-            "-",
-            f"{float(segment.get('end', 0)):.2f}",
-            repr(
-                segment.get(
-                    "text",
-                    ""
-                )
-            )
-        )
-
-    print(
-        "========================================"
-    )
-    print()
-
-    # ========================================
-    # ALIGN
-    # ========================================
-
-    align_model, metadata = (
-        whisperx.load_align_model(
-            language_code=language,
-            device=device
         )
     )
 
-    aligned_result = whisperx.align(
-        raw_result["segments"],
-        align_model,
-        metadata,
-        audio,
-        device,
-        return_char_alignments=False
+print(
+    "========================================"
+)
+print()
+
+# ========================================
+# ALIGN
+# ========================================
+
+align_model, metadata = (
+    whisperx.load_align_model(
+        language_code=language,
+        device=device
     )
+)
 
-    print()
-    print(
-        "========================================"
-    )
-    print(
-        "ALIGNED WHISPER"
-    )
-    print(
-        "========================================"
-    )
+aligned_result = whisperx.align(
+    raw_result["segments"],
+    align_model,
+    metadata,
+    audio,
+    device,
+    return_char_alignments=False
+)
 
-    for index, segment in enumerate(
-        aligned_result.get(
-            "segments",
-            []
-        )
-    ):
+print()
+print(
+    "========================================"
+)
+print(
+    "ALIGNED WHISPER"
+)
+print(
+    "========================================"
+)
 
-        print(
-            f"{index:03d}",
-            f"{float(segment.get('start', 0)):.2f}",
-            "-",
-            f"{float(segment.get('end', 0)):.2f}",
-            repr(
-                segment.get(
-                    "text",
-                    ""
-                )
-            )
-        )
-
-    print(
-        "========================================"
-    )
-    print()
-
-    # ========================================
-    # COLLECT WORD TIMINGS
-    # ========================================
-
-    raw_words = []
-
-    for segment in aligned_result.get(
+for index, segment in enumerate(
+    aligned_result.get(
         "segments",
+        []
+    )
+):
+
+    print(
+        f"{index:03d}",
+        f"{float(segment.get('start', 0)):.2f}",
+        "-",
+        f"{float(segment.get('end', 0)):.2f}",
+        repr(
+            segment.get(
+                "text",
+                ""
+            )
+        )
+    )
+
+print(
+    "========================================"
+)
+print()
+
+# ========================================
+# COLLECT WORD TIMINGS
+# ========================================
+
+raw_words = []
+
+for segment in aligned_result.get(
+    "segments",
+    []
+):
+
+    for word in segment.get(
+        "words",
         []
     ):
 
-        for word in segment.get(
-            "words",
-            []
+        if (
+            "start" not in word
+            or
+            "end" not in word
         ):
+            continue
 
-            if (
-                "start" not in word
-                or
-                "end" not in word
-            ):
-                continue
-
-            word_text = (
-                word.get(
-                    "word",
-                    ""
-                )
-                or
-                ""
-            ).strip()
-
-            if not word_text:
-                continue
-
-            start = float(
-                word["start"]
-            )
-
-            end = float(
-                word["end"]
-            )
-
-            if end <= start:
-                continue
-
-            raw_words.append({
-                "word":
-                    word_text,
-
-                "start":
-                    start,
-
-                "end":
-                    end
-            })
-
-    # ========================================
-    # SORT WORDS BY REAL TIME
-    # ========================================
-
-    raw_words.sort(
-        key=lambda item: (
-            float(
-                item["start"]
-            ),
-            float(
-                item["end"]
-            )
-        )
-    )
-
-    # ========================================
-    # REMOVE TEMPORAL DUPLICATES
-    # WITHOUT LOSING NEW WORDS
-    # ========================================
-
-    words = []
-
-    for word in raw_words:
-
-        word_text = str(
+        word_text = (
             word.get(
                 "word",
                 ""
@@ -954,6 +1016,9 @@ def detect_lyrics(vocal_path):
             ""
         ).strip()
 
+        if not word_text:
+            continue
+
         start = float(
             word["start"]
         )
@@ -965,495 +1030,316 @@ def detect_lyrics(vocal_path):
         if end <= start:
             continue
 
-        duplicate = False
-
-        # Проверяем только несколько
-        # последних слов — дубли окон
-        # всегда находятся рядом по времени.
-        for previous in reversed(
-            words[-8:]
-        ):
-
-            previous_start = float(
-                previous["start"]
-            )
-
-            previous_end = float(
-                previous["end"]
-            )
-
-            if (
-                start
-                - previous_end
-                > 2.0
-            ):
-                break
-
-            same_text = (
-                word_text.lower()
-                ==
-                str(
-                    previous.get(
-                        "word",
-                        ""
-                    )
-                ).strip().lower()
-            )
-
-            overlap_start = max(
-                start,
-                previous_start
-            )
-
-            overlap_end = min(
-                end,
-                previous_end
-            )
-
-            overlap = max(
-                0.0,
-                overlap_end
-                - overlap_start
-            )
-
-            word_duration = max(
-                0.001,
-                end - start
-            )
-
-            previous_duration = max(
-                0.001,
-                previous_end
-                - previous_start
-            )
-
-            overlap_ratio = (
-                overlap
-                /
-                min(
-                    word_duration,
-                    previous_duration
-                )
-            )
-
-            if (
-                same_text
-                and
-                overlap_ratio >= 0.5
-            ):
-
-                duplicate = True
-                break
-
-        if duplicate:
-            continue
-
-        words.append({
+        raw_words.append({
             "word":
                 word_text,
 
             "start":
-                round(
-                    start,
-                    3
-                ),
+                start,
 
             "end":
-                round(
-                    end,
-                    3
-                )
+                end
         })
 
-    # ========================================
-    # GUARANTEE MONOTONIC WORD TIMINGS
-    # ========================================
+# ========================================
+# SORT WORDS BY REAL TIME
+# ========================================
 
-    normalized_words = []
-
-    last_start = -1.0
-
-    for word in words:
-
-        start = float(
-            word["start"]
+raw_words.sort(
+    key=lambda item: (
+        float(
+            item["start"]
+        ),
+        float(
+            item["end"]
         )
+    )
+)
 
-        end = float(
-            word["end"]
-        )
+# ========================================
+# REMOVE TEMPORAL DUPLICATES
+# WITHOUT LOSING NEW WORDS
+# ========================================
 
-        if start < last_start:
-            start = last_start
+words = []
 
-        if end <= start:
-            continue
+for word in raw_words:
 
-        normalized_words.append({
-            "word":
-                word["word"],
-
-            "start":
-                round(
-                    start,
-                    3
-                ),
-
-            "end":
-                round(
-                    end,
-                    3
-                )
-        })
-
-        last_start = start
-
-    words = normalized_words
-
-    # ========================================
-    # TEXT
-    # ========================================
-
-    text = " ".join(
-        segment.get(
-            "text",
+    word_text = str(
+        word.get(
+            "word",
             ""
-        ).strip()
-        for segment
-        in aligned_result.get(
-            "segments",
-            []
         )
+        or
+        ""
     ).strip()
 
-    return {
-        "language":
-            language,
+    start = float(
+        word["start"]
+    )
 
-        "text":
-            text,
+    end = float(
+        word["end"]
+    )
 
-        "words":
-            words
-    }
+    if end <= start:
+        continue
 
+    duplicate = False
+
+    # Проверяем только несколько
+    # последних слов — дубли окон
+    # всегда находятся рядом по времени.
+    for previous in reversed(
+        words[-8:]
+    ):
+
+        previous_start = float(
+            previous["start"]
+        )
+
+        previous_end = float(
+            previous["end"]
+        )
+
+        if (
+            start
+            - previous_end
+            > 2.0
+        ):
+            break
+
+        same_text = (
+            word_text.lower()
+            ==
+            str(
+                previous.get(
+                    "word",
+                    ""
+                )
+            ).strip().lower()
+        )
+
+        overlap_start = max(
+            start,
+            previous_start
+        )
+
+        overlap_end = min(
+            end,
+            previous_end
+        )
+
+        overlap = max(
+            0.0,
+            overlap_end
+            - overlap_start
+        )
+
+        word_duration = max(
+            0.001,
+            end - start
+        )
+
+        previous_duration = max(
+            0.001,
+            previous_end
+            - previous_start
+        )
+
+        overlap_ratio = (
+            overlap
+            /
+            min(
+                word_duration,
+                previous_duration
+            )
+        )
+
+        if (
+            same_text
+            and
+            overlap_ratio >= 0.5
+        ):
+
+            duplicate = True
+            break
+
+    if duplicate:
+        continue
+
+    words.append({
+        "word":
+            word_text,
+
+        "start":
+            round(
+                start,
+                3
+            ),
+
+        "end":
+            round(
+                end,
+                3
+            )
+    })
 
 # ========================================
-# DEMUCS PROCESS
+# GUARANTEE MONOTONIC WORD TIMINGS
 # ========================================
+
+normalized_words = []
+
+last_start = -1.0
+
+for word in words:
+
+    start = float(
+        word["start"]
+    )
+
+    end = float(
+        word["end"]
+    )
+
+    if start < last_start:
+        start = last_start
+
+    if end <= start:
+        continue
+
+    normalized_words.append({
+        "word":
+            word["word"],
+
+        "start":
+            round(
+                start,
+                3
+            ),
+
+        "end":
+            round(
+                end,
+                3
+            )
+    })
+
+    last_start = start
+
+words = normalized_words
+
+# ========================================
+# TEXT
+# ========================================
+
+text = " ".join(
+    segment.get(
+        "text",
+        ""
+    ).strip()
+    for segment
+    in aligned_result.get(
+        "segments",
+        []
+    )
+).strip()
+
+return {
+    "language":
+        language,
+
+    "text":
+        text,
+
+    "words":
+        words
+}
+========================================
+DEMUCS PROCESS
+========================================
 
 def run_demucs(
-    job_id,
-    input_path,
-    job_result_dir
+job_id,
+input_path,
+job_result_dir
 ):
 
-    command = [
+command = [
 
-        sys.executable,
-        "-m",
-        "demucs",
+    sys.executable,
+    "-m",
+    "demucs",
 
-        "-n",
-        "htdemucs_6s",
+    "-n",
+    "htdemucs_6s",
 
-        "--mp3",
+    "--mp3",
 
-        "-o",
-        job_result_dir,
+    "-o",
+    job_result_dir,
 
-        input_path
-    ]
+    input_path
+]
 
 
-    try:
+try:
 
-        process = subprocess.Popen(
+    process = subprocess.Popen(
 
-            command,
+        command,
 
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
 
-            text=True,
+        text=True,
 
-            bufsize=1
-        )
+        bufsize=1
+    )
 
 
-        # ========================================
-        # READ DEMUCS OUTPUT
-        # ========================================
+    # ========================================
+    # READ DEMUCS OUTPUT
+    # ========================================
 
-        for line in process.stdout:
-
-            print(
-                line,
-                end=""
-            )
-
-            matches = re.findall(
-                r"(\d{1,3})%",
-                line
-            )
-
-            if matches:
-
-                percent = int(
-                    matches[-1]
-                )
-
-                percent = max(
-                    0,
-                    min(
-                        100,
-                        percent
-                    )
-                )
-
-                jobs[
-                    job_id
-                ][
-                    "progress"
-                ] = percent
-
-
-        process.wait()
-
-
-        if process.returncode != 0:
-
-            jobs[
-                job_id
-            ][
-                "status"
-            ] = "error"
-
-            jobs[
-                job_id
-            ][
-                "error"
-            ] = (
-                "Demucs process failed"
-            )
-
-            return
-
-
-        # ========================================
-        # FIND DEMUCS OUTPUT
-        # ========================================
-
-        model_dir = os.path.join(
-            job_result_dir,
-            "htdemucs_6s"
-        )
-
-
-        song_dirs = [
-
-            directory
-
-            for directory
-            in os.listdir(
-                model_dir
-            )
-
-            if os.path.isdir(
-
-                os.path.join(
-                    model_dir,
-                    directory
-                )
-            )
-        ]
-
-
-        if not song_dirs:
-
-            raise Exception(
-                "Demucs output not found"
-            )
-
-
-        song_dir = os.path.join(
-            model_dir,
-            song_dirs[0]
-        )
-
-
-        stem_names = [
-            "vocals",
-            "drums",
-            "bass",
-            "guitar",
-            "piano",
-            "other"
-        ]
-
-
-        stem_targets = {}
-
-
-        for stem_name in stem_names:
-
-            source_path = (
-                os.path.join(
-                    song_dir,
-                    f"{stem_name}.mp3"
-                )
-            )
-
-            target_path = (
-                os.path.join(
-                    job_result_dir,
-                    f"{stem_name}.mp3"
-                )
-            )
-
-            if not os.path.isfile(
-                source_path
-            ):
-
-                raise Exception(
-                    f"Demucs stem not found: "
-                    f"{stem_name}"
-                )
-
-            shutil.copy(
-                source_path,
-                target_path
-            )
-
-            stem_targets[
-                stem_name
-            ] = target_path
-
-        # ========================================
-        # DETECT VOCAL START / END
-        # ========================================
-
-        (
-            vocal_start,
-            vocal_end
-        ) = detect_vocal_range(
-            stem_targets[
-                "vocals"
-            ]
-        )
-
-
-        # ========================================
-        # DETECT LYRICS
-        # ========================================
-
-        lyrics = detect_lyrics(
-            stem_targets[
-                "vocals"
-            ]
-        )
-
-
-        # ========================================
-        # JOB COMPLETE
-        # ========================================
-
-        jobs[
-            job_id
-        ][
-            "progress"
-        ] = 100
-
-        jobs[
-            job_id
-        ][
-            "status"
-        ] = "done"
-
-
-        jobs[
-            job_id
-        ][
-            "vocals"
-        ] = (
-            f"/results/"
-            f"{job_id}/"
-            f"vocals.mp3"
-        )
-
-        jobs[
-            job_id
-        ][
-            "drums"
-        ] = (
-            f"/results/"
-            f"{job_id}/"
-            f"drums.mp3"
-        )
-
-        jobs[
-            job_id
-        ][
-            "bass"
-        ] = (
-            f"/results/"
-            f"{job_id}/"
-            f"bass.mp3"
-        )
-
-        jobs[
-            job_id
-        ][
-            "guitar"
-        ] = (
-            f"/results/"
-            f"{job_id}/"
-            f"guitar.mp3"
-        )
-
-        jobs[
-            job_id
-        ][
-            "piano"
-        ] = (
-            f"/results/"
-            f"{job_id}/"
-            f"piano.mp3"
-        )
-
-        jobs[
-            job_id
-        ][
-            "other"
-        ] = (
-            f"/results/"
-            f"{job_id}/"
-            f"other.mp3"
-        )
-
-        jobs[
-            job_id
-        ][
-            "vocal_start"
-        ] = vocal_start
-
-        jobs[
-            job_id
-        ][
-            "vocal_end"
-        ] = vocal_end
-
-        jobs[
-            job_id
-        ][
-            "lyrics"
-        ] = lyrics
-
-    except Exception as error:
+    for line in process.stdout:
 
         print(
-            error
+            line,
+            end=""
         )
+
+        matches = re.findall(
+            r"(\d{1,3})%",
+            line
+        )
+
+        if matches:
+
+            percent = int(
+                matches[-1]
+            )
+
+            percent = max(
+                0,
+                min(
+                    100,
+                    percent
+                )
+            )
+
+            jobs[
+                job_id
+            ][
+                "progress"
+            ] = percent
+
+
+    process.wait()
+
+
+    if process.returncode != 0:
 
         jobs[
             job_id
@@ -1465,1236 +1351,1445 @@ def run_demucs(
             job_id
         ][
             "error"
-        ] = str(
-            error
+        ] = (
+            "Demucs process failed"
+        )
+
+        return
+
+
+    # ========================================
+    # FIND DEMUCS OUTPUT
+    # ========================================
+
+    model_dir = os.path.join(
+        job_result_dir,
+        "htdemucs_6s"
+    )
+
+
+    song_dirs = [
+
+        directory
+
+        for directory
+        in os.listdir(
+            model_dir
+        )
+
+        if os.path.isdir(
+
+            os.path.join(
+                model_dir,
+                directory
+            )
+        )
+    ]
+
+
+    if not song_dirs:
+
+        raise Exception(
+            "Demucs output not found"
         )
 
 
-# ========================================
-# PROCESS PROGRESS
-# ========================================
-
-@app.route(
-    "/progress/<job_id>"
-)
-def progress(
-    job_id
-):
-
-    if job_id not in jobs:
-
-        return jsonify({
-            "error":
-                "Job not found"
-        }), 404
+    song_dir = os.path.join(
+        model_dir,
+        song_dirs[0]
+    )
 
 
-    return jsonify(
-        jobs[
-            job_id
+    stem_names = [
+        "vocals",
+        "drums",
+        "bass",
+        "guitar",
+        "piano",
+        "other"
+    ]
+
+
+    stem_targets = {}
+
+
+    for stem_name in stem_names:
+
+        source_path = (
+            os.path.join(
+                song_dir,
+                f"{stem_name}.mp3"
+            )
+        )
+
+        target_path = (
+            os.path.join(
+                job_result_dir,
+                f"{stem_name}.mp3"
+            )
+        )
+
+        if not os.path.isfile(
+            source_path
+        ):
+
+            raise Exception(
+                f"Demucs stem not found: "
+                f"{stem_name}"
+            )
+
+        shutil.copy(
+            source_path,
+            target_path
+        )
+
+        stem_targets[
+            stem_name
+        ] = target_path
+
+    # ========================================
+    # DETECT VOCAL START / END
+    # ========================================
+
+    (
+        vocal_start,
+        vocal_end
+    ) = detect_vocal_range(
+        stem_targets[
+            "vocals"
         ]
     )
 
 
-# ========================================
-# RESULT FILES
-# ========================================
+    # ========================================
+    # DETECT LYRICS
+    # ========================================
+
+    lyrics = detect_lyrics(
+        stem_targets[
+            "vocals"
+        ]
+    )
+
+
+    # ========================================
+    # JOB COMPLETE
+    # ========================================
+
+    jobs[
+        job_id
+    ][
+        "progress"
+    ] = 100
+
+    jobs[
+        job_id
+    ][
+        "status"
+    ] = "done"
+
+
+    jobs[
+        job_id
+    ][
+        "vocals"
+    ] = (
+        f"/results/"
+        f"{job_id}/"
+        f"vocals.mp3"
+    )
+
+    jobs[
+        job_id
+    ][
+        "drums"
+    ] = (
+        f"/results/"
+        f"{job_id}/"
+        f"drums.mp3"
+    )
+
+    jobs[
+        job_id
+    ][
+        "bass"
+    ] = (
+        f"/results/"
+        f"{job_id}/"
+        f"bass.mp3"
+    )
+
+    jobs[
+        job_id
+    ][
+        "guitar"
+    ] = (
+        f"/results/"
+        f"{job_id}/"
+        f"guitar.mp3"
+    )
+
+    jobs[
+        job_id
+    ][
+        "piano"
+    ] = (
+        f"/results/"
+        f"{job_id}/"
+        f"piano.mp3"
+    )
+
+    jobs[
+        job_id
+    ][
+        "other"
+    ] = (
+        f"/results/"
+        f"{job_id}/"
+        f"other.mp3"
+    )
+
+    jobs[
+        job_id
+    ][
+        "vocal_start"
+    ] = vocal_start
+
+    jobs[
+        job_id
+    ][
+        "vocal_end"
+    ] = vocal_end
+
+    jobs[
+        job_id
+    ][
+        "lyrics"
+    ] = lyrics
+
+except Exception as error:
+
+    print(
+        error
+    )
+
+    jobs[
+        job_id
+    ][
+        "status"
+    ] = "error"
+
+    jobs[
+        job_id
+    ][
+        "error"
+    ] = str(
+        error
+    )
+========================================
+PROCESS PROGRESS
+========================================
 
 @app.route(
-    "/results/<job_id>/<filename>"
+"/progress/<job_id>"
 )
-def result_file(
-    job_id,
-    filename
+def progress(
+job_id
 ):
 
-    folder = os.path.join(
-        RESULT_DIR,
+if job_id not in jobs:
+
+    return jsonify({
+        "error":
+            "Job not found"
+    }), 404
+
+
+return jsonify(
+    jobs[
         job_id
-    )
+    ]
+)
+========================================
+RESULT FILES
+========================================
+
+@app.route(
+"/results/<job_id>/<filename>"
+)
+def result_file(
+job_id,
+filename
+):
+
+folder = os.path.join(
+    RESULT_DIR,
+    job_id
+)
 
 
-    return send_from_directory(
-        folder,
-        filename
-    )
-
-
-# ========================================
-# AUDIO EXPORT
-# ========================================
+return send_from_directory(
+    folder,
+    filename
+)
+========================================
+AUDIO EXPORT
+========================================
 
 def find_ffmpeg():
 
-    ffmpeg = shutil.which(
-        "ffmpeg"
-    )
+ffmpeg = shutil.which(
+    "ffmpeg"
+)
 
 
-    if ffmpeg:
+if ffmpeg:
 
-        return ffmpeg
-
-
-    local_app_data = os.environ.get(
-        "LOCALAPPDATA",
-        ""
-    )
+    return ffmpeg
 
 
-    candidates = [
-
-        os.path.join(
-            local_app_data,
-            "Microsoft",
-            "WinGet",
-            "Links",
-            "ffmpeg.exe"
-        )
-
-    ]
+local_app_data = os.environ.get(
+    "LOCALAPPDATA",
+    ""
+)
 
 
-    package_pattern = os.path.join(
+candidates = [
+
+    os.path.join(
         local_app_data,
         "Microsoft",
         "WinGet",
-        "Packages",
-        "*FFmpeg*",
-        "**",
+        "Links",
         "ffmpeg.exe"
     )
 
+]
 
-    candidates.extend(
-        glob.glob(
-            package_pattern,
-            recursive=True
-        )
+
+package_pattern = os.path.join(
+    local_app_data,
+    "Microsoft",
+    "WinGet",
+    "Packages",
+    "*FFmpeg*",
+    "**",
+    "ffmpeg.exe"
+)
+
+
+candidates.extend(
+    glob.glob(
+        package_pattern,
+        recursive=True
     )
+)
 
 
-    for candidate in candidates:
+for candidate in candidates:
 
-        if os.path.isfile(
-            candidate
-        ):
+    if os.path.isfile(
+        candidate
+    ):
 
-            return candidate
+        return candidate
 
 
-    return None
-
+return None
 
 @app.route(
-    "/export-audio",
-    methods=["POST"]
+"/export-audio",
+methods=["POST"]
 )
 def export_audio():
 
-    if "audio" not in request.files:
+if "audio" not in request.files:
 
-        return jsonify({
-            "error":
-                "Audio file not received"
-        }), 400
+    return jsonify({
+        "error":
+            "Audio file not received"
+    }), 400
 
 
-    audio = request.files[
+audio = request.files[
+    "audio"
+]
+
+
+export_format = (
+    request.form
+    .get(
+        "format",
+        ""
+    )
+    .lower()
+)
+
+
+allowed_formats = {
+    "wav",
+    "mp3",
+    "flac",
+    "m4a"
+}
+
+
+if export_format not in allowed_formats:
+
+    return jsonify({
+        "error":
+            "Unsupported export format"
+    }), 400
+
+
+track_name = secure_filename(
+    request.form.get(
+        "track",
         "audio"
-    ]
+    )
+)
 
 
-    export_format = (
-        request.form
-        .get(
-            "format",
-            ""
+start_value = request.form.get(
+    "start"
+)
+
+
+end_value = request.form.get(
+    "end"
+)
+
+
+start_time = None
+end_time = None
+
+
+try:
+
+    if start_value is not None:
+
+        start_time = float(
+            start_value
         )
-        .lower()
-    )
 
 
-    allowed_formats = {
-        "wav",
-        "mp3",
-        "flac",
-        "m4a"
-    }
+    if end_value is not None:
 
-
-    if export_format not in allowed_formats:
-
-        return jsonify({
-            "error":
-                "Unsupported export format"
-        }), 400
-
-
-    track_name = secure_filename(
-        request.form.get(
-            "track",
-            "audio"
+        end_time = float(
+            end_value
         )
-    )
 
 
-    start_value = request.form.get(
-        "start"
-    )
+except ValueError:
+
+    return jsonify({
+        "error":
+            "Invalid selection time"
+    }), 400
 
 
-    end_value = request.form.get(
-        "end"
-    )
+if (
+    start_time is not None
+    and
+    end_time is not None
+    and
+    end_time <= start_time
+):
+
+    return jsonify({
+        "error":
+            "Invalid selection range"
+    }), 400
 
 
-    start_time = None
-    end_time = None
+ffmpeg = find_ffmpeg()
 
 
-    try:
+if not ffmpeg:
 
-        if start_value is not None:
-
-            start_time = float(
-                start_value
-            )
-
-
-        if end_value is not None:
-
-            end_time = float(
-                end_value
-            )
+    return jsonify({
+        "error":
+            "FFmpeg not found"
+    }), 500
 
 
-    except ValueError:
-
-        return jsonify({
-            "error":
-                "Invalid selection time"
-        }), 400
+export_id = str(
+    uuid.uuid4()
+)
 
 
-    if (
-        start_time is not None
-        and
-        end_time is not None
-        and
-        end_time <= start_time
-    ):
-
-        return jsonify({
-            "error":
-                "Invalid selection range"
-        }), 400
+export_job_dir = os.path.join(
+    EXPORT_DIR,
+    export_id
+)
 
 
-    ffmpeg = find_ffmpeg()
+os.makedirs(
+    export_job_dir,
+    exist_ok=True
+)
 
 
-    if not ffmpeg:
-
-        return jsonify({
-            "error":
-                "FFmpeg not found"
-        }), 500
-
-
-    export_id = str(
-        uuid.uuid4()
-    )
+incoming_name = secure_filename(
+    audio.filename
+    or
+    "audio.bin"
+)
 
 
-    export_job_dir = os.path.join(
-        EXPORT_DIR,
-        export_id
-    )
+extension = os.path.splitext(
+    incoming_name
+)[1]
 
 
-    os.makedirs(
-        export_job_dir,
-        exist_ok=True
-    )
+if not extension:
+
+    extension = ".bin"
 
 
-    incoming_name = secure_filename(
-        audio.filename
+input_path = os.path.join(
+    export_job_dir,
+    "input"
+    + extension
+)
+
+
+output_path = os.path.join(
+    export_job_dir,
+    (
+        track_name
         or
-        "audio.bin"
+        "audio"
     )
+    + "."
+    + export_format
+)
 
 
-    extension = os.path.splitext(
-        incoming_name
-    )[1]
+audio.save(
+    input_path
+)
 
 
-    if not extension:
-
-        extension = ".bin"
-
-
-    input_path = os.path.join(
-        export_job_dir,
-        "input"
-        + extension
-    )
+command = [
+    ffmpeg,
+    "-y"
+]
 
 
-    output_path = os.path.join(
-        export_job_dir,
-        (
-            track_name
-            or
-            "audio"
-        )
-        + "."
-        + export_format
-    )
-
-
-    audio.save(
-        input_path
-    )
-
-
-    command = [
-        ffmpeg,
-        "-y"
-    ]
-
-
-    if start_time is not None:
-
-        command += [
-            "-ss",
-            f"{start_time:.6f}"
-        ]
-
+if start_time is not None:
 
     command += [
-        "-i",
-        input_path
+        "-ss",
+        f"{start_time:.6f}"
     ]
 
 
-    if (
-        start_time is not None
-        and
-        end_time is not None
-    ):
-
-        command += [
-            "-t",
-            f"{(
-                end_time
-                - start_time
-            ):.6f}"
-        ]
+command += [
+    "-i",
+    input_path
+]
 
 
-    if export_format == "wav":
+if (
+    start_time is not None
+    and
+    end_time is not None
+):
 
-        command += [
-            "-c:a",
-            "pcm_s24le"
-        ]
-
-
-    elif export_format == "mp3":
-
-        command += [
-            "-c:a",
-            "libmp3lame",
-            "-b:a",
-            "320k"
-        ]
+    command += [
+        "-t",
+        f"{(
+            end_time
+            - start_time
+        ):.6f}"
+    ]
 
 
-    elif export_format == "flac":
+if export_format == "wav":
 
-        command += [
-            "-c:a",
-            "flac"
-        ]
-
-
-    elif export_format == "m4a":
-
-        command += [
-            "-c:a",
-            "aac",
-            "-b:a",
-            "256k"
-        ]
+    command += [
+        "-c:a",
+        "pcm_s24le"
+    ]
 
 
-    command.append(
-        output_path
+elif export_format == "mp3":
+
+    command += [
+        "-c:a",
+        "libmp3lame",
+        "-b:a",
+        "320k"
+    ]
+
+
+elif export_format == "flac":
+
+    command += [
+        "-c:a",
+        "flac"
+    ]
+
+
+elif export_format == "m4a":
+
+    command += [
+        "-c:a",
+        "aac",
+        "-b:a",
+        "256k"
+    ]
+
+
+command.append(
+    output_path
+)
+
+
+print(
+    "FFmpeg command:",
+    command
+)
+
+
+try:
+
+    process = subprocess.run(
+
+        command,
+
+        capture_output=True,
+
+        text=True
     )
 
 
-    print(
-        "FFmpeg command:",
-        command
-    )
-
-
-    try:
-
-        process = subprocess.run(
-
-            command,
-
-            capture_output=True,
-
-            text=True
-        )
-
-
-        if process.returncode != 0:
-
-            print(
-                process.stdout
-            )
-
-
-            print(
-                process.stderr
-            )
-
-
-            return jsonify({
-                "error":
-                    "FFmpeg export failed",
-                "details":
-                    process.stderr
-            }), 500
-
-
-        return send_file(
-
-            output_path,
-
-            as_attachment=True,
-
-            download_name=(
-                (
-                    track_name
-                    or
-                    "audio"
-                )
-                + "."
-                + export_format
-            )
-
-        )
-
-
-    except Exception as error:
+    if process.returncode != 0:
 
         print(
-            error
+            process.stdout
+        )
+
+
+        print(
+            process.stderr
         )
 
 
         return jsonify({
             "error":
-                str(error)
+                "FFmpeg export failed",
+            "details":
+                process.stderr
         }), 500
 
 
-# ========================================
-# LYRICS AUTOFIX
-# ========================================
+    return send_file(
+
+        output_path,
+
+        as_attachment=True,
+
+        download_name=(
+            (
+                track_name
+                or
+                "audio"
+            )
+            + "."
+            + export_format
+        )
+
+    )
+
+
+except Exception as error:
+
+    print(
+        error
+    )
+
+
+    return jsonify({
+        "error":
+            str(error)
+    }), 500
+========================================
+LYRICS AUTOFIX
+========================================
 
 _language_tools = {}
 
-
 def normalize_language(
-    language
+language
 ):
 
-    value = str(
-        language
-        or
-        "ru-RU"
-    ).lower()
+value = str(
+    language
+    or
+    "ru-RU"
+).lower()
 
-    if value.startswith(
-        "en"
-    ):
+if value.startswith(
+    "en"
+):
 
-        return "en-US"
+    return "en-US"
 
-    return "ru-RU"
-
+return "ru-RU"
 
 def get_language_tool(
-    language="ru-RU"
+language="ru-RU"
 ):
 
-    if language not in _language_tools:
+if language not in _language_tools:
 
-        _language_tools[
-            language
-        ] = (
-            language_tool_python
-            .LanguageTool(
-                language
-            )
-        )
-
-    return _language_tools[
+    _language_tools[
         language
-    ]
+    ] = (
+        language_tool_python
+        .LanguageTool(
+            language
+        )
+    )
 
+return _language_tools[
+    language
+]
 
 @app.route(
-    "/spellcheck",
-    methods=["POST"]
+"/spellcheck",
+methods=["POST"]
 )
 def spellcheck():
 
-    data = request.get_json(
-        silent=True
-    ) or {}
+data = request.get_json(
+    silent=True
+) or {}
 
-    text = str(
+text = str(
+    data.get(
+        "text",
+        ""
+    )
+)
+
+try:
+
+    language = normalize_language(
         data.get(
-            "text",
-            ""
+            "language",
+            "ru-RU"
         )
     )
 
-    try:
+    tool = get_language_tool(
+        language
+    )
 
-        language = normalize_language(
-            data.get(
-                "language",
-                "ru-RU"
+    matches = tool.check(
+        text
+    )
+
+    result = []
+
+    for match in matches:
+
+        replacements = [
+            str(
+                value
             )
-        )
+            for value
+            in (
+                match.replacements
+                or
+                []
+            )[:8]
+        ]
 
-        tool = get_language_tool(
-            language
-        )
+        result.append({
+            "offset":
+                int(
+                    match.offset
+                ),
 
-        matches = tool.check(
-            text
-        )
+            "length":
+                int(
+                    match.error_length
+                ),
 
-        result = []
-
-        for match in matches:
-
-            replacements = [
+            "message":
                 str(
-                    value
-                )
-                for value
-                in (
-                    match.replacements
-                    or
-                    []
-                )[:8]
-            ]
+                    match.message
+                ),
 
-            result.append({
-                "offset":
-                    int(
-                        match.offset
-                    ),
-
-                "length":
-                    int(
-                        match.error_length
-                    ),
-
-                "message":
-                    str(
-                        match.message
-                    ),
-
-                "replacements":
-                    replacements
-            })
-
-        return jsonify({
-            "language":
-                language,
-
-            "matches":
-                result
+            "replacements":
+                replacements
         })
 
-    except Exception as error:
-
-        print(
-            error
-        )
-
-        return jsonify({
-            "error":
-                str(
-                    error
-                )
-        }), 500
-
-
-# ========================================
-# LYRICS LANGUAGE + RU TRANSCRIPTION
-# ========================================
-
-SUPPORTED_LYRICS_LANGUAGES = {
-    "ru",
-    "en",
-    "es",
-    "it",
-    "fr",
-    "uk"
-}
-
-
-def _fallback_language(
-    text
-):
-
-    value = str(
-        text
-        or
-        ""
-    ).strip()
-
-    if re.search(
-        r"[ІіЇїЄєҐґ]",
-        value
-    ):
-
-        return "uk"
-
-    if re.search(
-        r"[А-Яа-яЁё]",
-        value
-    ):
-
-        return "ru"
-
-
-    lower = (
-        " "
-        + value.lower()
-        + " "
-    )
-
-
-    markers = {
-
-        "it": [
-            " che ",
-            " non ",
-            " per ",
-            " sono ",
-            " amore ",
-            " mio ",
-            " mia "
-        ],
-
-        "es": [
-            " que ",
-            " para ",
-            " soy ",
-            " amor ",
-            " corazón ",
-            " eres "
-        ],
-
-        "fr": [
-            " je ",
-            " pas ",
-            " pour ",
-            " avec ",
-            " amour ",
-            " suis ",
-            " mon "
-        ],
-
-        "en": [
-            " the ",
-            " i ",
-            " you ",
-            " and ",
-            " with ",
-            " love ",
-            " my ",
-            " is "
-        ]
-    }
-
-
-    scores = {
-
-        lang:
-            sum(
-                lower.count(
-                    x
-                )
-                for x
-                in words
-            )
-
-        for lang, words
-        in markers.items()
-    }
-
-
-    return (
-        max(
-            scores,
-            key=scores.get
-        )
-        if max(
-            scores.values()
-        )
-        else
-        "en"
-    )
-
-
-def detect_lyrics_line_language(
-    text
-):
-
-    value = str(
-        text
-        or
-        ""
-    ).strip()
-
-    if not value:
-
-        return "ru"
-
-
-    if re.search(
-        r"[ІіЇїЄєҐґ]",
-        value
-    ):
-
-        return "uk"
-
-
-    if re.search(
-        r"[А-Яа-яЁё]",
-        value
-    ):
-
-        return "ru"
-
-
-    try:
-
-        from langdetect import detect
-
-        language = detect(
-            value
-        )
-
-        if (
-            language
-            in
-            SUPPORTED_LYRICS_LANGUAGES
-        ):
-
-            return language
-
-    except Exception:
-
-        pass
-
-
-    return _fallback_language(
-        value
-    )
-
-
-@app.route(
-    "/detect-lyrics-languages",
-    methods=["POST"]
-)
-def detect_lyrics_languages():
-
-    data = request.get_json(
-        silent=True
-    ) or {}
-
-    lines = data.get(
-        "lines",
-        []
-    )
-
-    if not isinstance(
-        lines,
-        list
-    ):
-
-        return jsonify({
-            "error":
-                "Invalid lyrics lines"
-        }), 400
-
-
     return jsonify({
-        "languages": [
-            detect_lyrics_line_language(
-                line
-            )
-            for line
-            in lines
-        ]
+        "language":
+            language,
+
+        "matches":
+            result
     })
 
+except Exception as error:
 
-_WORDS = {
+    print(
+        error
+    )
 
-    "en": {
-        "i": "ай",
-        "you": "ю",
-        "your": "йор",
-        "me": "ми",
-        "my": "май",
-        "we": "уи",
-        "they": "зэй",
-        "he": "хи",
-        "she": "ши",
-        "the": "зэ",
-        "and": "энд",
-        "with": "уиз",
-        "love": "лав",
-        "baby": "бэйби",
-        "heart": "харт",
-        "night": "найт",
-        "day": "дэй",
-        "time": "тайм",
-        "life": "лайф",
-        "world": "уёрлд",
-        "never": "нэвэр",
-        "want": "уонт",
-        "know": "ноу",
-        "think": "синк",
-        "feel": "фил",
-        "see": "си",
-        "go": "гоу",
-        "come": "кам",
-        "stay": "стэй",
-        "leave": "лив",
-        "lose": "луз",
-        "home": "хоум",
-        "don't": "доунт",
-        "can't": "кэнт",
-        "won't": "уоунт"
-    },
+    return jsonify({
+        "error":
+            str(
+                error
+            )
+    }), 500
+========================================
+LYRICS LANGUAGE + RU TRANSCRIPTION
+========================================
 
-    "it": {
-        "io": "ио",
-        "tu": "ту",
-        "non": "нон",
-        "che": "кэ",
-        "per": "пэр",
-        "con": "кон",
-        "amore": "аморэ",
-        "mio": "мио",
-        "mia": "миа",
-        "sono": "соно",
-        "sei": "сэй",
-        "vita": "вита",
-        "cuore": "куорэ",
-        "notte": "ноттэ",
-        "giorno": "джорно"
-    },
-
-    "es": {
-        "yo": "йо",
-        "tu": "ту",
-        "no": "но",
-        "que": "кэ",
-        "para": "пара",
-        "con": "кон",
-        "amor": "амор",
-        "mi": "ми",
-        "soy": "сой",
-        "eres": "эрэс",
-        "vida": "вида",
-        "corazón": "корасон",
-        "noche": "ночэ",
-        "día": "диа"
-    },
-
-    "fr": {
-        "je": "жё",
-        "tu": "тю",
-        "il": "иль",
-        "elle": "эль",
-        "nous": "ну",
-        "vous": "ву",
-        "pas": "па",
-        "que": "кё",
-        "pour": "пур",
-        "avec": "авэк",
-        "amour": "амур",
-        "mon": "мон",
-        "ma": "ма",
-        "suis": "сюи",
-        "vie": "ви",
-        "cœur": "кёр",
-        "nuit": "нюи",
-        "jour": "жур"
-    }
+SUPPORTED_LYRICS_LANGUAGES = {
+"ru",
+"en",
+"es",
+"it",
+"fr",
+"uk"
 }
 
+def _fallback_language(
+text
+):
 
-_RULES = {
+value = str(
+    text
+    or
+    ""
+).strip()
 
-    "en": [
-        ("tion", "шн"),
-        ("igh", "ай"),
-        ("oo", "у"),
-        ("ee", "и"),
-        ("ea", "и"),
-        ("ai", "эй"),
-        ("ay", "эй"),
-        ("oa", "оу"),
-        ("ow", "оу"),
-        ("ou", "ау"),
-        ("ch", "ч"),
-        ("sh", "ш"),
-        ("th", "з"),
-        ("ph", "ф"),
-        ("ng", "нг")
-    ],
+if re.search(
+    r"[ІіЇїЄєҐґ]",
+    value
+):
+
+    return "uk"
+
+if re.search(
+    r"[А-Яа-яЁё]",
+    value
+):
+
+    return "ru"
+
+
+lower = (
+    " "
+    + value.lower()
+    + " "
+)
+
+
+markers = {
 
     "it": [
-        ("gli", "льи"),
-        ("gn", "нь"),
-        ("chi", "ки"),
-        ("che", "ке"),
-        ("ci", "чи"),
-        ("ce", "че"),
-        ("gi", "джи"),
-        ("ge", "дже")
+        " che ",
+        " non ",
+        " per ",
+        " sono ",
+        " amore ",
+        " mio ",
+        " mia "
     ],
 
     "es": [
-        ("ll", "й"),
-        ("ñ", "нь"),
-        ("ch", "ч"),
-        ("qu", "к"),
-        ("j", "х")
+        " que ",
+        " para ",
+        " soy ",
+        " amor ",
+        " corazón ",
+        " eres "
     ],
 
     "fr": [
-        ("eau", "о"),
-        ("au", "о"),
-        ("ou", "у"),
-        ("oi", "уа"),
-        ("ch", "ш"),
-        ("gn", "нь"),
-        ("ph", "ф"),
-        ("qu", "к"),
-        ("ai", "э")
+        " je ",
+        " pas ",
+        " pour ",
+        " avec ",
+        " amour ",
+        " suis ",
+        " mon "
+    ],
+
+    "en": [
+        " the ",
+        " i ",
+        " you ",
+        " and ",
+        " with ",
+        " love ",
+        " my ",
+        " is "
     ]
 }
 
 
-_CHARS = {
-    "a": "а",
-    "à": "а",
-    "á": "а",
-    "â": "а",
-    "ä": "а",
-    "b": "б",
-    "c": "к",
-    "ç": "с",
-    "d": "д",
-    "e": "э",
-    "è": "э",
-    "é": "э",
-    "ê": "э",
-    "ë": "э",
-    "f": "ф",
-    "g": "г",
-    "h": "х",
-    "i": "и",
-    "ì": "и",
-    "í": "и",
-    "î": "и",
-    "ï": "и",
-    "j": "ж",
-    "k": "к",
-    "l": "л",
-    "m": "м",
-    "n": "н",
-    "o": "о",
-    "ò": "о",
-    "ó": "о",
-    "ô": "о",
-    "ö": "о",
-    "p": "п",
-    "q": "к",
-    "r": "р",
-    "s": "с",
-    "t": "т",
-    "u": "у",
-    "ù": "у",
-    "ú": "у",
-    "û": "у",
-    "ü": "у",
-    "v": "в",
-    "w": "у",
-    "x": "кс",
-    "y": "й",
-    "z": "з"
+scores = {
+
+    lang:
+        sum(
+            lower.count(
+                x
+            )
+            for x
+            in words
+        )
+
+    for lang, words
+    in markers.items()
 }
 
 
-def _latin_word(
-    word,
-    language
+return (
+    max(
+        scores,
+        key=scores.get
+    )
+    if max(
+        scores.values()
+    )
+    else
+    "en"
+)
+
+def detect_lyrics_line_language(
+text
 ):
 
-    original = word
-    value = word.lower()
-
-    dictionary = _WORDS.get(
-        language,
-        {}
-    )
-
-    if value in dictionary:
-
-        result = dictionary[
-            value
-        ]
-
-    else:
-
-        result = value
-
-        for source, target in _RULES.get(
-            language,
-            []
-        ):
-
-            result = result.replace(
-                source,
-                target
-            )
-
-        result = "".join(
-            _CHARS.get(
-                ch,
-                ch
-            )
-            for ch
-            in result
-        )
-
-
-    if original.isupper():
-
-        return result.upper()
-
-
-    if original[:1].isupper():
-
-        return (
-            result[:1].upper()
-            + result[1:]
-        )
-
-
-    return result
-
-
-def _uk_to_ru(
+value = str(
     text
+    or
+    ""
+).strip()
+
+if not value:
+
+    return "ru"
+
+
+if re.search(
+    r"[ІіЇїЄєҐґ]",
+    value
 ):
 
-    result = str(
-        text
-        or
-        ""
+    return "uk"
+
+
+if re.search(
+    r"[А-Яа-яЁё]",
+    value
+):
+
+    return "ru"
+
+
+try:
+
+    from langdetect import detect
+
+    language = detect(
+        value
     )
 
-    for a, b in [
-        ("ї", "йи"),
-        ("Ї", "Йи"),
-        ("є", "йэ"),
-        ("Є", "Йэ"),
-        ("і", "и"),
-        ("І", "И"),
-        ("ґ", "г"),
-        ("Ґ", "Г"),
-        ("и", "ы"),
-        ("И", "Ы")
-    ]:
+    if (
+        language
+        in
+        SUPPORTED_LYRICS_LANGUAGES
+    ):
+
+        return language
+
+except Exception:
+
+    pass
+
+
+return _fallback_language(
+    value
+)
+
+@app.route(
+"/detect-lyrics-languages",
+methods=["POST"]
+)
+def detect_lyrics_languages():
+
+data = request.get_json(
+    silent=True
+) or {}
+
+lines = data.get(
+    "lines",
+    []
+)
+
+if not isinstance(
+    lines,
+    list
+):
+
+    return jsonify({
+        "error":
+            "Invalid lyrics lines"
+    }), 400
+
+
+return jsonify({
+    "languages": [
+        detect_lyrics_line_language(
+            line
+        )
+        for line
+        in lines
+    ]
+})
+
+_WORDS = {
+
+"en": {
+    "i": "ай",
+    "you": "ю",
+    "your": "йор",
+    "me": "ми",
+    "my": "май",
+    "we": "уи",
+    "they": "зэй",
+    "he": "хи",
+    "she": "ши",
+    "the": "зэ",
+    "and": "энд",
+    "with": "уиз",
+    "love": "лав",
+    "baby": "бэйби",
+    "heart": "харт",
+    "night": "найт",
+    "day": "дэй",
+    "time": "тайм",
+    "life": "лайф",
+    "world": "уёрлд",
+    "never": "нэвэр",
+    "want": "уонт",
+    "know": "ноу",
+    "think": "синк",
+    "feel": "фил",
+    "see": "си",
+    "go": "гоу",
+    "come": "кам",
+    "stay": "стэй",
+    "leave": "лив",
+    "lose": "луз",
+    "home": "хоум",
+    "don't": "доунт",
+    "can't": "кэнт",
+    "won't": "уоунт"
+},
+
+"it": {
+    "io": "ио",
+    "tu": "ту",
+    "non": "нон",
+    "che": "кэ",
+    "per": "пэр",
+    "con": "кон",
+    "amore": "аморэ",
+    "mio": "мио",
+    "mia": "миа",
+    "sono": "соно",
+    "sei": "сэй",
+    "vita": "вита",
+    "cuore": "куорэ",
+    "notte": "ноттэ",
+    "giorno": "джорно"
+},
+
+"es": {
+    "yo": "йо",
+    "tu": "ту",
+    "no": "но",
+    "que": "кэ",
+    "para": "пара",
+    "con": "кон",
+    "amor": "амор",
+    "mi": "ми",
+    "soy": "сой",
+    "eres": "эрэс",
+    "vida": "вида",
+    "corazón": "корасон",
+    "noche": "ночэ",
+    "día": "диа"
+},
+
+"fr": {
+    "je": "жё",
+    "tu": "тю",
+    "il": "иль",
+    "elle": "эль",
+    "nous": "ну",
+    "vous": "ву",
+    "pas": "па",
+    "que": "кё",
+    "pour": "пур",
+    "avec": "авэк",
+    "amour": "амур",
+    "mon": "мон",
+    "ma": "ма",
+    "suis": "сюи",
+    "vie": "ви",
+    "cœur": "кёр",
+    "nuit": "нюи",
+    "jour": "жур"
+}
+
+}
+
+_RULES = {
+
+"en": [
+    ("tion", "шн"),
+    ("igh", "ай"),
+    ("oo", "у"),
+    ("ee", "и"),
+    ("ea", "и"),
+    ("ai", "эй"),
+    ("ay", "эй"),
+    ("oa", "оу"),
+    ("ow", "оу"),
+    ("ou", "ау"),
+    ("ch", "ч"),
+    ("sh", "ш"),
+    ("th", "з"),
+    ("ph", "ф"),
+    ("ng", "нг")
+],
+
+"it": [
+    ("gli", "льи"),
+    ("gn", "нь"),
+    ("chi", "ки"),
+    ("che", "ке"),
+    ("ci", "чи"),
+    ("ce", "че"),
+    ("gi", "джи"),
+    ("ge", "дже")
+],
+
+"es": [
+    ("ll", "й"),
+    ("ñ", "нь"),
+    ("ch", "ч"),
+    ("qu", "к"),
+    ("j", "х")
+],
+
+"fr": [
+    ("eau", "о"),
+    ("au", "о"),
+    ("ou", "у"),
+    ("oi", "уа"),
+    ("ch", "ш"),
+    ("gn", "нь"),
+    ("ph", "ф"),
+    ("qu", "к"),
+    ("ai", "э")
+]
+
+}
+
+_CHARS = {
+"a": "а",
+"à": "а",
+"á": "а",
+"â": "а",
+"ä": "а",
+"b": "б",
+"c": "к",
+"ç": "с",
+"d": "д",
+"e": "э",
+"è": "э",
+"é": "э",
+"ê": "э",
+"ë": "э",
+"f": "ф",
+"g": "г",
+"h": "х",
+"i": "и",
+"ì": "и",
+"í": "и",
+"î": "и",
+"ï": "и",
+"j": "ж",
+"k": "к",
+"l": "л",
+"m": "м",
+"n": "н",
+"o": "о",
+"ò": "о",
+"ó": "о",
+"ô": "о",
+"ö": "о",
+"p": "п",
+"q": "к",
+"r": "р",
+"s": "с",
+"t": "т",
+"u": "у",
+"ù": "у",
+"ú": "у",
+"û": "у",
+"ü": "у",
+"v": "в",
+"w": "у",
+"x": "кс",
+"y": "й",
+"z": "з"
+}
+
+def _latin_word(
+word,
+language
+):
+
+original = word
+value = word.lower()
+
+dictionary = _WORDS.get(
+    language,
+    {}
+)
+
+if value in dictionary:
+
+    result = dictionary[
+        value
+    ]
+
+else:
+
+    result = value
+
+    for source, target in _RULES.get(
+        language,
+        []
+    ):
 
         result = result.replace(
-            a,
-            b
+            source,
+            target
         )
 
-    return result
+    result = "".join(
+        _CHARS.get(
+            ch,
+            ch
+        )
+        for ch
+        in result
+    )
 
 
-def transcribe_line_to_ru(
-    text,
-    language
+if original.isupper():
+
+    return result.upper()
+
+
+if original[:1].isupper():
+
+    return (
+        result[:1].upper()
+        + result[1:]
+    )
+
+
+return result
+
+def _uk_to_ru(
+text
 ):
 
-    value = str(
-        text
-        or
-        ""
+result = str(
+    text
+    or
+    ""
+)
+
+for a, b in [
+    ("ї", "йи"),
+    ("Ї", "Йи"),
+    ("є", "йэ"),
+    ("Є", "Йэ"),
+    ("і", "и"),
+    ("І", "И"),
+    ("ґ", "г"),
+    ("Ґ", "Г"),
+    ("и", "ы"),
+    ("И", "Ы")
+]:
+
+    result = result.replace(
+        a,
+        b
     )
 
-    language = str(
-        language
-        or
-        ""
-    ).lower()
+return result
+
+def transcribe_line_to_ru(
+text,
+language
+):
+
+value = str(
+    text
+    or
+    ""
+)
+
+language = str(
+    language
+    or
+    ""
+).lower()
 
 
-    if language == "ru":
+if language == "ru":
 
-        return value
-
-
-    if language == "uk":
-
-        return _uk_to_ru(
-            value
-        )
+    return value
 
 
-    pattern = re.compile(
-        r"[A-Za-zÀ-ÖØ-öø-ÿ]+"
-        r"(?:['’][A-Za-zÀ-ÖØ-öø-ÿ]+)?"
-    )
+if language == "uk":
 
-
-    return pattern.sub(
-        lambda m:
-            _latin_word(
-                m.group(0),
-                language
-            ),
+    return _uk_to_ru(
         value
     )
 
 
+pattern = re.compile(
+    r"[A-Za-zÀ-ÖØ-öø-ÿ]+"
+    r"(?:['’][A-Za-zÀ-ÖØ-öø-ÿ]+)?"
+)
+
+
+return pattern.sub(
+    lambda m:
+        _latin_word(
+            m.group(0),
+            language
+        ),
+    value
+)
+
 @app.route(
-    "/transcribe-to-ru",
-    methods=["POST"]
+"/transcribe-to-ru",
+methods=["POST"]
 )
 def transcribe_to_ru():
 
-    data = request.get_json(
-        silent=True
-    ) or {}
+data = request.get_json(
+    silent=True
+) or {}
 
-    lines = data.get(
-        "lines",
-        []
+lines = data.get(
+    "lines",
+    []
+)
+
+languages = data.get(
+    "languages",
+    []
+)
+
+
+if not isinstance(
+    lines,
+    list
+):
+
+    return jsonify({
+        "error":
+            "Invalid lyrics lines"
+    }), 400
+
+
+result = []
+
+
+for i, line in enumerate(
+    lines
+):
+
+    language = (
+        languages[i]
+
+        if (
+            isinstance(
+                languages,
+                list
+            )
+            and
+            i < len(
+                languages
+            )
+        )
+
+        else
+        detect_lyrics_line_language(
+            line
+        )
     )
 
-    languages = data.get(
-        "languages",
-        []
-    )
 
-
-    if not isinstance(
-        lines,
-        list
-    ):
-
-        return jsonify({
-            "error":
-                "Invalid lyrics lines"
-        }), 400
-
-
-    result = []
-
-
-    for i, line in enumerate(
-        lines
+    if (
+        language
+        not in
+        SUPPORTED_LYRICS_LANGUAGES
     ):
 
         language = (
-            languages[i]
-
-            if (
-                isinstance(
-                    languages,
-                    list
-                )
-                and
-                i < len(
-                    languages
-                )
-            )
-
-            else
             detect_lyrics_line_language(
                 line
             )
         )
 
 
-        if (
+    result.append(
+        transcribe_line_to_ru(
+            line,
             language
-            not in
-            SUPPORTED_LYRICS_LANGUAGES
-        ):
-
-            language = (
-                detect_lyrics_line_language(
-                    line
-                )
-            )
-
-
-        result.append(
-            transcribe_line_to_ru(
-                line,
-                language
-            )
         )
-
-
-    return jsonify({
-        "lines":
-            result
-    })
-
-
-# ========================================
-# SERVER START
-# ========================================
-
-if __name__ == "__main__":
-
-    app.run(
-
-        host="127.0.0.1",
-
-        port=5000,
-
-        debug=True,
-
-        threaded=True
     )
+
+
+return jsonify({
+    "lines":
+        result
+})
+========================================
+SERVER START
+========================================
+
+if name == "main":
+
+app.run(
+
+    host="127.0.0.1",
+
+    port=5000,
+
+    debug=True,
+
+    threaded=True
+)
+Закрыть
