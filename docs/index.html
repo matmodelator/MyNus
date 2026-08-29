@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.7.11</title>
+  <title>MyNus 4.8.2</title>
 
 
  <style>
@@ -1436,6 +1436,76 @@
       grid-template-columns: 1fr auto 1fr;
       align-items: center;
       gap: 10px;
+    }
+
+    .lyrics-structure-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 30px;
+      padding: 4px 10px;
+      border-top: 1px solid rgba(255,255,255,.08);
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      overflow: hidden;
+    }
+
+    .lyrics-structure-title {
+      flex: 0 0 auto;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .lyrics-structure-track {
+      display: flex;
+      align-items: stretch;
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 22px;
+      overflow: hidden;
+    }
+
+    .lyrics-structure-empty {
+      display: flex;
+      align-items: center;
+      padding: 0 6px;
+      opacity: .65;
+      font-size: 12px;
+    }
+
+    .lyrics-structure-segment {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 34px;
+      padding: 0 6px;
+      border-left: 1px solid rgba(255,255,255,.18);
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-size: 11px;
+      font-weight: 700;
+      box-sizing: border-box;
+    }
+
+    .lyrics-structure-track {
+      position: relative;
+    }
+
+    .lyrics-structure-segment {
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .lyrics-structure-playhead {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: currentColor;
+      pointer-events: none;
+      z-index: 3;
+      transform: translateX(-0.5px);
     }
 
     .lyrics-editor-transport {
@@ -3073,6 +3143,13 @@
 
     </div>
 
+    <div id="lyricsStructureRow" class="lyrics-structure-row">
+      <span class="lyrics-structure-title">Structure:</span>
+      <div id="lyricsStructureTrack" class="lyrics-structure-track">
+        <span class="lyrics-structure-empty">—</span>
+      </div>
+    </div>
+
     <div id="lyricsSpellPopup" class="lyrics-spell-popup"></div>
 
     <div id="lyricsEditorRows" class="lyrics-editor-rows"></div>
@@ -3420,6 +3497,7 @@ const lyricsSetStartBtn = document.getElementById("lyricsSetStartBtn");
 const lyricsSetEndBtn = document.getElementById("lyricsSetEndBtn");
 const lyricsPlayLineBtn = document.getElementById("lyricsPlayLineBtn");
 const lyricsRepeatBtn = document.getElementById("lyricsRepeatBtn");
+const lyricsStructureTrack = document.getElementById("lyricsStructureTrack");
 
 
 const originalAudio =
@@ -11314,7 +11392,7 @@ function buildKaraokeLines() {
             currentLength
             + text.length
             + 1
-          ) > 50
+          ) > 60
         ) {
 
           shouldBreak = true;
@@ -12036,6 +12114,249 @@ lyricsTranscriptionBtn.addEventListener("click", async () => {
 });
 
 
+function normalizeStructureText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function detectLyricsStructure(lines) {
+  const cleanLines = (lines || [])
+    .map((line, index) => ({
+      index,
+      start: Number(line.start),
+      end: Number(line.end),
+      text: normalizeStructureText(line._editedText ?? lineText(line))
+    }))
+    .filter(line =>
+      Number.isFinite(line.start)
+      && Number.isFinite(line.end)
+      && line.end > line.start
+      && line.text
+    );
+
+  if (!cleanLines.length) return [];
+
+  const songEnd = Math.max(
+    Number(duration) || 0,
+    cleanLines[cleanLines.length - 1].end
+  );
+
+  const MIN_INSTRUMENTAL_GAP = 8;
+  const repeated = new Array(cleanLines.length).fill(false);
+
+  // Chorus: repeated contiguous lyric chunks. Prefer longer repeated chunks first.
+  const maxChunk = Math.min(8, Math.floor(cleanLines.length / 2));
+  for (let size = maxChunk; size >= 2; size--) {
+    const occurrences = new Map();
+
+    for (let i = 0; i <= cleanLines.length - size; i++) {
+      const key = cleanLines
+        .slice(i, i + size)
+        .map(line => line.text)
+        .join(" || ");
+
+      if (!occurrences.has(key)) occurrences.set(key, []);
+      occurrences.get(key).push(i);
+    }
+
+    for (const starts of occurrences.values()) {
+      if (starts.length < 2) continue;
+
+      for (const startIndex of starts) {
+        for (let offset = 0; offset < size; offset++) {
+          repeated[startIndex + offset] = true;
+        }
+      }
+    }
+  }
+
+  const segments = [];
+  let cursor = 0;
+
+  if (cleanLines[0].start >= MIN_INSTRUMENTAL_GAP) {
+    segments.push({ type: "Intro", start: 0, end: cleanLines[0].start });
+  }
+
+  while (cursor < cleanLines.length) {
+    const isChorus = repeated[cursor];
+    let endIndex = cursor;
+
+    while (
+      endIndex + 1 < cleanLines.length
+      && repeated[endIndex + 1] === isChorus
+      && cleanLines[endIndex + 1].start - cleanLines[endIndex].end < MIN_INSTRUMENTAL_GAP
+    ) {
+      endIndex++;
+    }
+
+    segments.push({
+      type: isChorus ? "Chorus" : "Pending",
+      start: cleanLines[cursor].start,
+      end: cleanLines[endIndex].end,
+      firstLine: cursor,
+      lastLine: endIndex
+    });
+
+    if (endIndex + 1 < cleanLines.length) {
+      const gapStart = cleanLines[endIndex].end;
+      const gapEnd = cleanLines[endIndex + 1].start;
+      if (gapEnd - gapStart >= MIN_INSTRUMENTAL_GAP) {
+        segments.push({ type: "Solo", start: gapStart, end: gapEnd });
+      }
+    }
+
+    cursor = endIndex + 1;
+  }
+
+  const pending = segments.filter(segment => segment.type === "Pending");
+
+  // Verse base T: duration shared by at least two non-chorus vocal chunks within ±1 second.
+  let verseBase = null;
+  let bestMatches = 0;
+
+  for (const candidate of pending) {
+    const candidateDuration = candidate.end - candidate.start;
+    let matches = 0;
+
+    for (const other of pending) {
+      const otherDuration = other.end - other.start;
+      const ratio = otherDuration / candidateDuration;
+      const multiple = Math.max(1, Math.round(ratio));
+      if (Math.abs(otherDuration - candidateDuration * multiple) <= 1) matches++;
+    }
+
+    if (matches > bestMatches) {
+      bestMatches = matches;
+      verseBase = candidateDuration;
+    }
+  }
+
+  let verseNumber = 0;
+  const classified = [];
+
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+
+    if (segment.type !== "Pending") {
+      classified.push(segment);
+      continue;
+    }
+
+    const segmentDuration = segment.end - segment.start;
+    let verseParts = 0;
+
+    if (verseBase && bestMatches >= 2) {
+      const multiple = Math.max(1, Math.round(segmentDuration / verseBase));
+      if (Math.abs(segmentDuration - verseBase * multiple) <= 1) {
+        verseParts = multiple;
+      }
+    }
+
+    if (verseParts > 0) {
+      for (let part = 0; part < verseParts; part++) {
+        verseNumber++;
+        classified.push({
+          type: "Verse",
+          label: "Verse " + verseNumber,
+          start: segment.start + segmentDuration * part / verseParts,
+          end: segment.start + segmentDuration * (part + 1) / verseParts
+        });
+      }
+      continue;
+    }
+
+    const laterVocalSegment = segments
+      .slice(i + 1)
+      .some(item => item.type === "Pending" || item.type === "Chorus");
+
+    classified.push({
+      type: laterVocalSegment ? "Bridge" : "Coda",
+      start: segment.start,
+      end: segment.end
+    });
+  }
+
+  const lastLyricEnd = cleanLines[cleanLines.length - 1].end;
+  if (songEnd - lastLyricEnd >= MIN_INSTRUMENTAL_GAP) {
+    classified.push({ type: "Coda", start: lastLyricEnd, end: songEnd });
+  }
+
+  return classified
+    .filter(segment => segment.end > segment.start)
+    .sort((a, b) => a.start - b.start);
+}
+
+function renderLyricsStructure() {
+  if (!lyricsStructureTrack) return;
+
+  lyricsStructureTrack.innerHTML = "";
+  const structure = detectLyricsStructure(lyricsEditorDraft);
+
+  if (!structure.length) {
+    const empty = document.createElement("span");
+    empty.className = "lyrics-structure-empty";
+    empty.textContent = "—";
+    lyricsStructureTrack.appendChild(empty);
+    return;
+  }
+
+  const songEnd = Math.max(
+    Number(duration) || 0,
+    structure[structure.length - 1].end
+  );
+
+  structure.forEach(segment => {
+    const block = document.createElement("div");
+    block.className = "lyrics-structure-segment";
+    block.textContent = segment.label || segment.type;
+    block.title =
+      (segment.label || segment.type)
+      + "  "
+      + formatTime(segment.start)
+      + " – "
+      + formatTime(segment.end);
+
+    block.style.flexGrow = String(Math.max(0.01, segment.end - segment.start));
+    block.style.flexBasis = "0";
+
+    block.addEventListener("click", () => {
+      syncAllTo(segment.start);
+      updatePlayheads();
+      updateMasterCursor();
+      updateTimeDisplay();
+      updateLyricsMasterCounter();
+    });
+
+    lyricsStructureTrack.appendChild(block);
+  });
+
+  const playhead = document.createElement("div");
+  playhead.className = "lyrics-structure-playhead";
+  playhead.dataset.role = "lyrics-structure-playhead";
+  lyricsStructureTrack.appendChild(playhead);
+
+  updateLyricsStructurePlayhead(songEnd);
+}
+
+function updateLyricsStructurePlayhead(songEnd = null) {
+  if (!lyricsStructureTrack) return;
+  const playhead = lyricsStructureTrack.querySelector('[data-role="lyrics-structure-playhead"]');
+  if (!playhead) return;
+
+  const total = Math.max(
+    0.001,
+    Number(songEnd) || Number(duration) || 0.001
+  );
+
+  const current = Math.max(0, Math.min(total, Number(masterCursorTime) || 0));
+  playhead.style.left = (current / total * 100) + "%";
+}
+
 function renderLyricsEditor() {
   lyricsEditorRows.innerHTML = "";
 
@@ -12191,6 +12512,7 @@ function renderLyricsEditor() {
     (lyricsEditorSelectedLine >= 0 ? lyricsEditorSelectedLine + 1 : 0);
 
   updateLyricsEditorKaraoke(getCurrentTime());
+  renderLyricsStructure();
   updateLyricsTranscriptionButton();
 }
 
@@ -12372,6 +12694,8 @@ function updateLyricsMasterCounter() {
       masterCursorTime
     );
 
+  updateLyricsStructurePlayhead();
+
 }
 
 
@@ -12435,9 +12759,6 @@ function closeLyricsEditor() {
 
   const current =
     getCurrentTime();
-
-
-  pauseAll();
 
 
   fragmentStart =
@@ -15449,8 +15770,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-транспорт лирикс
-   | 4.7.11
+алгоритм струтуры
+   | 4.8.2
 </div>
 
 <div class="row" id="build-down">
