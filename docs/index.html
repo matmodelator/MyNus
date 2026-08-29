@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.8.7</title>
+  <title>MyNus 4.8.8</title>
 
 
  <style>
@@ -1529,15 +1529,14 @@
     }
 
     .lyrics-structure-playhead {
-      position: absolute;
-      top: -1px;
-      bottom: -1px;
-      width: 1px;
-      background: currentColor;
-      pointer-events: none;
-      z-index: 6;
-      transform: translateX(-0.5px);
-    }
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #0066ff;
+  pointer-events: none;
+  z-index: 20;
+}
 
     .lyrics-structure-timeline {
       position: relative;
@@ -1555,6 +1554,11 @@
       white-space: nowrap;
     }
 
+.lyrics-structure-tick.active {
+  color: #0066ff;
+  font-weight: 700;
+}
+   
     .lyrics-structure-tick::before {
       content: "";
       display: block;
@@ -12578,6 +12582,7 @@ function renderLyricsStructureTimeline(songEnd) {
     tick.className = "lyrics-structure-tick";
     tick.style.left = (t / total * 100) + "%";
     tick.textContent = formatTime(t);
+    tick.dataset.time = String(t);
     if (index === 0) tick.style.transform = "translateX(0)";
     if (index === times.length - 1) tick.style.transform = "translateX(-100%)";
     lyricsStructureTimeline.appendChild(tick);
@@ -12632,6 +12637,48 @@ block.style.left =
   (segment.start / songEnd * 100) + "%";
 block.style.width =
   ((segment.end - segment.start) / songEnd * 100) + "%";
+
+    block.addEventListener("dblclick", event => {
+  event.preventDefault();
+  event.stopPropagation();
+
+  const oldName =
+    segment.label || segment.type;
+
+  const newName =
+    window.prompt(
+      "Section name:",
+      oldName
+    );
+
+  if (newName === null) return;
+
+  const clean =
+    newName.trim();
+
+  if (!clean) return;
+
+  segment.label =
+    clean;
+
+  renderLyricsStructure();
+});
+
+
+block.addEventListener("contextmenu", event => {
+  event.preventDefault();
+  event.stopPropagation();
+
+  lyricsStructureDraft.splice(
+    index,
+    1
+  );
+
+  lyricsStructureSelectedIndex =
+    -1;
+
+  renderLyricsStructure();
+});
 
     block.addEventListener("click", event => {
       event.stopPropagation();
@@ -12745,8 +12792,47 @@ function updateLyricsStructurePlayhead(songEnd = null) {
     Number(songEnd) || Number(duration) || 0.001
   );
 
-  const current = Math.max(0, Math.min(total, Number(masterCursorTime) || 0));
-  playhead.style.left = (current / total * 100) + "%";
+  const current = Math.max(
+  0,
+  Math.min(
+    total,
+    Number(masterCursorTime) || 0
+  )
+);
+
+playhead.style.left =
+  (current / total * 100) + "%";
+
+
+if (lyricsStructureTimeline) {
+
+  const ticks =
+    lyricsStructureTimeline.querySelectorAll(
+      ".lyrics-structure-tick"
+    );
+
+  ticks.forEach(tick => {
+
+    const tickTime =
+      Number(tick.dataset.time);
+
+    if (
+      Number.isFinite(tickTime)
+      &&
+      Math.abs(current - tickTime) <= 5
+    ) {
+
+      tick.classList.add("active");
+
+    } else {
+
+      tick.classList.remove("active");
+
+    }
+
+  });
+
+}
 }
 
 lyricsStructureTrack?.addEventListener("click", () => {
@@ -13693,7 +13779,12 @@ lyricsRepeatBtn.addEventListener(
 
     syncAllTo(0);
 
+    lyricsEditorSelectedLine = 0;
+    renderLyricsEditor();
+    lyricsEditorRows.scrollTop = 0;
+
     updatePlayheads();
+    
     updateMasterCursor();
     updateTimeDisplay();
     updateLyricsMasterCounter();
@@ -15025,7 +15116,10 @@ function startAnimation() {
 lyricsEditorSelectedLine = 0;
 renderLyricsEditor();
 
+lyricsEditorRows.scrollTop = 0;
+
 updatePlayheads();
+          
 updateMasterCursor();
 updateTimeDisplay();
 updateLyricsMasterCounter();
@@ -16221,8 +16315,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-масштабирование редактирование и недавние
-   | 4.8.7
+редактирование структуры
+   | 4.8.8
 </div>
 
 <div class="row" id="build-down">
