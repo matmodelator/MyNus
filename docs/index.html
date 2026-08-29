@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.7.8</title>
+  <title>MyNus 4.7.9</title>
 
 
  <style>
@@ -1607,6 +1607,16 @@
       No file selected
     </div>
 
+    <select id="lyricsLanguageSelect" title="Lyrics recognition language">
+      <option value="auto" selected>Language: Auto</option>
+      <option value="ru">Русский</option>
+      <option value="en">English</option>
+      <option value="it">Italiano</option>
+      <option value="es">Español</option>
+      <option value="fr">Français</option>
+      <option value="uk">Українська</option>
+    </select>
+
     <button id="splitBtn">
       Split
     </button>
@@ -3071,7 +3081,6 @@
 
       <div class="lyrics-editor-transport">
         <button type="button" id="lyricsPlayMasterBtn">Play Master</button>
-        <button type="button" id="lyricsRepeatBtn">|&lt;-Repeat</button>
         <button type="button" id="lyricsPlayLineBtn">Loop Line</button>
         <button type="button" id="lyricsSetStartBtn">Set Start</button>
         <button type="button" id="lyricsSetEndBtn">Set End</button>
@@ -3154,6 +3163,9 @@ const audioFile =
 
 const selectFileBtn =
   document.getElementById("selectFileBtn");
+
+const lyricsLanguageSelect =
+  document.getElementById("lyricsLanguageSelect");
 
 const fileName =
   document.getElementById("fileName");
@@ -3388,9 +3400,6 @@ const lyricsSaveAsConfirmBtn = document.getElementById("lyricsSaveAsConfirmBtn")
 
 const lyricsPlayMasterBtn =
   document.getElementById("lyricsPlayMasterBtn");
-
-const lyricsRepeatBtn =
-  document.getElementById("lyricsRepeatBtn");
 
 const lyricsMasterCounter =
   document.getElementById("lyricsMasterCounter");
@@ -4206,6 +4215,11 @@ splitBtn.addEventListener(
     formData.append(
       "audio",
       file
+    );
+
+    formData.append(
+      "lyrics_language",
+      lyricsLanguageSelect.value
     );
 
 
@@ -11667,6 +11681,13 @@ function switchLyricsLoopToLine(index) {
   if (isPlaying) syncAllTo(fragmentStart);
 }
 
+function switchLyricsMasterToLine(index) {
+  if (lyricsTransportMode !== "master" || !isPlaying) return;
+  const line = lyricsEditorDraft[index];
+  if (!line) return;
+  syncAllTo(Number(line.start));
+}
+
 function updateLyricsEditorKaraoke(currentTime) {
   if (!lyricsEditorDialog.classList.contains("open")) return;
 
@@ -12107,6 +12128,7 @@ function renderLyricsEditor() {
       });
 
       switchLyricsLoopToLine(index);
+      switchLyricsMasterToLine(index);
       textWrap.classList.add("editing");
       textArea.value = line._editedText ?? lineText(line);
       textArea.focus();
@@ -12151,6 +12173,7 @@ function renderLyricsEditor() {
         "Lines: " + lyricsEditorDraft.length + " | Selected: " + (index + 1);
 
       switchLyricsLoopToLine(index);
+      switchLyricsMasterToLine(index);
     });
 
     textWrap.appendChild(karaokeBox);
@@ -12934,36 +12957,6 @@ lyricsPlayMasterBtn.addEventListener(
       "master";
 
 
-    if (
-      isPlaying
-      &&
-      loopEnabled
-    ) {
-
-      fragmentStart =
-        null;
-
-
-      fragmentEnd =
-        null;
-
-
-      loopEnabled =
-        false;
-
-
-      lyricsLoopPaused =
-        false;
-
-
-      updateLyricsTransportButtons();
-
-
-      return;
-
-    }
-
-
     if (isPlaying) {
 
       pauseAll();
@@ -12998,35 +12991,6 @@ lyricsPlayMasterBtn.addEventListener(
 
 
     updateLyricsTransportButtons();
-
-  }
-);
-
-
-lyricsRepeatBtn.addEventListener(
-  "click",
-  () => {
-
-    if (
-      !lyricsEditorDialog.classList.contains(
-        "open"
-      )
-    ) {
-
-      return;
-
-    }
-
-
-    syncAllTo(
-      0
-    );
-
-
-    updatePlayheads();
-    updateMasterCursor();
-    updateTimeDisplay();
-    updateLyricsMasterCounter();
 
   }
 );
@@ -14238,34 +14202,9 @@ function startAnimation() {
         )
       ) {
 
-        if (
-          lyricsEditorDialog.classList.contains(
-            "open"
-          )
-          &&
-          lyricsTransportMode ===
-            "master"
-        ) {
+        pauseAll();
 
-          syncAllTo(
-            0
-          );
-
-
-          updatePlayheads();
-          updateMasterCursor();
-          updateTimeDisplay();
-          updateLyricsMasterCounter();
-
-        }
-
-        else {
-
-          pauseAll();
-
-          return;
-
-        }
+        return;
 
       }
 
@@ -15444,8 +15383,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-ебаный транспорт текста
-   | 4.7.8
+выбор языка
+   | 4.7.9
 </div>
 
 <div class="row" id="build-down">
