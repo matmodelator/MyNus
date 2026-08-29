@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.7.9</title>
+  <title>MyNus 4.7.11</title>
 
 
  <style>
@@ -3082,6 +3082,7 @@
       <div class="lyrics-editor-transport">
         <button type="button" id="lyricsPlayMasterBtn">Play Master</button>
         <button type="button" id="lyricsPlayLineBtn">Loop Line</button>
+        <button type="button" id="lyricsRepeatBtn">|&lt;-Repeat</button>
         <button type="button" id="lyricsSetStartBtn">Set Start</button>
         <button type="button" id="lyricsSetEndBtn">Set End</button>
       </div>
@@ -3418,6 +3419,7 @@ const lyricsMergeDownBtn = document.getElementById("lyricsMergeDownBtn");
 const lyricsSetStartBtn = document.getElementById("lyricsSetStartBtn");
 const lyricsSetEndBtn = document.getElementById("lyricsSetEndBtn");
 const lyricsPlayLineBtn = document.getElementById("lyricsPlayLineBtn");
+const lyricsRepeatBtn = document.getElementById("lyricsRepeatBtn");
 
 
 const originalAudio =
@@ -12917,6 +12919,20 @@ lyricsMergeDownBtn.addEventListener(
   }
 );
 
+lyricsRepeatBtn.addEventListener(
+  "click",
+  () => {
+
+    syncAllTo(0);
+
+    updatePlayheads();
+    updateMasterCursor();
+    updateTimeDisplay();
+    updateLyricsMasterCounter();
+
+  }
+);
+
 lyricsSetStartBtn.addEventListener("click", () => {
   const line = getSelectedLyricsLine();
   if (!line) return;
@@ -12952,6 +12968,34 @@ lyricsSetEndBtn.addEventListener("click", () => {
 lyricsPlayMasterBtn.addEventListener(
   "click",
   () => {
+
+    if (
+      lyricsTransportMode === "line"
+      &&
+      loopEnabled
+      &&
+      isPlaying
+    ) {
+
+      lyricsTransportMode =
+        "master";
+
+      fragmentStart =
+        null;
+
+      fragmentEnd =
+        null;
+
+      loopEnabled =
+        false;
+
+      lyricsLoopPaused =
+        false;
+
+      updateLyricsTransportButtons();
+
+      return;
+    }
 
     lyricsTransportMode =
       "master";
@@ -14202,6 +14246,28 @@ function startAnimation() {
         )
       ) {
 
+        if (
+          lyricsEditorDialog
+          &&
+          !lyricsEditorDialog.classList.contains("hidden")
+        ) {
+
+          syncAllTo(0);
+
+          updatePlayheads();
+          updateMasterCursor();
+          updateTimeDisplay();
+          updateLyricsMasterCounter();
+
+          animationFrame =
+            requestAnimationFrame(
+              update
+            );
+
+          return;
+
+        }
+
         pauseAll();
 
         return;
@@ -15383,8 +15449,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-выбор языка
-   | 4.7.9
+транспорт лирикс
+   | 4.7.11
 </div>
 
 <div class="row" id="build-down">
