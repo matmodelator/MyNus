@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.7.6</title>
+  <title>MyNus 4.7.7</title>
 
 
  <style>
@@ -1533,6 +1533,44 @@
     .generated-track { display: none; }
     .fx-create-button { width: 100%; margin-top: 4px; padding: 6px 7px; font-size: 10px; }
 
+
+/* ========================================
+   VOCALIST DIARIZATION
+======================================== */
+
+.vocals-singer-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.vocals-singer-segment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid currentColor;
+  border-right: 1px solid currentColor;
+  background: rgba(127,127,127,.06);
+  overflow: hidden;
+}
+
+.vocals-singer-label {
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0,0,0,.72);
+  color: white;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 700;
+  text-align: center;
+}
+
+
 </style>
 
 </head>
@@ -1810,6 +1848,11 @@
         >
 
           <canvas id="vocalsCanvas"></canvas>
+
+          <div
+            id="vocalsSingerOverlay"
+            class="vocals-singer-overlay"
+          ></div>
 
           <div
             id="vocalsCropMaskLeft"
@@ -3376,6 +3419,11 @@ const originalVolumeValue =
 const vocalsAudio =
   document.getElementById("vocalsAudio");
 
+const vocalsSingerOverlay =
+  document.getElementById(
+    "vocalsSingerOverlay"
+  );
+
 const vocalsMuteBtn =
   document.getElementById("vocalsMuteBtn");
 
@@ -3712,6 +3760,8 @@ let pixelsPerSecond =
 
 let originalFileURL =
   null;
+
+let singerSegments = [];
 
 let waveformData = {
 
@@ -4253,6 +4303,9 @@ splitBtn.addEventListener(
 
       resetMaster();
 
+      singerSegments = [];
+      renderSingerSegments();
+
 
       stemIds.forEach(
         stemId => {
@@ -4279,6 +4332,14 @@ splitBtn.addEventListener(
         await waitForSeparation(
           jobId
         );
+
+
+      singerSegments =
+        Array.isArray(
+          data.singer_segments
+        )
+        ? data.singer_segments
+        : [];
 
 
       stemIds.forEach(
@@ -4480,6 +4541,7 @@ studio.style.display =
       resetTransport();
 
           drawAllWaveforms();
+      renderSingerSegments();
 
       drawMasterTimeline();
 
@@ -4894,6 +4956,135 @@ function resetMaster() {
 // ========================================
 // WAVEFORM DRAWING
 // ========================================
+
+
+function renderSingerSegments() {
+
+  if (
+    !vocalsSingerOverlay
+  ) {
+    return;
+  }
+
+
+  vocalsSingerOverlay.innerHTML =
+    "";
+
+
+  if (
+    !Array.isArray(
+      singerSegments
+    )
+    ||
+    !singerSegments.length
+    ||
+    !Number.isFinite(
+      pixelsPerSecond
+    )
+    ||
+    pixelsPerSecond <= 0
+  ) {
+    return;
+  }
+
+
+  singerSegments.forEach(
+    segment => {
+
+      const start =
+        Number(
+          segment.start
+        );
+
+
+      const end =
+        Number(
+          segment.end
+        );
+
+
+      if (
+        !Number.isFinite(
+          start
+        )
+        ||
+        !Number.isFinite(
+          end
+        )
+        ||
+        end <= start
+      ) {
+        return;
+      }
+
+
+      const block =
+        document.createElement(
+          "div"
+        );
+
+
+      block.className =
+        "vocals-singer-segment";
+
+
+      block.style.left =
+        (
+          start
+          *
+          pixelsPerSecond
+        )
+        +
+        "px";
+
+
+      block.style.width =
+        Math.max(
+          1,
+          (
+            end
+            -
+            start
+          )
+          *
+          pixelsPerSecond
+        )
+        +
+        "px";
+
+
+      const label =
+        document.createElement(
+          "span"
+        );
+
+
+      label.className =
+        "vocals-singer-label";
+
+
+      label.textContent =
+        String(
+          segment.singer
+          ||
+          "?"
+        );
+
+
+      block.appendChild(
+        label
+      );
+
+
+      vocalsSingerOverlay.appendChild(
+        block
+      );
+
+    }
+  );
+
+}
+
 
 function drawAllWaveforms() {
 
@@ -11062,20 +11253,61 @@ function buildKaraokeLines() {
         : 0;
 
 
-      const shouldBreak =
-        currentLine.length > 0
+      const previousText =
+        previous
+        ? (
+            previous.word
+            || ""
+          ).trim()
+        : "";
+
+
+      const punctuationBreak =
+        previousText
         &&
-        (
-          pause > 0.75
-          ||
+        /[\p{P}]$/u.test(
+          previousText
+        );
+
+
+      let shouldBreak = false;
+
+
+      if (
+        currentLine.length > 0
+      ) {
+
+        if (
+          punctuationBreak
+        ) {
+
+          shouldBreak = true;
+
+        } else if (
+          pause > 1.0
+        ) {
+
+          shouldBreak = true;
+
+        } else if (
           (
             currentLength
             + text.length
             + 1
-          ) > 42
-          ||
-          currentLine.length >= 8
-        );
+          ) > 50
+        ) {
+
+          shouldBreak = true;
+
+        } else if (
+          currentLine.length >= 10
+        ) {
+
+          shouldBreak = true;
+
+        }
+
+      }
 
 
       if (shouldBreak) {
@@ -14249,6 +14481,8 @@ function changeZoom(
 
   drawAllWaveforms();
 
+
+  renderSingerSegments();
   drawMasterTimeline();
 
   updateSelectionDisplay();
@@ -14501,6 +14735,8 @@ function resetToInitialSplit() {
 
   drawAllWaveforms();
 
+
+  renderSingerSegments();
   drawMasterTimeline();
 
 
@@ -15120,8 +15356,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-КИРРИЛИЦА
-   | 4.7.6
+приоритет формирования line
+   | 4.7.7
 </div>
 
 <div class="row" id="build-down">
