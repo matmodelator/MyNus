@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.7.7</title>
+  <title>MyNus 4.7.8</title>
 
 
  <style>
@@ -3071,6 +3071,7 @@
 
       <div class="lyrics-editor-transport">
         <button type="button" id="lyricsPlayMasterBtn">Play Master</button>
+        <button type="button" id="lyricsRepeatBtn">|&lt;-Repeat</button>
         <button type="button" id="lyricsPlayLineBtn">Loop Line</button>
         <button type="button" id="lyricsSetStartBtn">Set Start</button>
         <button type="button" id="lyricsSetEndBtn">Set End</button>
@@ -3387,6 +3388,9 @@ const lyricsSaveAsConfirmBtn = document.getElementById("lyricsSaveAsConfirmBtn")
 
 const lyricsPlayMasterBtn =
   document.getElementById("lyricsPlayMasterBtn");
+
+const lyricsRepeatBtn =
+  document.getElementById("lyricsRepeatBtn");
 
 const lyricsMasterCounter =
   document.getElementById("lyricsMasterCounter");
@@ -12930,6 +12934,36 @@ lyricsPlayMasterBtn.addEventListener(
       "master";
 
 
+    if (
+      isPlaying
+      &&
+      loopEnabled
+    ) {
+
+      fragmentStart =
+        null;
+
+
+      fragmentEnd =
+        null;
+
+
+      loopEnabled =
+        false;
+
+
+      lyricsLoopPaused =
+        false;
+
+
+      updateLyricsTransportButtons();
+
+
+      return;
+
+    }
+
+
     if (isPlaying) {
 
       pauseAll();
@@ -12964,6 +12998,35 @@ lyricsPlayMasterBtn.addEventListener(
 
 
     updateLyricsTransportButtons();
+
+  }
+);
+
+
+lyricsRepeatBtn.addEventListener(
+  "click",
+  () => {
+
+    if (
+      !lyricsEditorDialog.classList.contains(
+        "open"
+      )
+    ) {
+
+      return;
+
+    }
+
+
+    syncAllTo(
+      0
+    );
+
+
+    updatePlayheads();
+    updateMasterCursor();
+    updateTimeDisplay();
+    updateLyricsMasterCounter();
 
   }
 );
@@ -14175,9 +14238,34 @@ function startAnimation() {
         )
       ) {
 
-        pauseAll();
+        if (
+          lyricsEditorDialog.classList.contains(
+            "open"
+          )
+          &&
+          lyricsTransportMode ===
+            "master"
+        ) {
 
-        return;
+          syncAllTo(
+            0
+          );
+
+
+          updatePlayheads();
+          updateMasterCursor();
+          updateTimeDisplay();
+          updateLyricsMasterCounter();
+
+        }
+
+        else {
+
+          pauseAll();
+
+          return;
+
+        }
 
       }
 
@@ -15356,8 +15444,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-приоритет формирования line
-   | 4.7.7
+ебаный транспорт текста
+   | 4.7.8
 </div>
 
 <div class="row" id="build-down">
