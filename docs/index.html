@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.8.9</title>
+  <title>MyNus 4.9.0</title>
 
 
  <style>
@@ -1560,6 +1560,50 @@
       font-weight: 700;
     }
 
+    .lyrics-structure-track,
+    .lyrics-structure-timeline {
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+
+    .lyrics-structure-name-menu {
+      position: fixed;
+      z-index: 10020;
+      display: none;
+      min-width: 150px;
+      max-height: 320px;
+      overflow-y: auto;
+      padding: 5px;
+      background: #fff;
+      border: 1px solid #b9b9b9;
+      border-radius: 7px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.18);
+    }
+
+    .lyrics-structure-name-menu.open {
+      display: block;
+    }
+
+    .lyrics-structure-name-item {
+      display: block;
+      width: 100%;
+      padding: 7px 9px;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      color: #111;
+      text-align: left;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .lyrics-structure-name-item:hover {
+      background: #e8e8e8;
+    }
+
     .lyrics-structure-tick::before {
       content: "";
       display: block;
@@ -1734,15 +1778,39 @@
       box-shadow: 0 8px 24px rgba(0,0,0,.18);
     }
     .recent-audio-menu.open { display: block; }
-    .recent-audio-menu-item, .recent-audio-menu-empty {
-      display: block; width: 100%; box-sizing: border-box; padding: 7px 9px;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-      border: 0; border-radius: 5px; background: transparent; text-align: left;
-      font: inherit; font-size: 12px;
+    .recent-audio-menu-item,
+    .recent-audio-menu-empty {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 9px 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      text-align: left;
+      font: inherit;
+      font-size: 13px;
     }
-    .recent-audio-menu-item { cursor: pointer; }
-    .recent-audio-menu-item:hover { background: #f0f0f0; }
-    .recent-audio-menu-empty { opacity: .6; }
+
+    .recent-audio-menu-item {
+      cursor: pointer;
+      color: #111;
+      font-weight: 600;
+      opacity: 1;
+    }
+
+    .recent-audio-menu-item:hover {
+      background: #e8e8e8;
+      color: #000;
+    }
+
+    .recent-audio-menu-empty {
+      color: #555;
+      opacity: 1;
+    }
 
 </style>
 
@@ -3229,9 +3297,9 @@
 
       <div class="lyrics-editor-toolbar-left">
         <button type="button" id="lyricsSplitLineBtn">Split</button>
-        <button type="button" id="lyricsMergeUpBtn">Merge Up</button>
-        <button type="button" id="lyricsMergeDownBtn">Merge Down</button>
-        <button type="button" id="lyricsDeleteLineBtn">Delete Line</button>
+        <button type="button" id="lyricsMergeUpBtn">Merge Before</button>
+        <button type="button" id="lyricsMergeDownBtn">Merge After</button>
+        <button type="button" id="lyricsDeleteLineBtn">Delete</button>
       </div>
 
       <div class="lyrics-editor-toolbar-center">
@@ -3256,6 +3324,7 @@
           <span class="lyrics-structure-empty">—</span>
         </div>
         <div id="lyricsStructureTimeline" class="lyrics-structure-timeline"></div>
+      <div id="lyricsStructureNameMenu" class="lyrics-structure-name-menu"></div>
       </div>
     </div>
 
@@ -3608,6 +3677,7 @@ const lyricsPlayLineBtn = document.getElementById("lyricsPlayLineBtn");
 const lyricsRepeatBtn = document.getElementById("lyricsRepeatBtn");
 const lyricsStructureTrack = document.getElementById("lyricsStructureTrack");
 const lyricsStructureTimeline = document.getElementById("lyricsStructureTimeline");
+const lyricsStructureNameMenu = document.getElementById("lyricsStructureNameMenu");
 const lyricsEditorCard = lyricsEditorDialog ? lyricsEditorDialog.querySelector(".lyrics-editor-card") : null;
 const lyricsEditorHeader = lyricsEditorDialog ? lyricsEditorDialog.querySelector(".lyrics-editor-header") : null;
 const recentAudioMenu = document.getElementById("recentAudioMenu");
@@ -4058,6 +4128,9 @@ let lyricsEditorDraft = [];
 let lyricsEditorSelectedLine = -1;
 let lyricsStructureDraft = null;
 let lyricsStructureSelectedIndex = -1;
+let lyricsStructureTransportMode = "play";
+let lyricsStructureLoopStart = null;
+let lyricsStructureLoopEnd = null;
 let recentSelectedAudioFile = null;
 
 let lyricsUndoStack = [];
@@ -4457,6 +4530,7 @@ document.addEventListener("click", event => {
   closeRecentAudioMenu();
 });
 window.addEventListener("resize", closeRecentAudioMenu);
+window.addEventListener("resize", closeLyricsStructureNameMenu);
 window.addEventListener("blur", closeRecentAudioMenu);
 
 // ========================================
@@ -12542,6 +12616,237 @@ function ensureLyricsStructureDraft() {
   lyricsStructureSelectedIndex = -1;
 }
 
+function formatStructureTime(value) {
+  const totalSeconds = Math.max(0, Math.floor(Number(value) || 0));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes + ":" + String(seconds).padStart(2, "0");
+}
+
+function closeLyricsStructureNameMenu() {
+  if (!lyricsStructureNameMenu) return;
+  lyricsStructureNameMenu.classList.remove("open");
+}
+
+function openLyricsStructureNameMenu(event, index) {
+  if (!lyricsStructureNameMenu || !lyricsStructureDraft?.[index]) return;
+
+  const names = [
+    "Intro",
+    "Verse",
+    "Half Verse",
+    "Short Verse",
+    "Chorus",
+    "Half Chorus",
+    "Short Chorus",
+    "Bridge",
+    "Break",
+    "Solo",
+    "Part C",
+    "Coda"
+  ];
+
+  lyricsStructureSelectedIndex = index;
+  lyricsStructureNameMenu.innerHTML = "";
+
+  names.forEach(name => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "lyrics-structure-name-item";
+    item.textContent = name;
+
+    item.addEventListener("click", menuEvent => {
+      menuEvent.preventDefault();
+      menuEvent.stopPropagation();
+
+      const segment = lyricsStructureDraft?.[index];
+      if (!segment) return;
+
+      const oldName = segment.label || segment.type;
+      if (oldName !== name) {
+        pushLyricsHistory();
+        segment.label = name;
+      }
+
+      closeLyricsStructureNameMenu();
+      renderLyricsStructure();
+    });
+
+    lyricsStructureNameMenu.appendChild(item);
+  });
+
+  lyricsStructureNameMenu.style.left =
+    Math.max(8, Math.min(event.clientX, window.innerWidth - 170)) + "px";
+
+  lyricsStructureNameMenu.style.top =
+    Math.max(8, Math.min(event.clientY, window.innerHeight - 330)) + "px";
+
+  lyricsStructureNameMenu.classList.add("open");
+}
+
+function clearLyricsStructureLoop() {
+  lyricsStructureTransportMode = "play";
+  lyricsStructureLoopStart = null;
+  lyricsStructureLoopEnd = null;
+}
+
+function playLyricsStructureSegment(index) {
+  const segment = lyricsStructureDraft?.[index];
+  if (!segment) return;
+
+  lyricsStructureSelectedIndex = index;
+  lyricsStructureTransportMode = "loop";
+  lyricsStructureLoopStart = Number(segment.start);
+  lyricsStructureLoopEnd = Number(segment.end);
+
+  syncAllTo(lyricsStructureLoopStart);
+  updatePlayheads();
+  updateMasterCursor();
+  updateTimeDisplay();
+  updateLyricsMasterCounter();
+
+  if (!isPlaying) {
+    playCurrentMode();
+  }
+
+  renderLyricsStructure();
+}
+
+function playLyricsStructureTimelineAt(event) {
+  if (!lyricsStructureTimeline) return;
+
+  const rect = lyricsStructureTimeline.getBoundingClientRect();
+  if (!rect.width) return;
+
+  const ratio = Math.max(
+    0,
+    Math.min(1, (event.clientX - rect.left) / rect.width)
+  );
+
+  const time = ratio * structureSongEnd();
+
+  clearLyricsStructureLoop();
+  lyricsStructureSelectedIndex = -1;
+
+  syncAllTo(time);
+  updatePlayheads();
+  updateMasterCursor();
+  updateTimeDisplay();
+  updateLyricsMasterCounter();
+
+  if (!isPlaying) {
+    playCurrentMode();
+  }
+
+  renderLyricsStructure();
+}
+
+function splitSelectedLyricsStructure() {
+  const index = lyricsStructureSelectedIndex;
+  const segment = lyricsStructureDraft?.[index];
+  if (!segment) return false;
+
+  const current = Number(masterCursorTime);
+  const start = Number(segment.start);
+  const end = Number(segment.end);
+
+  if (
+    !Number.isFinite(current)
+    ||
+    current <= start
+    ||
+    current >= end
+  ) {
+    return true;
+  }
+
+  pushLyricsHistory();
+
+  const first = {
+    ...segment,
+    start,
+    end: current
+  };
+
+  const second = {
+    ...segment,
+    start: current,
+    end
+  };
+
+  lyricsStructureDraft.splice(index, 1, first, second);
+  lyricsStructureSelectedIndex = index + 1;
+  clearLyricsStructureLoop();
+  renderLyricsStructure();
+  return true;
+}
+
+function mergeSelectedLyricsStructureBefore() {
+  const index = lyricsStructureSelectedIndex;
+  if (!lyricsStructureDraft || index <= 0) return index >= 0;
+
+  const previous = lyricsStructureDraft[index - 1];
+  const current = lyricsStructureDraft[index];
+
+  pushLyricsHistory();
+
+  const merged = {
+    ...previous,
+    start: Number(previous.start),
+    end: Number(current.end)
+  };
+
+  lyricsStructureDraft.splice(index - 1, 2, merged);
+  lyricsStructureSelectedIndex = index - 1;
+  clearLyricsStructureLoop();
+  renderLyricsStructure();
+  return true;
+}
+
+function mergeSelectedLyricsStructureAfter() {
+  const index = lyricsStructureSelectedIndex;
+  if (
+    !lyricsStructureDraft
+    ||
+    index < 0
+    ||
+    index >= lyricsStructureDraft.length - 1
+  ) {
+    return index >= 0;
+  }
+
+  const current = lyricsStructureDraft[index];
+  const next = lyricsStructureDraft[index + 1];
+
+  pushLyricsHistory();
+
+  const merged = {
+    ...current,
+    start: Number(current.start),
+    end: Number(next.end)
+  };
+
+  lyricsStructureDraft.splice(index, 2, merged);
+  lyricsStructureSelectedIndex = index;
+  clearLyricsStructureLoop();
+  renderLyricsStructure();
+  return true;
+}
+
+function deleteSelectedLyricsStructure() {
+  const index = lyricsStructureSelectedIndex;
+  if (!lyricsStructureDraft || index < 0 || index >= lyricsStructureDraft.length) {
+    return false;
+  }
+
+  pushLyricsHistory();
+  lyricsStructureDraft.splice(index, 1);
+  lyricsStructureSelectedIndex = -1;
+  clearLyricsStructureLoop();
+  renderLyricsStructure();
+  return true;
+}
+
 function renderLyricsStructureTimeline(songEnd) {
   if (!lyricsStructureTimeline) return;
   lyricsStructureTimeline.innerHTML = "";
@@ -12558,7 +12863,7 @@ function renderLyricsStructureTimeline(songEnd) {
     const tick = document.createElement("span");
     tick.className = "lyrics-structure-tick";
     tick.style.left = (t / total * 100) + "%";
-    tick.textContent = formatTime(t);
+    tick.textContent = formatStructureTime(t);
     tick.dataset.time = String(t);
     if (index === 0) tick.style.transform = "translateX(0)";
     if (index === times.length - 1) tick.style.transform = "translateX(-100%)";
@@ -12605,9 +12910,9 @@ function renderLyricsStructure() {
     block.title =
       (segment.label || segment.type)
       + "  "
-      + formatTime(segment.start)
+      + formatStructureTime(segment.start)
       + " – "
-      + formatTime(segment.end);
+      + formatStructureTime(segment.end);
 
     block.style.position = "absolute";
     block.style.left =
@@ -12617,13 +12922,8 @@ function renderLyricsStructure() {
 
     block.addEventListener("click", event => {
       event.stopPropagation();
-      lyricsStructureSelectedIndex = index;
-      syncAllTo(segment.start);
-      updatePlayheads();
-      updateMasterCursor();
-      updateTimeDisplay();
-      updateLyricsMasterCounter();
-      renderLyricsStructure();
+      closeLyricsStructureNameMenu();
+      playLyricsStructureSegment(index);
     });
 
     block.addEventListener("dblclick", event => {
@@ -12647,18 +12947,7 @@ function renderLyricsStructure() {
     block.addEventListener("contextmenu", event => {
       event.preventDefault();
       event.stopPropagation();
-
-      lyricsStructureSelectedIndex = index;
-      const name = segment.label || segment.type;
-
-      if (!window.confirm('Delete section "' + name + '"?')) {
-        return;
-      }
-
-      pushLyricsHistory();
-
-      lyricsStructureDraft.splice(index, 1);
-      lyricsStructureSelectedIndex = -1;
+      openLyricsStructureNameMenu(event, index);
       renderLyricsStructure();
     });
 
@@ -12764,8 +13053,48 @@ function updateLyricsStructurePlayhead(songEnd = null) {
   }
 }
 
-lyricsStructureTrack?.addEventListener("click", () => {
+
+lyricsStructureTimeline?.addEventListener("click", event => {
+  event.preventDefault();
+  event.stopPropagation();
+  closeLyricsStructureNameMenu();
+  playLyricsStructureTimelineAt(event);
+});
+
+document.addEventListener("click", event => {
+  if (
+    lyricsStructureNameMenu
+    &&
+    !lyricsStructureNameMenu.contains(event.target)
+  ) {
+    closeLyricsStructureNameMenu();
+  }
+});
+
+lyricsStructureTrack?.addEventListener("click", event => {
+  if (event.target !== lyricsStructureTrack) return;
+
+  const rect = lyricsStructureTrack.getBoundingClientRect();
+  if (!rect.width) return;
+
+  const ratio = Math.max(
+    0,
+    Math.min(1, (event.clientX - rect.left) / rect.width)
+  );
+
+  clearLyricsStructureLoop();
   lyricsStructureSelectedIndex = -1;
+
+  syncAllTo(ratio * structureSongEnd());
+  updatePlayheads();
+  updateMasterCursor();
+  updateTimeDisplay();
+  updateLyricsMasterCounter();
+
+  if (!isPlaying) {
+    playCurrentMode();
+  }
+
   renderLyricsStructure();
 });
 
@@ -12776,12 +13105,7 @@ document.addEventListener("keydown", event => {
   const active = document.activeElement;
   if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) return;
   event.preventDefault();
-
-  pushLyricsHistory();
-
-  lyricsStructureDraft.splice(lyricsStructureSelectedIndex, 1);
-  lyricsStructureSelectedIndex = -1;
-  renderLyricsStructure();
+  deleteSelectedLyricsStructure();
 });
 
 function initLyricsEditorWindowMovement() {
@@ -12907,6 +13231,8 @@ function renderLyricsEditor() {
 
     karaokeBox.addEventListener("click", event => {
       event.stopPropagation();
+      lyricsStructureSelectedIndex = -1;
+      clearLyricsStructureLoop();
       lyricsEditorSelectedLine = index;
 
       document.querySelectorAll(".lyrics-editor-row").forEach((item, itemIndex) => {
@@ -13346,6 +13672,8 @@ lyricsSplitLineBtn.addEventListener(
   "click",
   () => {
 
+    if (lyricsStructureSelectedIndex >= 0) { splitSelectedLyricsStructure(); return; }
+
     const line =
       getSelectedLyricsLine();
 
@@ -13539,6 +13867,8 @@ lyricsMergeUpBtn.addEventListener(
   "click",
   () => {
 
+    if (lyricsStructureSelectedIndex >= 0) { mergeSelectedLyricsStructureBefore(); return; }
+
     const index =
       lyricsEditorSelectedLine;
 
@@ -13628,6 +13958,8 @@ lyricsMergeUpBtn.addEventListener(
 lyricsMergeDownBtn.addEventListener(
   "click",
   () => {
+
+    if (lyricsStructureSelectedIndex >= 0) { mergeSelectedLyricsStructureAfter(); return; }
 
     const index =
       lyricsEditorSelectedLine;
@@ -14017,6 +14349,11 @@ lyricsResetBtn.addEventListener("click", () => {
 
 
 lyricsDeleteLineBtn.addEventListener("click", () => {
+  if (lyricsStructureSelectedIndex >= 0) {
+    deleteSelectedLyricsStructure();
+    return;
+  }
+
   const index =
     lyricsEditorSelectedLine;
 
@@ -14995,6 +15332,27 @@ function startAnimation() {
 
 
       if (
+        lyricsStructureTransportMode === "loop"
+        &&
+        Number.isFinite(lyricsStructureLoopStart)
+        &&
+        Number.isFinite(lyricsStructureLoopEnd)
+        &&
+        lyricsStructureLoopEnd > lyricsStructureLoopStart
+        &&
+        getCurrentTime() >= lyricsStructureLoopEnd
+      ) {
+        syncAllTo(lyricsStructureLoopStart);
+        updatePlayheads();
+        updateMasterCursor();
+        updateTimeDisplay();
+        updateLyricsMasterCounter();
+      }
+
+
+      if (
+        lyricsStructureTransportMode !== "loop"
+        &&
         fragmentEnd !== null
         &&
         fragmentStart !== null
@@ -16285,8 +16643,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-функции удалить и переименовать в стуктуре
-   | 4.8.9
+интерфейс под Структуру
+   | 4.9.0
 </div>
 
 <div class="row" id="build-down">
