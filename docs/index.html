@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.8.8</title>
+  <title>MyNus 4.8.9</title>
 
 
  <style>
@@ -1529,14 +1529,15 @@
     }
 
     .lyrics-structure-playhead {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: #0066ff;
-  pointer-events: none;
-  z-index: 20;
-}
+      position: absolute;
+      top: -1px;
+      bottom: -1px;
+      width: 2px;
+      background: #0066ff;
+      pointer-events: none;
+      z-index: 20;
+      transform: translateX(-1px);
+    }
 
     .lyrics-structure-timeline {
       position: relative;
@@ -1554,11 +1555,11 @@
       white-space: nowrap;
     }
 
-.lyrics-structure-tick.active {
-  color: #0066ff;
-  font-weight: 700;
-}
-   
+    .lyrics-structure-tick.active {
+      color: #0066ff;
+      font-weight: 700;
+    }
+
     .lyrics-structure-tick::before {
       content: "";
       display: block;
@@ -1733,39 +1734,15 @@
       box-shadow: 0 8px 24px rgba(0,0,0,.18);
     }
     .recent-audio-menu.open { display: block; }
-    .recent-audio-menu-item,
-.recent-audio-menu-empty {
-  display: block;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 9px 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  text-align: left;
-  font: inherit;
-  font-size: 13px;
-}
-
-.recent-audio-menu-item {
-  cursor: pointer;
-  color: #111;
-  font-weight: 600;
-  opacity: 1;
-}
-
-.recent-audio-menu-item:hover {
-  background: #e8e8e8;
-  color: #000;
-}
-
-.recent-audio-menu-empty {
-  color: #555;
-  opacity: 1;
-}
+    .recent-audio-menu-item, .recent-audio-menu-empty {
+      display: block; width: 100%; box-sizing: border-box; padding: 7px 9px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      border: 0; border-radius: 5px; background: transparent; text-align: left;
+      font: inherit; font-size: 12px;
+    }
+    .recent-audio-menu-item { cursor: pointer; }
+    .recent-audio-menu-item:hover { background: #f0f0f0; }
+    .recent-audio-menu-empty { opacity: .6; }
 
 </style>
 
@@ -12633,52 +12610,10 @@ function renderLyricsStructure() {
       + formatTime(segment.end);
 
     block.style.position = "absolute";
-block.style.left =
-  (segment.start / songEnd * 100) + "%";
-block.style.width =
-  ((segment.end - segment.start) / songEnd * 100) + "%";
-
-    block.addEventListener("dblclick", event => {
-  event.preventDefault();
-  event.stopPropagation();
-
-  const oldName =
-    segment.label || segment.type;
-
-  const newName =
-    window.prompt(
-      "Section name:",
-      oldName
-    );
-
-  if (newName === null) return;
-
-  const clean =
-    newName.trim();
-
-  if (!clean) return;
-
-  segment.label =
-    clean;
-
-  renderLyricsStructure();
-});
-
-
-block.addEventListener("contextmenu", event => {
-  event.preventDefault();
-  event.stopPropagation();
-
-  lyricsStructureDraft.splice(
-    index,
-    1
-  );
-
-  lyricsStructureSelectedIndex =
-    -1;
-
-  renderLyricsStructure();
-});
+    block.style.left =
+      (segment.start / songEnd * 100) + "%";
+    block.style.width =
+      ((segment.end - segment.start) / songEnd * 100) + "%";
 
     block.addEventListener("click", event => {
       event.stopPropagation();
@@ -12701,6 +12636,9 @@ block.addEventListener("contextmenu", event => {
 
       const clean = nextName.trim();
       if (!clean) return;
+      if (clean === oldName) return;
+
+      pushLyricsHistory();
 
       segment.label = clean;
       renderLyricsStructure();
@@ -12714,9 +12652,10 @@ block.addEventListener("contextmenu", event => {
       const name = segment.label || segment.type;
 
       if (!window.confirm('Delete section "' + name + '"?')) {
-        renderLyricsStructure();
         return;
       }
+
+      pushLyricsHistory();
 
       lyricsStructureDraft.splice(index, 1);
       lyricsStructureSelectedIndex = -1;
@@ -12738,6 +12677,8 @@ block.addEventListener("contextmenu", event => {
     handle.addEventListener("pointerdown", event => {
       event.preventDefault();
       event.stopPropagation();
+
+      pushLyricsHistory();
 
       const rect = lyricsStructureTrack.getBoundingClientRect();
       const min = Number(segment.start) + 0.25;
@@ -12793,46 +12734,34 @@ function updateLyricsStructurePlayhead(songEnd = null) {
   );
 
   const current = Math.max(
-  0,
-  Math.min(
-    total,
-    Number(masterCursorTime) || 0
-  )
-);
+    0,
+    Math.min(
+      total,
+      Number(masterCursorTime) || 0
+    )
+  );
 
-playhead.style.left =
-  (current / total * 100) + "%";
+  playhead.style.left =
+    (current / total * 100) + "%";
 
+  if (lyricsStructureTimeline) {
+    const ticks =
+      lyricsStructureTimeline.querySelectorAll(
+        ".lyrics-structure-tick"
+      );
 
-if (lyricsStructureTimeline) {
+    ticks.forEach(tick => {
+      const tickTime =
+        Number(tick.dataset.time);
 
-  const ticks =
-    lyricsStructureTimeline.querySelectorAll(
-      ".lyrics-structure-tick"
-    );
-
-  ticks.forEach(tick => {
-
-    const tickTime =
-      Number(tick.dataset.time);
-
-    if (
-      Number.isFinite(tickTime)
-      &&
-      Math.abs(current - tickTime) <= 5
-    ) {
-
-      tick.classList.add("active");
-
-    } else {
-
-      tick.classList.remove("active");
-
-    }
-
-  });
-
-}
+      tick.classList.toggle(
+        "active",
+        Number.isFinite(tickTime)
+        &&
+        Math.abs(current - tickTime) <= 5
+      );
+    });
+  }
 }
 
 lyricsStructureTrack?.addEventListener("click", () => {
@@ -12847,6 +12776,9 @@ document.addEventListener("keydown", event => {
   const active = document.activeElement;
   if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) return;
   event.preventDefault();
+
+  pushLyricsHistory();
+
   lyricsStructureDraft.splice(lyricsStructureSelectedIndex, 1);
   lyricsStructureSelectedIndex = -1;
   renderLyricsStructure();
@@ -13234,8 +13166,21 @@ function cloneLyricsEditorDraft() {
   return JSON.parse(JSON.stringify(lyricsEditorDraft));
 }
 
+function cloneLyricsEditorState() {
+  return {
+    lyrics: JSON.parse(
+      JSON.stringify(lyricsEditorDraft)
+    ),
+    structure: JSON.parse(
+      JSON.stringify(lyricsStructureDraft)
+    )
+  };
+}
+
 function pushLyricsHistory() {
-  lyricsUndoStack.push(cloneLyricsEditorDraft());
+  lyricsUndoStack.push(
+    cloneLyricsEditorState()
+  );
 
   if (lyricsUndoStack.length > 100) {
     lyricsUndoStack.shift();
@@ -13779,12 +13724,18 @@ lyricsRepeatBtn.addEventListener(
 
     syncAllTo(0);
 
-    lyricsEditorSelectedLine = 0;
+    lyricsEditorSelectedLine =
+      lyricsEditorDraft.length
+      ? 0
+      : -1;
+
     renderLyricsEditor();
-    lyricsEditorRows.scrollTop = 0;
+
+    if (lyricsEditorRows) {
+      lyricsEditorRows.scrollTop = 0;
+    }
 
     updatePlayheads();
-    
     updateMasterCursor();
     updateTimeDisplay();
     updateLyricsMasterCounter();
@@ -13986,11 +13937,17 @@ lyricsUndoBtn.addEventListener("click", () => {
   if (!lyricsUndoStack.length) return;
 
   lyricsRedoStack.push(
-    cloneLyricsEditorDraft()
+    cloneLyricsEditorState()
   );
 
-  lyricsEditorDraft =
+  const state =
     lyricsUndoStack.pop();
+
+  lyricsEditorDraft =
+    state.lyrics;
+
+  lyricsStructureDraft =
+    state.structure;
 
   lyricsEditorSelectedLine =
     lyricsEditorDraft.length
@@ -14001,6 +13958,7 @@ lyricsUndoBtn.addEventListener("click", () => {
     : -1;
 
   renderLyricsEditor();
+  renderLyricsStructure();
   updateLyricsUndoRedoButtons();
 });
 
@@ -14009,11 +13967,17 @@ lyricsRedoBtn.addEventListener("click", () => {
   if (!lyricsRedoStack.length) return;
 
   lyricsUndoStack.push(
-    cloneLyricsEditorDraft()
+    cloneLyricsEditorState()
   );
 
-  lyricsEditorDraft =
+  const state =
     lyricsRedoStack.pop();
+
+  lyricsEditorDraft =
+    state.lyrics;
+
+  lyricsStructureDraft =
+    state.structure;
 
   lyricsEditorSelectedLine =
     lyricsEditorDraft.length
@@ -14024,6 +13988,7 @@ lyricsRedoBtn.addEventListener("click", () => {
     : -1;
 
   renderLyricsEditor();
+  renderLyricsStructure();
   updateLyricsUndoRedoButtons();
 });
 
@@ -15113,17 +15078,22 @@ function startAnimation() {
 
           syncAllTo(0);
 
-lyricsEditorSelectedLine = 0;
-renderLyricsEditor();
+          lyricsEditorSelectedLine =
+            lyricsEditorDraft.length
+            ? 0
+            : -1;
 
-lyricsEditorRows.scrollTop = 0;
+          renderLyricsEditor();
 
-updatePlayheads();
-          
-updateMasterCursor();
-updateTimeDisplay();
-updateLyricsMasterCounter();
-updateLyricsStructurePlayhead();
+          if (lyricsEditorRows) {
+            lyricsEditorRows.scrollTop = 0;
+          }
+
+          updatePlayheads();
+          updateMasterCursor();
+          updateTimeDisplay();
+          updateLyricsMasterCounter();
+          updateLyricsStructurePlayhead();
 
           animationFrame =
             requestAnimationFrame(
@@ -16315,8 +16285,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-редактирование структуры
-   | 4.8.8
+функции удалить и переименовать в стуктуре
+   | 4.8.9
 </div>
 
 <div class="row" id="build-down">
