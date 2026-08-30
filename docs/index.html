@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.10.6</title>
+  <title>MyNus 4.11.2</title>
 
 
  <style>
@@ -1241,7 +1241,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      padding: 12px 14px;
+      padding: 16px 14px;
       border-bottom: 1px solid #ddd;
     }
 
@@ -1260,7 +1260,7 @@
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
-      padding: 10px 14px;
+      padding: 14px 14px;
       border-bottom: 1px solid #ddd;
       background: #f7f7f7;
     }
@@ -1269,7 +1269,7 @@
       flex: 1;
       min-height: 0;
       overflow-y: auto;
-      padding: 10px 14px;
+      padding: 14px 14px;
     }
 
     .lyrics-editor-row {
@@ -1316,7 +1316,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      padding: 10px 14px;
+      padding: 14px 14px;
       border-top: 1px solid #ddd;
       background: #f7f7f7;
     }
@@ -1667,15 +1667,17 @@
 
 
     /* LYRICS EDITOR — KARAOKE WORDS | 4.4.0 */
-    .lyrics-editor-text-wrap { position: relative; min-width: 0; }
-    .lyrics-editor-karaoke { min-height: 46px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 5px; background: white; font-size: 13px; line-height: 1.35; cursor: text; }
-    .lyrics-editor-karaoke-word { display: inline; padding: 1px 2px; border-radius: 3px; }
+    .lyrics-editor-text-wrap { position: relative; min-width: 0; display: grid; }
+    .lyrics-editor-karaoke { grid-area: 1 / 1; min-height: 46px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 5px; background: white; font-size: 13px; line-height: 1.35; cursor: text; }
+    .lyrics-editor-karaoke-word { display: inline; padding: 1px 2px; border-radius: 3px; cursor: pointer; }
     .lyrics-editor-karaoke-word.past { color: #888; }
     .lyrics-editor-karaoke-word.active { background: #222; color: white; }
     .lyrics-editor-row.karaoke-current-row { border-color: #222; }
-    .lyrics-editor-text-wrap textarea { display: none; }
-    .lyrics-editor-text-wrap.editing textarea { display: block; }
-    .lyrics-editor-text-wrap.editing .lyrics-editor-karaoke { display: none; }
+    .lyrics-editor-text-wrap textarea { grid-area: 1 / 1; display: none; position: relative; z-index: 2; }
+    .lyrics-editor-text-wrap.lyrics-edit-active textarea { display: block; }
+    .lyrics-editor-text-wrap.lyrics-edit-active .lyrics-editor-karaoke { visibility: hidden; }
+    .lyrics-editor-edit-marker { display: none; position: absolute; z-index: 3; pointer-events: none; border-radius: 3px; box-sizing: border-box; background: rgba(34,34,34,.18); }
+    .lyrics-editor-text-wrap.lyrics-edit-active .lyrics-editor-edit-marker { display: block; }
 
 
     .lyrics-editor-toolbar-center {
@@ -1729,6 +1731,15 @@
       display: flex;
       align-items: center;
       gap: 8px;
+      white-space: nowrap;
+    }
+
+    #lyricsRepeatBtn,
+    #lyricsSetStartBtn,
+    #lyricsSetEndBtn {
+      min-width: 0;
+      padding: 6px 10px;
+      font-size: 11px;
       white-space: nowrap;
     }
 
@@ -4260,6 +4271,8 @@ let activeKaraokeLine =
 
 let lyricsEditorDraft = [];
 let lyricsEditorSelectedLine = -1;
+let lyricsEditorEditLineIndex = -1;
+let lyricsEditorCaretOffset = 0;
 let lyricsStructureDraft = null;
 let lyricsStructureSelectedIndex = -1;
 let lyricsStructureSelectedIndices = new Set();
@@ -4289,6 +4302,8 @@ let lyricsTransportMode =
 
 let lyricsLoopPaused =
   false;
+
+// Shared text marker in Lines: boundary before word N.
 
 
 let vocalStartTimeRaw =
@@ -6137,6 +6152,7 @@ function playCurrentMode() {
 
 
   syncTransportMirrors();
+  updateLyricsTransportButtons();
 
 
   startAnimation();
@@ -6176,6 +6192,7 @@ function pauseAll() {
 
 
   syncTransportMirrors();
+  updateLyricsTransportButtons();
 
 
   stopAnimation();
@@ -11007,6 +11024,19 @@ function setGlobalCursorTime(time) {
   if (!Number.isFinite(numeric)) return;
 
   syncAllTo(numeric);
+
+  if (lyricsTransportMode === "line" && loopEnabled) {
+    const lineIndex = findLyricsLineIndexAtTime(masterCursorTime);
+    const line = lyricsEditorDraft[lineIndex];
+
+    if (lineIndex >= 0 && line) {
+      lyricsEditorSelectedLine = lineIndex;
+      fragmentStart = Number(line.start);
+      fragmentEnd = Number(line.end);
+      updateLyricsEditorStats();
+    }
+  }
+
   updatePlayheads();
   updateMasterCursor();
   updateTimeDisplay();
@@ -12245,24 +12275,186 @@ function nearestLyricsWordIndex(line, time) {
   return bestIndex;
 }
 
-function setCursorFromLyricsLinePointer(line, event, box) {
-  if (!line || !box) return;
-  const rect = box.getBoundingClientRect();
-  if (!rect.width) return;
+// A Lines marker is a TEXT BOUNDARY, not the nearest word centre.
+// Boundary N means: words [0..N-1] stay left, words [N..] go right.
+function nearestLyricsTextBoundary(line, time) {
+  const words = Array.isArray(line?.words) ? line.words : [];
+  if (!words.length) return { index: -1, time: NaN };
 
-  const start = Number(line.start);
-  const end = Number(line.end);
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return;
+  const current = Number(time);
+  const candidates = [];
 
-  const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-  const approximateTime = start + ratio * (end - start);
-  const wordIndex = nearestLyricsWordIndex(line, approximateTime);
-  const word = line.words?.[wordIndex];
-  const snappedTime = word && Number.isFinite(Number(word.start))
-    ? Number(word.start)
-    : approximateTime;
+  words.forEach((word, index) => {
+    const start = Number(word.start);
+    if (Number.isFinite(start)) candidates.push({ index, time: start });
+  });
 
-  setGlobalCursorTime(snappedTime);
+  const lineEnd = Number(line.end);
+  if (Number.isFinite(lineEnd)) candidates.push({ index: words.length, time: lineEnd });
+  if (!candidates.length) return { index: -1, time: NaN };
+
+  let best = candidates[0];
+  let bestDistance = Math.abs(best.time - current);
+  for (const candidate of candidates.slice(1)) {
+    const distance = Math.abs(candidate.time - current);
+    if (distance < bestDistance) {
+      best = candidate;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+function findLyricsLineIndexAtTime(time) {
+  const current = Number(time);
+  if (!Number.isFinite(current)) return -1;
+  return lyricsEditorDraft.findIndex(line =>
+    current >= Number(line.start) && current <= Number(line.end)
+  );
+}
+
+function seekLyricsWord(line, wordIndex) {
+  const word = line?.words?.[wordIndex];
+  const time = Number(word?.start);
+  if (!Number.isFinite(time)) return;
+  setGlobalCursorTime(time);
+}
+
+function caretOffsetForLyricsGap(line, karaokeBox, clientX, clientY) {
+  const spans = [...karaokeBox.querySelectorAll(".lyrics-editor-karaoke-word")];
+  if (!spans.length) return 0;
+
+  let bestBoundary = 0;
+  let bestDistance = Infinity;
+
+  spans.forEach((span, index) => {
+    const rect = span.getBoundingClientRect();
+    const cy = Math.max(rect.top, Math.min(clientY, rect.bottom));
+    const leftDistance = Math.hypot(clientX - rect.left, clientY - cy);
+    const rightDistance = Math.hypot(clientX - rect.right, clientY - cy);
+
+    if (leftDistance < bestDistance) {
+      bestDistance = leftDistance;
+      bestBoundary = index;
+    }
+    if (rightDistance < bestDistance) {
+      bestDistance = rightDistance;
+      bestBoundary = index + 1;
+    }
+  });
+
+  const text = line?._editedText ?? lineText(line);
+  const tokens = [...String(text).matchAll(/\S+/g)];
+  if (!tokens.length) return 0;
+  if (bestBoundary <= 0) return 0;
+  if (bestBoundary >= tokens.length) return String(text).length;
+  return tokens[bestBoundary].index;
+}
+
+function leaveLyricsEdit() {
+  if (lyricsEditorEditLineIndex < 0) return;
+  const row = lyricsEditorRows.querySelector(`.lyrics-editor-row[data-index="${lyricsEditorEditLineIndex}"]`);
+  const textArea = row?.querySelector("textarea");
+  const textWrap = row?.querySelector(".lyrics-editor-text-wrap");
+  const marker = row?.querySelector(".lyrics-editor-edit-marker");
+  const line = lyricsEditorDraft[lyricsEditorEditLineIndex];
+
+  if (line && textArea) {
+    line._editedText = textArea.value;
+    applyEditedTextToLine(line);
+  }
+  if (textWrap) textWrap.classList.remove("lyrics-edit-active");
+  if (marker) marker.style.display = "none";
+
+  lyricsEditorEditLineIndex = -1;
+  lyricsEditorCaretOffset = 0;
+}
+
+function enterLyricsEditAt(line, row, textWrap, textArea, karaokeBox, clientX, clientY) {
+  const lineIndex = Number(row?.dataset.index);
+  if (!Number.isInteger(lineIndex)) return;
+
+  if (lyricsEditorEditLineIndex >= 0 && lyricsEditorEditLineIndex !== lineIndex) {
+    leaveLyricsEdit();
+  }
+
+  const caretOffset = caretOffsetForLyricsGap(line, karaokeBox, clientX, clientY);
+  lyricsEditorEditLineIndex = lineIndex;
+  lyricsEditorCaretOffset = caretOffset;
+  textWrap.classList.add("lyrics-edit-active");
+  textArea.value = line._editedText ?? lineText(line);
+  textArea.focus({ preventScroll: true });
+  textArea.setSelectionRange(caretOffset, caretOffset);
+  updateLyricsEditMarker(row, line, getCurrentTime());
+}
+
+function updateLyricsEditMarker(row, line, currentTime) {
+  if (!row || !line) return;
+  const textWrap = row.querySelector(".lyrics-editor-text-wrap");
+  const marker = row.querySelector(".lyrics-editor-edit-marker");
+  const karaokeBox = row.querySelector(".lyrics-editor-karaoke");
+  if (!textWrap || !marker || !karaokeBox || Number(row.dataset.index) !== lyricsEditorEditLineIndex) {
+    if (marker) marker.style.display = "none";
+    return;
+  }
+
+  const wordIndex = (line.words || []).findIndex(word =>
+    currentTime >= Number(word.start) && currentTime <= Number(word.end)
+  );
+  const span = wordIndex >= 0
+    ? karaokeBox.querySelectorAll(".lyrics-editor-karaoke-word")[wordIndex]
+    : null;
+
+  if (!span) {
+    marker.style.display = "none";
+    return;
+  }
+
+  const wrapRect = textWrap.getBoundingClientRect();
+  const spanRect = span.getBoundingClientRect();
+  marker.style.display = "block";
+  marker.style.left = (spanRect.left - wrapRect.left) + "px";
+  marker.style.top = (spanRect.top - wrapRect.top) + "px";
+  marker.style.width = spanRect.width + "px";
+  marker.style.height = spanRect.height + "px";
+}
+
+function getLyricsEditContext() {
+  const lineIndex = lyricsEditorEditLineIndex;
+  if (!Number.isInteger(lineIndex) || lineIndex < 0 || lineIndex >= lyricsEditorDraft.length) return null;
+  const row = lyricsEditorRows.querySelector(`.lyrics-editor-row[data-index="${lineIndex}"]`);
+  const textArea = row?.querySelector("textarea");
+  if (!row || !textArea) return null;
+  return { textArea, row, lineIndex, line: lyricsEditorDraft[lineIndex] };
+}
+
+function splitTimeFromCaret(line, text, caretOffset) {
+  const start = Number(line?.start);
+  const end = Number(line?.end);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return NaN;
+
+  const tokens = [...String(text).matchAll(/\S+/g)];
+  const words = Array.isArray(line?.words) ? line.words : [];
+  if (tokens.length === words.length && tokens.length) {
+    for (let i = 0; i < tokens.length; i++) {
+      const tokenStart = tokens[i].index;
+      const tokenEnd = tokenStart + tokens[i][0].length;
+      if (caretOffset <= tokenStart) return Number(words[i].start);
+      if (caretOffset < tokenEnd) {
+        const ws = Number(words[i].start);
+        const we = Number(words[i].end);
+        if (Number.isFinite(ws) && Number.isFinite(we) && we > ws) {
+          const ratio = (caretOffset - tokenStart) / Math.max(1, tokenEnd - tokenStart);
+          return ws + Math.max(0, Math.min(1, ratio)) * (we - ws);
+        }
+      }
+    }
+    return end;
+  }
+
+  const length = Math.max(1, String(text).length);
+  const ratio = Math.max(0, Math.min(1, caretOffset / length));
+  return start + ratio * (end - start);
 }
 
 function updateLyricsEditorKaraoke(currentTime) {
@@ -12281,10 +12473,6 @@ function updateLyricsEditorKaraoke(currentTime) {
     const line = lyricsEditorDraft[rowIndex];
     const wordSpans = row.querySelectorAll(".lyrics-editor-karaoke-word");
 
-    const cursorWordIndex = rowIndex === currentLineIndex
-      ? nearestLyricsWordIndex(line, currentTime)
-      : -1;
-
     wordSpans.forEach((span, wordIndex) => {
       const word = line && line.words && line.words[wordIndex];
       if (!word) return;
@@ -12294,8 +12482,9 @@ function updateLyricsEditorKaraoke(currentTime) {
 
       span.classList.toggle("active", currentTime >= start && currentTime <= end);
       span.classList.toggle("past", currentTime > end);
-      span.classList.toggle("cursor-word", wordIndex === cursorWordIndex);
     });
+
+    updateLyricsEditMarker(row, line, currentTime);
   });
 
   if (
@@ -13261,8 +13450,15 @@ function renderLyricsStructure() {
       lyricsEditorSelectedLine = -1;
       document.querySelectorAll(".lyrics-editor-row").forEach(item => item.classList.remove("selected"));
       setLyricsStructureSelection([index]);
-      clearLyricsStructureLoop();
+
+      // If Structure Loop is already active, selecting another block retargets it.
+      if (lyricsStructureTransportMode === "loop") {
+        lyricsStructureLoopStart = Number(segment.start);
+        lyricsStructureLoopEnd = Number(segment.end);
+        setGlobalCursorTime(lyricsStructureLoopStart);
+      }
       renderLyricsStructure();
+      updateLyricsTransportButtons();
     });
 
     block.addEventListener("dblclick", event => {
@@ -13521,16 +13717,22 @@ function renderLyricsEditor() {
 
     const textWrap = document.createElement("div");
     textWrap.className = "lyrics-editor-text-wrap";
+    if (index === lyricsEditorEditLineIndex) textWrap.classList.add("lyrics-edit-active");
 
     const karaokeBox = document.createElement("div");
     karaokeBox.className = "lyrics-editor-karaoke";
 
-    line.words.forEach(word => {
+    line.words.forEach((word, wordIndex) => {
       const span = document.createElement("span");
       span.className = "lyrics-editor-karaoke-word";
-      span.textContent = word.word + " ";
+      span.dataset.wordIndex = String(wordIndex);
+      span.textContent = word.word;
       karaokeBox.appendChild(span);
+      if (wordIndex < line.words.length - 1) karaokeBox.appendChild(document.createTextNode(" "));
     });
+
+    const editMarker = document.createElement("div");
+    editMarker.className = "lyrics-editor-edit-marker";
 
     const textArea = document.createElement("textarea");
     textArea.value = line._editedText ?? lineText(line);
@@ -13558,6 +13760,7 @@ function renderLyricsEditor() {
       event.target.value = formatLyricsTime(line.end);
     });
 
+    karaokeBox.tabIndex = 0;
     karaokeBox.addEventListener("click", event => {
       event.stopPropagation();
       clearLyricsStructureSelection();
@@ -13568,40 +13771,30 @@ function renderLyricsEditor() {
         item.classList.toggle("selected", itemIndex === index);
       });
 
-      // Position inside Lines is relative to this line and snaps to the nearest word.
-      // The same cursor immediately moves in Structure and Sequencer.
-      setCursorFromLyricsLinePointer(line, event, karaokeBox);
-
-      textWrap.classList.add("editing");
-      textArea.value = line._editedText ?? lineText(line);
-      textArea.focus();
-      textArea.setSelectionRange(textArea.value.length, textArea.value.length);
+      const wordSpan = event.target.closest?.(".lyrics-editor-karaoke-word");
+      if (wordSpan) {
+        // POINTER: a word click is transport only.
+        if (lyricsEditorEditLineIndex >= 0) leaveLyricsEdit();
+        seekLyricsWord(line, Number(wordSpan.dataset.wordIndex));
+      } else {
+        // CARET: a click between words enters text editing only; transport time is untouched.
+        enterLyricsEditAt(line, row, textWrap, textArea, karaokeBox, event.clientX, event.clientY);
+      }
+      updateLyricsEditorStats();
     });
+
+    const rememberLyricsCaret = () => {
+      if (lyricsEditorEditLineIndex !== index) return;
+      lyricsEditorCaretOffset = Number(textArea.selectionStart) || 0;
+    };
 
     textArea.addEventListener("input", event => {
       line._editedText = event.target.value;
+      rememberLyricsCaret();
     });
-
-    textArea.addEventListener("blur", () => {
-      applyEditedTextToLine(line);
-      textWrap.classList.remove("editing");
-      karaokeBox.innerHTML = "";
-
-      line.words.forEach(word => {
-        const span = document.createElement("span");
-        span.className = "lyrics-editor-karaoke-word";
-        span.textContent = word.word + " ";
-        karaokeBox.appendChild(span);
-      });
-
-      updateLyricsEditorKaraoke(getCurrentTime());
-
-      updateLyricsLineSpellcheck(
-        line,
-        index,
-        karaokeBox
-      );
-    });
+    textArea.addEventListener("click", rememberLyricsCaret);
+    textArea.addEventListener("keyup", rememberLyricsCaret);
+    textArea.addEventListener("select", rememberLyricsCaret);
 
     row.addEventListener("click", event => {
       if (event.target === startInput || event.target === endInput || event.target === textArea) return;
@@ -13619,6 +13812,7 @@ function renderLyricsEditor() {
 
     textWrap.appendChild(karaokeBox);
     textWrap.appendChild(textArea);
+    textWrap.appendChild(editMarker);
     row.appendChild(startInput);
     row.appendChild(endInput);
     row.appendChild(textWrap);
@@ -13742,62 +13936,21 @@ function parseLyricsTime(
 
 
 function updateLyricsTransportButtons() {
+  if (!lyricsEditorDialog || !lyricsEditorDialog.classList.contains("open")) return;
 
-  if (
-    !lyricsEditorDialog
-    ||
-    !lyricsEditorDialog.classList.contains(
-      "open"
-    )
-  ) {
+  const structureLoopActive =
+    lyricsStructureTransportMode === "loop"
+    && Number.isFinite(lyricsStructureLoopStart)
+    && Number.isFinite(lyricsStructureLoopEnd)
+    && lyricsStructureLoopEnd > lyricsStructureLoopStart;
 
-    return;
+  const lineLoopActive = lyricsTransportMode === "line" && loopEnabled;
 
-  }
+  lyricsPlayMasterBtn.textContent =
+    isPlaying && !structureLoopActive && !lineLoopActive ? "Pause" : "Play";
 
-
-  if (isPlaying) {
-
-    if (
-      lyricsTransportMode ===
-      "line"
-      &&
-      loopEnabled
-    ) {
-
-      lyricsPlayLineBtn.textContent =
-        "Pause";
-
-
-      lyricsPlayMasterBtn.textContent =
-        "Play";
-
-    }
-
-    else {
-
-      lyricsPlayMasterBtn.textContent =
-        "Pause";
-
-
-      lyricsPlayLineBtn.textContent =
-        "Loop";
-
-    }
-
-  }
-
-  else {
-
-    lyricsPlayMasterBtn.textContent =
-      "Play";
-
-
-    lyricsPlayLineBtn.textContent =
-      "Loop";
-
-  }
-
+  lyricsPlayLineBtn.textContent =
+    isPlaying && (structureLoopActive || lineLoopActive) ? "Pause" : "Loop";
 }
 
 
@@ -13999,192 +14152,67 @@ lyricsSplitLineBtn.addEventListener(
   "click",
   () => {
 
-    if (lyricsStructureSelectedIndex >= 0) { splitSelectedLyricsStructure(); return; }
-
-    const line =
-      getSelectedLyricsLine();
-
-
-    if (!line) {
-
+    if (lyricsStructureSelectedIndex >= 0) {
+      splitSelectedLyricsStructure();
       return;
-
     }
 
+    const edit = getLyricsEditContext();
+    if (!edit) {
+      setLyricsEditorMessage("Split: available only in Edit");
+      return;
+    }
 
-    applyEditedTextToLine(
-      line
-    );
+    const { textArea, lineIndex, line } = edit;
+    const fullText = textArea.value;
+    const caret = Math.max(0, Math.min(fullText.length, Number(lyricsEditorCaretOffset) || 0));
+    const leftText = fullText.slice(0, caret).trim();
+    const rightText = fullText.slice(caret).trim();
 
+    if (!leftText || !rightText) {
+      setLyricsEditorMessage("Split: text is required on both sides of the caret");
+      return;
+    }
 
-    const current = Number(masterCursorTime);
-
-
+    const splitTime = splitTimeFromCaret(line, fullText, caret);
     if (
-      !Number.isFinite(current)
-      ||
-      current <= Number(line.start)
-      ||
-      current >= Number(line.end)
+      !Number.isFinite(splitTime)
+      || splitTime <= Number(line.start)
+      || splitTime >= Number(line.end)
     ) {
-
-      setLyricsEditorMessage("Cursor outside selected line");
-
+      setLyricsEditorMessage("Split: caret cannot create two text lines here");
       return;
-
     }
-
 
     pushLyricsHistory();
 
+    const leftLine = {
+      start: Number(line.start),
+      end: splitTime,
+      words: []
+    };
+    const rightLine = {
+      start: splitTime,
+      end: Number(line.end),
+      words: []
+    };
 
-    const topWords = [];
-    const bottomWords = [];
+    setLineText(leftLine, leftText);
+    setLineText(rightLine, rightText);
 
+    lyricsEditorDraft.splice(lineIndex, 1, leftLine, rightLine);
+    lyricsEditorSelectedLine = lineIndex + 1;
+    lyricsEditorEditLineIndex = lineIndex + 1;
+    lyricsEditorCaretOffset = 0;
 
-    line.words.forEach(
-      word => {
-
-        const wordStart =
-          Number(
-            word.start
-          );
-
-
-        const wordEnd =
-          Number(
-            word.end
-          );
-
-
-        const wordMiddle =
-          (
-            wordStart
-            + wordEnd
-          )
-          / 2;
-
-
-        if (
-          wordMiddle < current
-        ) {
-
-          topWords.push({
-            ...word
-          });
-
-        }
-
-        else {
-
-          bottomWords.push({
-            ...word
-          });
-
-        }
-
-      }
-    );
-
-
-    if (
-      topWords.length === 0
-      &&
-      bottomWords.length
-    ) {
-
-      topWords.push(
-        bottomWords.shift()
-      );
-
+    if (lyricsTransportMode === "line" && loopEnabled) {
+      fragmentStart = Number(lyricsEditorDraft[lyricsEditorSelectedLine].start);
+      fragmentEnd = Number(lyricsEditorDraft[lyricsEditorSelectedLine].end);
     }
-
-
-    if (
-      bottomWords.length === 0
-      &&
-      topWords.length
-    ) {
-
-      bottomWords.unshift(
-        topWords.pop()
-      );
-
-    }
-
-
-    if (
-      topWords.length
-    ) {
-
-      topWords[
-        topWords.length - 1
-      ].end =
-        Math.min(
-          Number(
-            topWords[
-              topWords.length - 1
-            ].end
-          ),
-          current
-        );
-
-    }
-
-
-    if (
-      bottomWords.length
-    ) {
-
-      bottomWords[0].start =
-        Math.max(
-          Number(
-            bottomWords[0].start
-          ),
-          current
-        );
-
-    }
-
-
-    lyricsEditorDraft.splice(
-      lyricsEditorSelectedLine,
-      1,
-      {
-        start:
-          Number(
-            line.start
-          ),
-
-        end:
-          current,
-
-        words:
-          topWords
-      },
-      {
-        start:
-          current,
-
-        end:
-          Number(
-            line.end
-          ),
-
-        words:
-          bottomWords
-      }
-    );
-
-
-    lyricsEditorSelectedLine +=
-      1;
-
 
     renderLyricsEditor();
-
     updateLyricsUndoRedoButtons();
-
+    updateLyricsTransportButtons();
   }
 );
 
@@ -14195,7 +14223,7 @@ lyricsMergeUpBtn.addEventListener(
     if (lyricsStructureSelectedIndex >= 0) { mergeSelectedLyricsStructureBefore(); return; }
 
     const index =
-      lyricsEditorSelectedLine;
+      lyricsEditorEditLineIndex;
 
 
     if (
@@ -14271,6 +14299,8 @@ lyricsMergeUpBtn.addEventListener(
 
     lyricsEditorSelectedLine =
       index - 1;
+    lyricsEditorEditLineIndex =
+      index - 1;
 
 
     renderLyricsEditor();
@@ -14287,7 +14317,7 @@ lyricsMergeDownBtn.addEventListener(
     if (lyricsStructureSelectedIndex >= 0) { mergeSelectedLyricsStructureAfter(); return; }
 
     const index =
-      lyricsEditorSelectedLine;
+      lyricsEditorEditLineIndex;
 
 
     if (
@@ -14365,6 +14395,8 @@ lyricsMergeDownBtn.addEventListener(
 
 
     lyricsEditorSelectedLine =
+      index;
+    lyricsEditorEditLineIndex =
       index;
 
 
@@ -14510,78 +14542,55 @@ lyricsPlayMasterBtn.addEventListener(
 lyricsPlayLineBtn.addEventListener(
   "click",
   () => {
+    // Structure selected -> Loop works on the selected structure block.
+    if (lyricsStructureSelectedIndex >= 0 && lyricsStructureDraft?.[lyricsStructureSelectedIndex]) {
+      const segment = lyricsStructureDraft[lyricsStructureSelectedIndex];
 
-    const line =
-      getSelectedLyricsLine();
+      if (lyricsStructureTransportMode === "loop" && isPlaying) {
+        pauseAll();
+        updateLyricsTransportButtons();
+        return;
+      }
 
+      lyricsTransportMode = "master";
+      loopEnabled = false;
+      fragmentStart = null;
+      fragmentEnd = null;
+      lyricsStructureTransportMode = "loop";
+      lyricsStructureLoopStart = Number(segment.start);
+      lyricsStructureLoopEnd = Number(segment.end);
+      lyricsLoopPaused = false;
 
-    if (!line) {
-
-      return;
-
-    }
-
-
-    lyricsTransportMode =
-      "line";
-
-
-    if (
-      isPlaying
-      &&
-      loopEnabled
-    ) {
-
-      pauseAll();
-
-
-      lyricsLoopPaused =
-        true;
-
-
+      setGlobalCursorTime(lyricsStructureLoopStart);
+      if (!isPlaying) playCurrentMode();
       updateLyricsTransportButtons();
-
-
+      renderLyricsStructure();
       return;
-
     }
 
+    const line = getSelectedLyricsLine();
+    if (!line) return;
 
-    fragmentStart =
-      Number(
-        line.start
-      );
+    clearLyricsStructureLoop();
+    lyricsTransportMode = "line";
 
+    if (isPlaying && loopEnabled) {
+      pauseAll();
+      lyricsLoopPaused = true;
+      updateLyricsTransportButtons();
+      return;
+    }
 
-    fragmentEnd =
-      Number(
-        line.end
-      );
+    fragmentStart = Number(line.start);
+    fragmentEnd = Number(line.end);
+    loopEnabled = true;
+    lyricsLoopPaused = false;
 
-
-    loopEnabled =
-      true;
-
-
-    lyricsLoopPaused =
-      false;
-
-
-    syncAllTo(
-      fragmentStart
-    );
-
-
-    playCurrentMode();
-
-
+    setGlobalCursorTime(fragmentStart);
+    if (!isPlaying) playCurrentMode();
     updateLyricsTransportButtons();
-
   }
 );
-
-
-
 
 
 
@@ -14679,7 +14688,7 @@ lyricsDeleteLineBtn.addEventListener("click", () => {
   }
 
   const index =
-    lyricsEditorSelectedLine;
+    lyricsEditorEditLineIndex;
 
   if (
     index < 0
@@ -14692,6 +14701,8 @@ lyricsDeleteLineBtn.addEventListener("click", () => {
   pushLyricsHistory();
 
   lyricsEditorDraft.splice(index, 1);
+  lyricsEditorEditLineIndex = -1;
+  lyricsEditorCaretOffset = 0;
 
   if (!lyricsEditorDraft.length) {
     lyricsEditorSelectedLine = -1;
@@ -16634,21 +16645,31 @@ window.addEventListener(
       );
 
 
-    if (isTextEditing) {
+    // Space mode is defined only by Lines EDIT, never by focus/blur.
+    if (event.code === "Space") {
+      if (lyricsEditorEditLineIndex >= 0) {
+        const edit = getLyricsEditContext();
+        if (edit && event.target !== edit.textArea) {
+          event.preventDefault();
+          const text = edit.textArea.value;
+          const caret = Math.max(0, Math.min(text.length, Number(lyricsEditorCaretOffset) || 0));
+          edit.textArea.value = text.slice(0, caret) + " " + text.slice(caret);
+          edit.line._editedText = edit.textArea.value;
+          lyricsEditorCaretOffset = caret + 1;
+          edit.textArea.setSelectionRange(lyricsEditorCaretOffset, lyricsEditorCaretOffset);
+        }
+        return;
+      }
 
+      event.preventDefault();
+      if (isPlaying) pauseAll();
+      else playCurrentMode();
+      updateLyricsTransportButtons();
       return;
-
     }
 
-    if (
-      isTypingTarget(
-        event.target
-      )
-    ) {
-
-      return;
-
-    }
+    if (isTextEditing) return;
+    if (isTypingTarget(event.target)) return;
 
 
     if (
@@ -16706,28 +16727,6 @@ window.addEventListener(
 
 
     if (
-  code === "Space"
-) {
-
-  event.preventDefault();
-
-
-  playBtn.click();
-
-
-  if (
-    lyricsEditorDialog.classList.contains(
-      "open"
-    )
-  ) {
-
-    updateLyricsTransportButtons();
-
-  }
-
-}
-
-    else if (
       code === "Backspace"
     ) {
 
@@ -17036,8 +17035,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Lyrics Editor: мини-консоль перенесена в существующую верхнюю строку редактора (Clear / копируемое поле / Copy); Lines/Selected перенесены вниз рядом со счётчиком; отдельная нижняя панель консоли удалена. Ограничение 10 секунд действует только для автоматического структурирования; ручной Split и ручное перемещение границ Structure выполняются без минимальной длительности.
-   | 4.10.6
+Lyrics Editor: Merge Before / Merge After / Delete теперь работают по строке карета (EDIT), а не по selectedLine. Repeat / Set Start / Set End приведены к размеру кнопок Save / Load (padding 6×10 px, font-size 11 px). Увеличены только вертикальные внутренние отступы окна Lyrics Editor: header 16 px, toolbar/rows/footer 14 px. Остальная логика не изменена.
+   | 4.11.2
 </div>
 
 <div class="row" id="build-down">
