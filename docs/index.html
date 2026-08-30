@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.10.4</title>
+  <title>MyNus 4.10.6</title>
 
 
  <style>
@@ -1693,6 +1693,45 @@
     }
 
 
+    .lyrics-editor-console-inline {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      width: min(520px, 48vw);
+      min-width: 220px;
+    }
+    .lyrics-editor-console-inline button {
+      flex: 0 0 auto;
+      padding: 3px 7px;
+      font-size: 10px;
+      line-height: 1.2;
+    }
+    #lyricsEditorErrorConsole {
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 24px;
+      min-height: 24px;
+      max-height: 24px;
+      resize: none;
+      overflow: auto;
+      box-sizing: border-box;
+      padding: 3px 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #fff;
+      color: #444;
+      font-family: Consolas, monospace;
+      font-size: 10px;
+      line-height: 16px;
+      white-space: pre;
+    }
+    .lyrics-footer-counter-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
     .lyrics-editor-karaoke-word.spell-error {
       text-decoration-line: underline;
       text-decoration-style: wavy;
@@ -3313,7 +3352,11 @@
         id="lyricsEditorStatus"
         class="lyrics-editor-status lyrics-editor-status-top"
       >
-        Lines: 0 | Selected: 0
+        <div class="lyrics-editor-console-inline">
+          <button type="button" id="lyricsErrorClearBtn">Clear</button>
+          <textarea id="lyricsEditorErrorConsole" readonly spellcheck="false" aria-label="Lyrics Editor messages"></textarea>
+          <button type="button" id="lyricsErrorCopyBtn">Copy</button>
+        </div>
       </div>
 
       <button type="button" id="closeLyricsEditorBtn">Close</button>
@@ -3367,11 +3410,16 @@
         <button type="button" id="lyricsSetEndBtn">Set End</button>
       </div>
 
-      <div
-        id="lyricsMasterCounter"
-        class="lyrics-master-counter"
-      >
-        00:00.00
+      <div class="lyrics-footer-counter-group">
+        <div
+          id="lyricsMasterCounter"
+          class="lyrics-master-counter"
+        >
+          00:00.00
+        </div>
+        <div id="lyricsEditorStats" class="lyrics-editor-status">
+          Lines: 0 | Selected: 0
+        </div>
       </div>
 
       <div class="lyrics-editor-actions">
@@ -3693,6 +3741,67 @@ const saveLyricsEditBtn = document.getElementById("saveLyricsEditBtn");
 const lyricsEditorRows = document.getElementById("lyricsEditorRows");
 const lyricsSpellPopup = document.getElementById("lyricsSpellPopup");
 const lyricsEditorStatus = document.getElementById("lyricsEditorStatus");
+const lyricsEditorStats = document.getElementById("lyricsEditorStats");
+const lyricsEditorErrorConsole = document.getElementById("lyricsEditorErrorConsole");
+const lyricsErrorClearBtn = document.getElementById("lyricsErrorClearBtn");
+const lyricsErrorCopyBtn = document.getElementById("lyricsErrorCopyBtn");
+
+function setLyricsEditorError(error, prefix = "") {
+  if (!lyricsEditorErrorConsole) return;
+  const message = error instanceof Error
+    ? (error.stack || error.message || String(error))
+    : String(error ?? "");
+  lyricsEditorErrorConsole.value = prefix ? prefix + message : message;
+  lyricsEditorErrorConsole.scrollTop = 0;
+  lyricsEditorErrorConsole.scrollLeft = 0;
+}
+
+function setLyricsEditorMessage(message) {
+  if (!lyricsEditorErrorConsole) return;
+  lyricsEditorErrorConsole.value = String(message ?? "");
+  lyricsEditorErrorConsole.scrollTop = 0;
+  lyricsEditorErrorConsole.scrollLeft = 0;
+}
+
+function updateLyricsEditorStats() {
+  if (!lyricsEditorStats) return;
+  lyricsEditorStats.textContent =
+    "Lines: " + lyricsEditorDraft.length + " | Selected: " +
+    (lyricsEditorSelectedLine >= 0 ? lyricsEditorSelectedLine + 1 : 0);
+}
+
+lyricsErrorClearBtn?.addEventListener("click", () => {
+  lyricsEditorErrorConsole.value = "";
+});
+
+lyricsErrorCopyBtn?.addEventListener("click", async () => {
+  const text = lyricsEditorErrorConsole?.value || "";
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (_) {
+    lyricsEditorErrorConsole.focus();
+    lyricsEditorErrorConsole.select();
+    document.execCommand("copy");
+    lyricsEditorErrorConsole.setSelectionRange(0, 0);
+  }
+  const oldText = lyricsErrorCopyBtn.textContent;
+  lyricsErrorCopyBtn.textContent = "Copied";
+  setTimeout(() => { lyricsErrorCopyBtn.textContent = oldText; }, 900);
+});
+
+window.addEventListener("error", event => {
+  if (document.getElementById("lyricsEditorDialog")?.classList.contains("open") ||
+      getComputedStyle(document.getElementById("lyricsEditorDialog")).display !== "none") {
+    setLyricsEditorError(event.error || event.message, "Error: ");
+  }
+});
+window.addEventListener("unhandledrejection", event => {
+  if (document.getElementById("lyricsEditorDialog")?.classList.contains("open") ||
+      getComputedStyle(document.getElementById("lyricsEditorDialog")).display !== "none") {
+    setLyricsEditorError(event.reason, "Promise error: ");
+  }
+});
 const lyricsSplitLineBtn = document.getElementById("lyricsSplitLineBtn");
 const lyricsMergeUpBtn = document.getElementById("lyricsMergeUpBtn");
 const lyricsMergeDownBtn = document.getElementById("lyricsMergeDownBtn");
@@ -5852,7 +5961,12 @@ function drawMasterTimeline() {
       + "px";
 
 
-    label.textContent = Number(second).toFixed(2);
+    {
+      const total = Math.max(0, Math.round(Number(second) || 0));
+      const mm = Math.floor(total / 60);
+      const ss = String(total % 60).padStart(2, "0");
+      label.textContent = mm + "." + ss;
+    }
 
 
     masterRuler.appendChild(
@@ -12196,8 +12310,7 @@ function updateLyricsEditorKaraoke(currentTime) {
       row.classList.toggle("selected", rowIndex === currentLineIndex);
     });
 
-    lyricsEditorStatus.textContent =
-      "Lines: " + lyricsEditorDraft.length + " | Selected: " + (currentLineIndex + 1);
+    updateLyricsEditorStats();
 
     const currentRow = rows[currentLineIndex];
     if (currentRow) currentRow.scrollIntoView({ block: "nearest" });
@@ -12469,7 +12582,7 @@ lyricsTranscriptionBtn.addEventListener("click", async () => {
 
     lyricsTranscriptionMode = false;
     renderLyricsEditor();
-    lyricsEditorStatus.textContent = "Original";
+    setLyricsEditorMessage("Original");
     return;
   }
 
@@ -12495,11 +12608,10 @@ lyricsTranscriptionBtn.addEventListener("click", async () => {
 
     lyricsTranscriptionMode = true;
     renderLyricsEditor();
-    lyricsEditorStatus.textContent = "RU Transcription";
+    setLyricsEditorMessage("RU Transcription");
   }
   catch (error) {
-    lyricsEditorStatus.textContent =
-      "Transcription error: " + error.message;
+    setLyricsEditorError(error, "Transcription error: ");
   }
   finally {
     updateLyricsTranscriptionButton();
@@ -12507,7 +12619,7 @@ lyricsTranscriptionBtn.addEventListener("click", async () => {
 });
 
 
-const MIN_STRUCTURE_BLOCK_DURATION = 10;
+const MIN_AUTO_STRUCTURE_BLOCK_DURATION = 10;
 
 function normalizeStructureText(text) {
   return String(text || "")
@@ -12719,7 +12831,7 @@ function normalizeStructureCoverage(structure, requestedSongEnd = null) {
   }
   items[items.length - 1].end = total;
 
-  items = enforceMinimumStructureDuration(items);
+  items = enforceMinimumAutoStructureDuration(items);
 
   // Merging short blocks may change neighbours; restore exact continuity.
   if (items.length) {
@@ -12733,7 +12845,7 @@ function normalizeStructureCoverage(structure, requestedSongEnd = null) {
   return items;
 }
 
-function enforceMinimumStructureDuration(structure) {
+function enforceMinimumAutoStructureDuration(structure) {
   const items = Array.isArray(structure)
     ? structure.map(item => ({ ...item }))
     : [];
@@ -12747,7 +12859,7 @@ function enforceMinimumStructureDuration(structure) {
     for (let i = 0; i < items.length; i++) {
       const current = items[i];
       const length = Number(current.end) - Number(current.start);
-      if (!Number.isFinite(length) || length >= MIN_STRUCTURE_BLOCK_DURATION) continue;
+      if (!Number.isFinite(length) || length >= MIN_AUTO_STRUCTURE_BLOCK_DURATION) continue;
 
       if (i > 0) {
         items[i - 1].end = Number(current.end);
@@ -12927,12 +13039,10 @@ function splitSelectedLyricsStructure() {
 
   if (
     !Number.isFinite(current)
-    || current < start + MIN_STRUCTURE_BLOCK_DURATION
-    || current > end - MIN_STRUCTURE_BLOCK_DURATION
+    || current <= start
+    || current >= end
   ) {
-    if (lyricsEditorStatus) {
-      lyricsEditorStatus.textContent = "Split: cursor must leave at least 10.00 s on both sides";
-    }
+    setLyricsEditorMessage("Split: cursor outside selected structure block");
     return true;
   }
 
@@ -13199,8 +13309,8 @@ function renderLyricsStructure() {
       pushLyricsHistory();
 
       const rect = lyricsStructureTrack.getBoundingClientRect();
-      const min = Number(segment.start) + MIN_STRUCTURE_BLOCK_DURATION;
-      const max = Number(next.end) - MIN_STRUCTURE_BLOCK_DURATION;
+      const min = Number(segment.start);
+      const max = Number(next.end);
 
       handle.setPointerCapture?.(event.pointerId);
 
@@ -13504,8 +13614,7 @@ function renderLyricsEditor() {
         item.classList.toggle("selected", itemIndex === index);
       });
 
-      lyricsEditorStatus.textContent =
-        "Lines: " + lyricsEditorDraft.length + " | Selected: " + (index + 1);
+      updateLyricsEditorStats();
     });
 
     textWrap.appendChild(karaokeBox);
@@ -13516,9 +13625,7 @@ function renderLyricsEditor() {
     lyricsEditorRows.appendChild(row);
   });
 
-  lyricsEditorStatus.textContent =
-    "Lines: " + lyricsEditorDraft.length + " | Selected: " +
-    (lyricsEditorSelectedLine >= 0 ? lyricsEditorSelectedLine + 1 : 0);
+  updateLyricsEditorStats();
 
   updateLyricsEditorKaraoke(getCurrentTime());
   renderLyricsStructure();
@@ -13921,8 +14028,7 @@ lyricsSplitLineBtn.addEventListener(
       current >= Number(line.end)
     ) {
 
-      lyricsEditorStatus.textContent =
-        "Cursor outside selected line";
+      setLyricsEditorMessage("Cursor outside selected line");
 
       return;
 
@@ -14562,8 +14668,7 @@ lyricsResetBtn.addEventListener("click", () => {
   renderLyricsEditor();
   updateLyricsUndoRedoButtons();
 
-  lyricsEditorStatus.textContent =
-    "Reset to WhisperX";
+  setLyricsEditorMessage("Reset to WhisperX");
 });
 
 
@@ -14604,8 +14709,7 @@ lyricsDeleteLineBtn.addEventListener("click", () => {
   renderLyricsEditor();
   updateLyricsUndoRedoButtons();
 
-  lyricsEditorStatus.textContent =
-    "Line deleted";
+  setLyricsEditorMessage("Line deleted");
 });
 
 
@@ -14730,8 +14834,7 @@ lyricsLoadInput.addEventListener("change", async () => {
   }
 
   else {
-    lyricsEditorStatus.textContent =
-      "Load: use MyNus Lyrics JSON or TXT";
+    setLyricsEditorError("Load: use MyNus Lyrics JSON or TXT");
     return;
   }
 
@@ -16933,8 +17036,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Единый курсор Structure ↔ Lines ↔ Sequencer: Split использует один общий таймкод; выбор Structure/Lines взаимоисключающий; в Lines курсор позиционируется относительно границ строки и привязывается к ближайшему слову; перемещение курсора сохраняет Play/Pause/Loop; Master Timeline показывает секунды x.xx и автоматически прореживает деления до расстояния не менее ~1 см; тайм-линия Structure подсвечена серым; граница selected рисуется точно по геометрии блока.
-   | 4.10.4
+Lyrics Editor: мини-консоль перенесена в существующую верхнюю строку редактора (Clear / копируемое поле / Copy); Lines/Selected перенесены вниз рядом со счётчиком; отдельная нижняя панель консоли удалена. Ограничение 10 секунд действует только для автоматического структурирования; ручной Split и ручное перемещение границ Structure выполняются без минимальной длительности.
+   | 4.10.6
 </div>
 
 <div class="row" id="build-down">
