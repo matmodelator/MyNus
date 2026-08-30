@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.9.0</title>
+  <title>MyNus 4.10.0</title>
 
 
  <style>
@@ -3318,7 +3318,6 @@
     </div>
 
     <div id="lyricsStructureRow" class="lyrics-structure-row">
-      <span class="lyrics-structure-title">Structure:</span>
       <div class="lyrics-structure-body">
         <div id="lyricsStructureTrack" class="lyrics-structure-track">
           <span class="lyrics-structure-empty">—</span>
@@ -4128,6 +4127,7 @@ let lyricsEditorDraft = [];
 let lyricsEditorSelectedLine = -1;
 let lyricsStructureDraft = null;
 let lyricsStructureSelectedIndex = -1;
+let lyricsStructureSelectedIndices = new Set();
 let lyricsStructureTransportMode = "play";
 let lyricsStructureLoopStart = null;
 let lyricsStructureLoopEnd = null;
@@ -12616,6 +12616,23 @@ function ensureLyricsStructureDraft() {
   lyricsStructureSelectedIndex = -1;
 }
 
+function setLyricsStructureSelection(indices) {
+  lyricsStructureSelectedIndices = new Set(
+    (indices || []).filter(index =>
+      Number.isInteger(index)
+      && index >= 0
+      && index < (lyricsStructureDraft?.length || 0)
+    )
+  );
+  const ordered = [...lyricsStructureSelectedIndices].sort((a, b) => a - b);
+  lyricsStructureSelectedIndex = ordered.length ? ordered[ordered.length - 1] : -1;
+}
+
+function clearLyricsStructureSelection() {
+  lyricsStructureSelectedIndices.clear();
+  lyricsStructureSelectedIndex = -1;
+}
+
 function formatStructureTime(value) {
   const totalSeconds = Math.max(0, Math.floor(Number(value) || 0));
   const minutes = Math.floor(totalSeconds / 60);
@@ -12694,7 +12711,7 @@ function playLyricsStructureSegment(index) {
   const segment = lyricsStructureDraft?.[index];
   if (!segment) return;
 
-  lyricsStructureSelectedIndex = index;
+  setLyricsStructureSelection([index]);
   lyricsStructureTransportMode = "loop";
   lyricsStructureLoopStart = Number(segment.start);
   lyricsStructureLoopEnd = Number(segment.end);
@@ -12726,7 +12743,7 @@ function playLyricsStructureTimelineAt(event) {
   const time = ratio * structureSongEnd();
 
   clearLyricsStructureLoop();
-  lyricsStructureSelectedIndex = -1;
+  clearLyricsStructureSelection();
 
   syncAllTo(time);
   updatePlayheads();
@@ -12746,7 +12763,7 @@ function splitSelectedLyricsStructure() {
   const segment = lyricsStructureDraft?.[index];
   if (!segment) return false;
 
-  const current = Number(masterCursorTime);
+  const current = Number(getCurrentTime());
   const start = Number(segment.start);
   const end = Number(segment.end);
 
@@ -12775,7 +12792,7 @@ function splitSelectedLyricsStructure() {
   };
 
   lyricsStructureDraft.splice(index, 1, first, second);
-  lyricsStructureSelectedIndex = index + 1;
+  setLyricsStructureSelection([index + 1]);
   clearLyricsStructureLoop();
   renderLyricsStructure();
   return true;
@@ -12797,7 +12814,7 @@ function mergeSelectedLyricsStructureBefore() {
   };
 
   lyricsStructureDraft.splice(index - 1, 2, merged);
-  lyricsStructureSelectedIndex = index - 1;
+  setLyricsStructureSelection([index - 1]);
   clearLyricsStructureLoop();
   renderLyricsStructure();
   return true;
@@ -12827,21 +12844,47 @@ function mergeSelectedLyricsStructureAfter() {
   };
 
   lyricsStructureDraft.splice(index, 2, merged);
-  lyricsStructureSelectedIndex = index;
+  setLyricsStructureSelection([index]);
   clearLyricsStructureLoop();
   renderLyricsStructure();
   return true;
 }
 
 function deleteSelectedLyricsStructure() {
-  const index = lyricsStructureSelectedIndex;
-  if (!lyricsStructureDraft || index < 0 || index >= lyricsStructureDraft.length) {
-    return false;
+  if (!lyricsStructureDraft?.length) return false;
+
+  let indices = [...lyricsStructureSelectedIndices].sort((a, b) => a - b);
+  if (!indices.length && lyricsStructureSelectedIndex >= 0) {
+    indices = [lyricsStructureSelectedIndex];
+  }
+  if (!indices.length) return false;
+
+  for (let i = 1; i < indices.length; i++) {
+    if (indices[i] !== indices[i - 1] + 1) return false;
   }
 
+  const firstIndex = indices[0];
+  const lastIndex = indices[indices.length - 1];
+  const first = lyricsStructureDraft[firstIndex];
+  const last = lyricsStructureDraft[lastIndex];
+  if (!first || !last) return false;
+
   pushLyricsHistory();
-  lyricsStructureDraft.splice(index, 1);
-  lyricsStructureSelectedIndex = -1;
+
+  const emptyBlock = {
+    type: "",
+    label: "",
+    start: Number(first.start),
+    end: Number(last.end)
+  };
+
+  lyricsStructureDraft.splice(
+    firstIndex,
+    lastIndex - firstIndex + 1,
+    emptyBlock
+  );
+
+  setLyricsStructureSelection([firstIndex]);
   clearLyricsStructureLoop();
   renderLyricsStructure();
   return true;
@@ -12902,13 +12945,14 @@ function renderLyricsStructure() {
   structure.forEach((segment, index) => {
     const block = document.createElement("div");
     block.className = "lyrics-structure-segment";
-    if (index === lyricsStructureSelectedIndex) {
+    if (lyricsStructureSelectedIndices.has(index) || index === lyricsStructureSelectedIndex) {
       block.classList.add("selected");
     }
 
-    block.textContent = segment.label || segment.type;
+    const structureName = String(segment.label || segment.type || "").trim();
+    block.textContent = structureName || "[      ]";
     block.title =
-      (segment.label || segment.type)
+      (structureName || "[      ]")
       + "  "
       + formatStructureTime(segment.start)
       + " – "
@@ -12923,6 +12967,23 @@ function renderLyricsStructure() {
     block.addEventListener("click", event => {
       event.stopPropagation();
       closeLyricsStructureNameMenu();
+
+      if (event.shiftKey) {
+        const current = [...lyricsStructureSelectedIndices].sort((a, b) => a - b);
+        const anchor = current.length
+          ? (index < current[0] ? current[0] : current[current.length - 1])
+          : (lyricsStructureSelectedIndex >= 0 ? lyricsStructureSelectedIndex : index);
+        const from = Math.min(anchor, index);
+        const to = Math.max(anchor, index);
+        setLyricsStructureSelection(
+          Array.from({ length: to - from + 1 }, (_, offset) => from + offset)
+        );
+        clearLyricsStructureLoop();
+        renderLyricsStructure();
+        return;
+      }
+
+      setLyricsStructureSelection([index]);
       playLyricsStructureSegment(index);
     });
 
@@ -13083,7 +13144,7 @@ lyricsStructureTrack?.addEventListener("click", event => {
   );
 
   clearLyricsStructureLoop();
-  lyricsStructureSelectedIndex = -1;
+  clearLyricsStructureSelection();
 
   syncAllTo(ratio * structureSongEnd());
   updatePlayheads();
@@ -13101,7 +13162,7 @@ lyricsStructureTrack?.addEventListener("click", event => {
 document.addEventListener("keydown", event => {
   if (!lyricsEditorDialog?.classList.contains("open")) return;
   if (event.key !== "Delete") return;
-  if (lyricsStructureSelectedIndex < 0 || !lyricsStructureDraft?.length) return;
+  if (!lyricsStructureSelectedIndices.size && lyricsStructureSelectedIndex < 0 || !lyricsStructureDraft?.length) return;
   const active = document.activeElement;
   if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) return;
   event.preventDefault();
@@ -13231,7 +13292,7 @@ function renderLyricsEditor() {
 
     karaokeBox.addEventListener("click", event => {
       event.stopPropagation();
-      lyricsStructureSelectedIndex = -1;
+      clearLyricsStructureSelection();
       clearLyricsStructureLoop();
       lyricsEditorSelectedLine = index;
 
@@ -14429,6 +14490,11 @@ lyricsLoadInput.addEventListener("change", async () => {
           loaded.lines
         )
       );
+
+    lyricsStructureDraft = Array.isArray(loaded.structure)
+      ? JSON.parse(JSON.stringify(loaded.structure))
+      : null;
+    clearLyricsStructureSelection();
   }
 
   else if (extension === "txt") {
@@ -14724,7 +14790,13 @@ function exportLyricsFile(rawName, format, encoding = "utf8") {
                     .join(" ")
               )
               .join(" "),
-          lines
+          lines,
+          structure: (lyricsStructureDraft || []).map(segment => ({
+            type: String(segment.type || ""),
+            label: String(segment.label || ""),
+            start: Number(segment.start),
+            end: Number(segment.end)
+          }))
         },
         null,
         2
@@ -14784,6 +14856,16 @@ function exportLyricsFile(rawName, format, encoding = "utf8") {
               .join(" ")
         )
         .join("\n");
+
+    if (lyricsStructureDraft?.length) {
+      const scheme = lyricsStructureDraft.map(segment => {
+        const name = String(segment.label || segment.type || "").trim() || "[      ]";
+        return formatStructureTime(segment.start)
+          + " ── " + name + " ── "
+          + formatStructureTime(segment.end);
+      }).join("\n");
+      content += "\n\n" + scheme;
+    }
   }
 
   else if (format === "pdf") {
@@ -16643,8 +16725,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-интерфейс под Структуру
-   | 4.9.0
+Lyrics Structure: исправлен Split во всех режимах; Shift выделяет только соседний диапазон; Delete превращает всё выделение в один пустой блок; JSON сохраняет и восстанавливает Structure; TXT сохраняет Structure как компактную блок-схему; убран заголовок Structure и расширена тайм-линия.
+   | 4.10.0
 </div>
 
 <div class="row" id="build-down">
