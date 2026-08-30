@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.10.0</title>
+  <title>MyNus 4.10.4</title>
 
 
  <style>
@@ -1508,9 +1508,19 @@
     }
 
     .lyrics-structure-segment.selected {
-      outline: 2px solid currentColor;
-      outline-offset: -2px;
+      outline: none;
+      box-shadow: none;
       z-index: 2;
+    }
+
+    .lyrics-structure-segment.selected::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border: 2px solid currentColor;
+      box-sizing: border-box;
+      pointer-events: none;
+      z-index: 6;
     }
 
     .lyrics-structure-boundary {
@@ -1546,6 +1556,7 @@
       font-size: 10px;
       color: #666;
       overflow: visible;
+      background: rgba(128,128,128,.12);
     }
 
     .lyrics-structure-tick {
@@ -1558,6 +1569,21 @@
     .lyrics-structure-tick.active {
       color: #0066ff;
       font-weight: 700;
+    }
+
+    .lyrics-editor-karaoke-word.cursor-word {
+      position: relative;
+    }
+
+    .lyrics-editor-karaoke-word.cursor-word::before {
+      content: "";
+      position: absolute;
+      left: -1px;
+      top: -2px;
+      bottom: -2px;
+      width: 2px;
+      background: #0066ff;
+      pointer-events: none;
     }
 
     .lyrics-structure-track,
@@ -3334,8 +3360,8 @@
     <div class="lyrics-editor-footer">
 
       <div class="lyrics-editor-transport">
-        <button type="button" id="lyricsPlayMasterBtn">Play Master</button>
-        <button type="button" id="lyricsPlayLineBtn">Loop Line</button>
+        <button type="button" id="lyricsPlayMasterBtn">Play</button>
+        <button type="button" id="lyricsPlayLineBtn">Loop</button>
         <button type="button" id="lyricsRepeatBtn">|&lt;-Repeat</button>
         <button type="button" id="lyricsSetStartBtn">Set Start</button>
         <button type="button" id="lyricsSetEndBtn">Set End</button>
@@ -5767,27 +5793,16 @@ function drawMasterTimeline() {
     "";
 
 
-  let interval =
-    10;
+  // Keep adjacent visible divisions at least about 1 cm apart (~38 CSS px).
+  const minTickPixels = 38;
+  const niceIntervals = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 30, 60, 120, 300, 600];
+  let interval = niceIntervals[niceIntervals.length - 1];
 
-
-  if (
-    pixelsPerSecond >= 80
-  ) {
-
-    interval =
-      5;
-
-  }
-
-
-  if (
-    pixelsPerSecond >= 140
-  ) {
-
-    interval =
-      1;
-
+  for (const candidate of niceIntervals) {
+    if (candidate * pixelsPerSecond >= minTickPixels) {
+      interval = candidate;
+      break;
+    }
   }
 
 
@@ -5837,10 +5852,7 @@ function drawMasterTimeline() {
       + "px";
 
 
-    label.textContent =
-      formatShortTime(
-        second
-      );
+    label.textContent = Number(second).toFixed(2);
 
 
     masterRuler.appendChild(
@@ -10876,6 +10888,19 @@ function syncAllTo(
 }
 
 
+function setGlobalCursorTime(time) {
+  const numeric = Number(time);
+  if (!Number.isFinite(numeric)) return;
+
+  syncAllTo(numeric);
+  updatePlayheads();
+  updateMasterCursor();
+  updateTimeDisplay();
+  updateLyricsMasterCounter();
+  updateLyricsEditorKaraoke(masterCursorTime);
+}
+
+
 // ========================================
 // FRAGMENT IN / LOOP / OUT
 // ========================================
@@ -11021,16 +11046,7 @@ function seekFromWaveform(
     * duration;
 
 
-  syncAllTo(
-    time
-  );
-
-
-  updatePlayheads();
-
-  updateMasterCursor();
-
-  updateTimeDisplay();
+  setGlobalCursorTime(time);
 
 }
 
@@ -11449,16 +11465,7 @@ function seekFromMasterTimeline(
     * duration;
 
 
-  syncAllTo(
-    time
-  );
-
-
-  updatePlayheads();
-
-  updateMasterCursor();
-
-  updateTimeDisplay();
+  setGlobalCursorTime(time);
 
 }
 
@@ -11477,7 +11484,7 @@ function updatePlayheads() {
 
 
   const x =
-    getCurrentTime()
+    Number(masterCursorTime || 0)
     * pixelsPerSecond;
 
 
@@ -11507,7 +11514,7 @@ function updateMasterCursor() {
 
 
   const x =
-    getCurrentTime()
+    Number(masterCursorTime || 0)
     * pixelsPerSecond;
 
 
@@ -11790,6 +11797,27 @@ function buildKaraokeLines() {
 
   }
 
+
+  const filteredLines = [];
+  let previousNormalizedLine = null;
+  let repeatedLineCount = 0;
+
+  karaokeLines.forEach(line => {
+    const normalized = normalizeStructureText(lineText(line));
+
+    if (normalized && normalized === previousNormalizedLine) {
+      repeatedLineCount += 1;
+    } else {
+      previousNormalizedLine = normalized;
+      repeatedLineCount = 1;
+    }
+
+    if (repeatedLineCount <= 3) {
+      filteredLines.push(line);
+    }
+  });
+
+  karaokeLines = filteredLines;
 
   activeKaraokeLine =
     -1;
@@ -12079,6 +12107,50 @@ function switchLyricsMasterToLine(index) {
   syncAllTo(Number(line.start));
 }
 
+function nearestLyricsWordIndex(line, time) {
+  const words = Array.isArray(line?.words) ? line.words : [];
+  if (!words.length) return -1;
+
+  let bestIndex = 0;
+  let bestDistance = Infinity;
+  const current = Number(time);
+
+  words.forEach((word, index) => {
+    const start = Number(word.start);
+    const end = Number(word.end);
+    const anchor = Number.isFinite(start) && Number.isFinite(end)
+      ? (start + end) / 2
+      : (Number.isFinite(start) ? start : 0);
+    const distance = Math.abs(anchor - current);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  });
+
+  return bestIndex;
+}
+
+function setCursorFromLyricsLinePointer(line, event, box) {
+  if (!line || !box) return;
+  const rect = box.getBoundingClientRect();
+  if (!rect.width) return;
+
+  const start = Number(line.start);
+  const end = Number(line.end);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return;
+
+  const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+  const approximateTime = start + ratio * (end - start);
+  const wordIndex = nearestLyricsWordIndex(line, approximateTime);
+  const word = line.words?.[wordIndex];
+  const snappedTime = word && Number.isFinite(Number(word.start))
+    ? Number(word.start)
+    : approximateTime;
+
+  setGlobalCursorTime(snappedTime);
+}
+
 function updateLyricsEditorKaraoke(currentTime) {
   if (!lyricsEditorDialog.classList.contains("open")) return;
 
@@ -12095,6 +12167,10 @@ function updateLyricsEditorKaraoke(currentTime) {
     const line = lyricsEditorDraft[rowIndex];
     const wordSpans = row.querySelectorAll(".lyrics-editor-karaoke-word");
 
+    const cursorWordIndex = rowIndex === currentLineIndex
+      ? nearestLyricsWordIndex(line, currentTime)
+      : -1;
+
     wordSpans.forEach((span, wordIndex) => {
       const word = line && line.words && line.words[wordIndex];
       if (!word) return;
@@ -12104,10 +12180,16 @@ function updateLyricsEditorKaraoke(currentTime) {
 
       span.classList.toggle("active", currentTime >= start && currentTime <= end);
       span.classList.toggle("past", currentTime > end);
+      span.classList.toggle("cursor-word", wordIndex === cursorWordIndex);
     });
   });
 
-  if (lyricsTransportMode === "master" && lyricsEditorSelectedLine !== currentLineIndex) {
+  if (
+    lyricsTransportMode === "master"
+    && lyricsStructureSelectedIndex < 0
+    && !lyricsStructureSelectedIndices.size
+    && lyricsEditorSelectedLine !== currentLineIndex
+  ) {
     lyricsEditorSelectedLine = currentLineIndex;
 
     rows.forEach((row, rowIndex) => {
@@ -12425,6 +12507,8 @@ lyricsTranscriptionBtn.addEventListener("click", async () => {
 });
 
 
+const MIN_STRUCTURE_BLOCK_DURATION = 10;
+
 function normalizeStructureText(text) {
   return String(text || "")
     .toLowerCase()
@@ -12597,9 +12681,88 @@ function detectLyricsStructure(lines) {
     classified.push({ type: "Coda", start: lastLyricEnd, end: songEnd });
   }
 
-  return classified
-    .filter(segment => segment.end > segment.start)
-    .sort((a, b) => a.start - b.start);
+  return normalizeStructureCoverage(
+    classified
+      .filter(segment => segment.end > segment.start)
+      .sort((a, b) => a.start - b.start),
+    songEnd
+  );
+}
+
+function normalizeStructureCoverage(structure, requestedSongEnd = null) {
+  let items = Array.isArray(structure)
+    ? structure
+        .map(item => ({ ...item }))
+        .filter(item =>
+          Number.isFinite(Number(item.start))
+          && Number.isFinite(Number(item.end))
+          && Number(item.end) > Number(item.start)
+        )
+        .sort((a, b) => Number(a.start) - Number(b.start))
+    : [];
+
+  if (!items.length) return items;
+
+  const total = Math.max(
+    0.001,
+    Number(requestedSongEnd) || 0,
+    Number(duration) || 0,
+    ...items.map(item => Number(item.end) || 0)
+  );
+
+  // Structure is a continuous partition of the song: no invisible gaps.
+  items[0].start = 0;
+  for (let i = 1; i < items.length; i++) {
+    const boundary = Math.max(0, Math.min(total, Number(items[i].start) || 0));
+    items[i - 1].end = boundary;
+    items[i].start = boundary;
+  }
+  items[items.length - 1].end = total;
+
+  items = enforceMinimumStructureDuration(items);
+
+  // Merging short blocks may change neighbours; restore exact continuity.
+  if (items.length) {
+    items[0].start = 0;
+    for (let i = 1; i < items.length; i++) {
+      items[i].start = Number(items[i - 1].end);
+    }
+    items[items.length - 1].end = total;
+  }
+
+  return items;
+}
+
+function enforceMinimumStructureDuration(structure) {
+  const items = Array.isArray(structure)
+    ? structure.map(item => ({ ...item }))
+    : [];
+
+  if (items.length <= 1) return items;
+
+  let changed = true;
+  while (changed && items.length > 1) {
+    changed = false;
+
+    for (let i = 0; i < items.length; i++) {
+      const current = items[i];
+      const length = Number(current.end) - Number(current.start);
+      if (!Number.isFinite(length) || length >= MIN_STRUCTURE_BLOCK_DURATION) continue;
+
+      if (i > 0) {
+        items[i - 1].end = Number(current.end);
+        items.splice(i, 1);
+      } else {
+        items[1].start = Number(current.start);
+        items.splice(0, 1);
+      }
+
+      changed = true;
+      break;
+    }
+  }
+
+  return items;
 }
 
 function structureSongEnd(structure = lyricsStructureDraft) {
@@ -12611,8 +12774,11 @@ function structureSongEnd(structure = lyricsStructureDraft) {
 
 function ensureLyricsStructureDraft() {
   if (lyricsStructureDraft !== null) return;
-  lyricsStructureDraft = detectLyricsStructure(lyricsEditorDraft)
-    .map(item => ({ ...item }));
+  const detectedStructure = detectLyricsStructure(lyricsEditorDraft);
+  lyricsStructureDraft = normalizeStructureCoverage(
+    detectedStructure,
+    structureSongEnd(detectedStructure)
+  ).map(item => ({ ...item }));
   lyricsStructureSelectedIndex = -1;
 }
 
@@ -12658,6 +12824,7 @@ function openLyricsStructureNameMenu(event, index) {
     "Short Chorus",
     "Bridge",
     "Break",
+    "Riff",
     "Solo",
     "Part C",
     "Coda"
@@ -12742,18 +12909,8 @@ function playLyricsStructureTimelineAt(event) {
 
   const time = ratio * structureSongEnd();
 
-  clearLyricsStructureLoop();
-  clearLyricsStructureSelection();
-
-  syncAllTo(time);
-  updatePlayheads();
-  updateMasterCursor();
-  updateTimeDisplay();
-  updateLyricsMasterCounter();
-
-  if (!isPlaying) {
-    playCurrentMode();
-  }
+  // One shared cursor for Structure, Lines and Sequencer. Transport state is preserved.
+  setGlobalCursorTime(time);
 
   renderLyricsStructure();
 }
@@ -12763,17 +12920,19 @@ function splitSelectedLyricsStructure() {
   const segment = lyricsStructureDraft?.[index];
   if (!segment) return false;
 
-  const current = Number(getCurrentTime());
+  const cursorTime = Number(masterCursorTime);
+  const current = Number.isFinite(cursorTime) ? cursorTime : Number(getCurrentTime());
   const start = Number(segment.start);
   const end = Number(segment.end);
 
   if (
     !Number.isFinite(current)
-    ||
-    current <= start
-    ||
-    current >= end
+    || current < start + MIN_STRUCTURE_BLOCK_DURATION
+    || current > end - MIN_STRUCTURE_BLOCK_DURATION
   ) {
+    if (lyricsEditorStatus) {
+      lyricsEditorStatus.textContent = "Split: cursor must leave at least 10.00 s on both sides";
+    }
     return true;
   }
 
@@ -12918,8 +13077,11 @@ function renderLyricsStructure() {
   if (!lyricsStructureTrack) return;
 
   if (lyricsStructureDraft === null) {
-    lyricsStructureDraft = detectLyricsStructure(lyricsEditorDraft)
-      .map(item => ({ ...item }));
+    const detectedStructure = detectLyricsStructure(lyricsEditorDraft);
+    lyricsStructureDraft = normalizeStructureCoverage(
+      detectedStructure,
+      structureSongEnd(detectedStructure)
+    ).map(item => ({ ...item }));
     lyricsStructureSelectedIndex = -1;
   }
 
@@ -12975,6 +13137,8 @@ function renderLyricsStructure() {
           : (lyricsStructureSelectedIndex >= 0 ? lyricsStructureSelectedIndex : index);
         const from = Math.min(anchor, index);
         const to = Math.max(anchor, index);
+        lyricsEditorSelectedLine = -1;
+        document.querySelectorAll(".lyrics-editor-row").forEach(item => item.classList.remove("selected"));
         setLyricsStructureSelection(
           Array.from({ length: to - from + 1 }, (_, offset) => from + offset)
         );
@@ -12983,8 +13147,12 @@ function renderLyricsStructure() {
         return;
       }
 
+      // Structure and Lines never compete for Split: only one selection is active.
+      lyricsEditorSelectedLine = -1;
+      document.querySelectorAll(".lyrics-editor-row").forEach(item => item.classList.remove("selected"));
       setLyricsStructureSelection([index]);
-      playLyricsStructureSegment(index);
+      clearLyricsStructureLoop();
+      renderLyricsStructure();
     });
 
     block.addEventListener("dblclick", event => {
@@ -13031,8 +13199,8 @@ function renderLyricsStructure() {
       pushLyricsHistory();
 
       const rect = lyricsStructureTrack.getBoundingClientRect();
-      const min = Number(segment.start) + 0.25;
-      const max = Number(next.end) - 0.25;
+      const min = Number(segment.start) + MIN_STRUCTURE_BLOCK_DURATION;
+      const max = Number(next.end) - MIN_STRUCTURE_BLOCK_DURATION;
 
       handle.setPointerCapture?.(event.pointerId);
 
@@ -13143,18 +13311,8 @@ lyricsStructureTrack?.addEventListener("click", event => {
     Math.min(1, (event.clientX - rect.left) / rect.width)
   );
 
-  clearLyricsStructureLoop();
-  clearLyricsStructureSelection();
-
-  syncAllTo(ratio * structureSongEnd());
-  updatePlayheads();
-  updateMasterCursor();
-  updateTimeDisplay();
-  updateLyricsMasterCounter();
-
-  if (!isPlaying) {
-    playCurrentMode();
-  }
+  // One shared cursor for Structure, Lines and Sequencer. Transport state is preserved.
+  setGlobalCursorTime(ratio * structureSongEnd());
 
   renderLyricsStructure();
 });
@@ -13300,8 +13458,10 @@ function renderLyricsEditor() {
         item.classList.toggle("selected", itemIndex === index);
       });
 
-      switchLyricsLoopToLine(index);
-      switchLyricsMasterToLine(index);
+      // Position inside Lines is relative to this line and snaps to the nearest word.
+      // The same cursor immediately moves in Structure and Sequencer.
+      setCursorFromLyricsLinePointer(line, event, karaokeBox);
+
       textWrap.classList.add("editing");
       textArea.value = line._editedText ?? lineText(line);
       textArea.focus();
@@ -13336,6 +13496,8 @@ function renderLyricsEditor() {
     row.addEventListener("click", event => {
       if (event.target === startInput || event.target === endInput || event.target === textArea) return;
 
+      clearLyricsStructureSelection();
+      clearLyricsStructureLoop();
       lyricsEditorSelectedLine = index;
 
       document.querySelectorAll(".lyrics-editor-row").forEach((item, itemIndex) => {
@@ -13344,9 +13506,6 @@ function renderLyricsEditor() {
 
       lyricsEditorStatus.textContent =
         "Lines: " + lyricsEditorDraft.length + " | Selected: " + (index + 1);
-
-      switchLyricsLoopToLine(index);
-      switchLyricsMasterToLine(index);
     });
 
     textWrap.appendChild(karaokeBox);
@@ -13504,7 +13663,7 @@ function updateLyricsTransportButtons() {
 
 
       lyricsPlayMasterBtn.textContent =
-        "Play Master";
+        "Play";
 
     }
 
@@ -13515,7 +13674,7 @@ function updateLyricsTransportButtons() {
 
 
       lyricsPlayLineBtn.textContent =
-        "Loop Line";
+        "Loop";
 
     }
 
@@ -13524,11 +13683,11 @@ function updateLyricsTransportButtons() {
   else {
 
     lyricsPlayMasterBtn.textContent =
-      "Play Master";
+      "Play";
 
 
     lyricsPlayLineBtn.textContent =
-      "Loop Line";
+      "Loop";
 
   }
 
@@ -13610,11 +13769,11 @@ function openLyricsEditor() {
 
 
   lyricsPlayMasterBtn.textContent =
-    "Play Master";
+    "Play";
 
 
   lyricsPlayLineBtn.textContent =
-    "Loop Line";
+    "Loop";
 
 
   lyricsEditorDialog.classList.add("open");
@@ -13663,11 +13822,11 @@ function closeLyricsEditor() {
 
 
   lyricsPlayMasterBtn.textContent =
-    "Play Master";
+    "Play";
 
 
   lyricsPlayLineBtn.textContent =
-    "Loop Line";
+    "Loop";
 
 
   lyricsEditorDialog.classList.remove(
@@ -13751,8 +13910,7 @@ lyricsSplitLineBtn.addEventListener(
     );
 
 
-    const current =
-      masterCursorTime;
+    const current = Number(masterCursorTime);
 
 
     if (
@@ -14492,7 +14650,13 @@ lyricsLoadInput.addEventListener("change", async () => {
       );
 
     lyricsStructureDraft = Array.isArray(loaded.structure)
-      ? JSON.parse(JSON.stringify(loaded.structure))
+      ? normalizeStructureCoverage(
+          JSON.parse(JSON.stringify(loaded.structure)),
+          Math.max(
+            Number(duration) || 0,
+            ...loaded.structure.map(item => Number(item.end) || 0)
+          )
+        )
       : null;
     clearLyricsStructureSelection();
   }
@@ -14740,6 +14904,25 @@ function formatSrtTime(seconds) {
 }
 
 
+function buildLyricsStructureScheme() {
+  if (!lyricsStructureDraft?.length) return "";
+
+  return lyricsStructureDraft.map(segment => {
+    const name = String(segment.label || segment.type || "").trim() || "[      ]";
+    return formatStructureTime(segment.start)
+      + " ── " + name + " ── "
+      + formatStructureTime(segment.end);
+  }).join("\n");
+}
+
+function escapeLyricsHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function exportLyricsFile(rawName, format, encoding = "utf8") {
   const safeName =
     (
@@ -14769,6 +14952,7 @@ function exportLyricsFile(rawName, format, encoding = "utf8") {
 
   let content = "";
   let mime = "text/plain";
+  const structureScheme = buildLyricsStructureScheme();
 
   if (format === "json") {
     mime = "application/json";
@@ -14820,6 +15004,10 @@ function exportLyricsFile(rawName, format, encoding = "utf8") {
               .join(" ")
         )
         .join("\n");
+
+    if (structureScheme) {
+      content += "\n\n" + structureScheme;
+    }
   }
 
   else if (format === "srt") {
@@ -14841,6 +15029,10 @@ function exportLyricsFile(rawName, format, encoding = "utf8") {
                 .join(" ")
         )
         .join("\n\n");
+
+    if (structureScheme) {
+      content += "\n\n" + structureScheme;
+    }
   }
 
   else if (format === "txt") {
@@ -14857,78 +15049,94 @@ function exportLyricsFile(rawName, format, encoding = "utf8") {
         )
         .join("\n");
 
-    if (lyricsStructureDraft?.length) {
-      const scheme = lyricsStructureDraft.map(segment => {
-        const name = String(segment.label || segment.type || "").trim() || "[      ]";
-        return formatStructureTime(segment.start)
-          + " ── " + name + " ── "
-          + formatStructureTime(segment.end);
-      }).join("\n");
-      content += "\n\n" + scheme;
+    if (structureScheme) {
+      content += "\n\n" + structureScheme;
     }
   }
 
   else if (format === "pdf") {
-    const printWindow =
-      window.open("", "_blank");
-
-    if (!printWindow) return;
-
     const body =
       lines
         .map(
           line =>
             "<p>"
-            +
-            line.words
-              .map(
-                word =>
-                  String(word.word)
-                    .replace(/&/g, "&amp;")
-                    .replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;")
-              )
-              .join(" ")
-            +
-            "</p>"
+            + line.words.map(word => escapeLyricsHtml(word.word)).join(" ")
+            + "</p>"
         )
         .join("");
 
-    printWindow.document.write(
+    const structureBody = structureScheme
+      ? "<div class='structure'>"
+        + structureScheme
+            .split("\n")
+            .map(row => "<div>" + escapeLyricsHtml(row) + "</div>")
+            .join("")
+        + "</div>"
+      : "";
+
+    // Print through a temporary hidden iframe instead of a popup window.
+    // The iframe is removed after printing, so the editor cannot remain stuck
+    // behind a dead/foreground print window after PDF save/cancel.
+    const printFrame = document.createElement("iframe");
+    printFrame.setAttribute("aria-hidden", "true");
+    printFrame.style.position = "fixed";
+    printFrame.style.right = "0";
+    printFrame.style.bottom = "0";
+    printFrame.style.width = "1px";
+    printFrame.style.height = "1px";
+    printFrame.style.border = "0";
+    printFrame.style.opacity = "0";
+    printFrame.style.pointerEvents = "none";
+    document.body.appendChild(printFrame);
+
+    const printWindow = printFrame.contentWindow;
+    const printDocument = printFrame.contentDocument || printWindow?.document;
+    if (!printWindow || !printDocument) {
+      printFrame.remove();
+      return;
+    }
+
+    let printCleaned = false;
+    const cleanupPrintFrame = () => {
+      if (printCleaned) return;
+      printCleaned = true;
+      setTimeout(() => printFrame.remove(), 0);
+    };
+
+    printWindow.onafterprint = cleanupPrintFrame;
+
+    printDocument.open();
+    printDocument.write(
       "<!doctype html>"
-      +
-      "<html><head><meta charset='utf-8'>"
-      +
-      "<title>"
-      + safeName
-      + "</title>"
-      +
-      "<style>"
-      +
-      "body{font-family:Arial,sans-serif;padding:40px;line-height:1.5}"
-      +
-      "h1{font-size:22px;margin-bottom:28px}"
-      +
-      "p{margin:0 0 8px}"
-      +
-      "</style></head><body>"
-      +
-      "<h1>"
-      + safeName
-      + "</h1>"
-      +
-      body
-      +
-      "</body></html>"
+      + "<html><head><meta charset='utf-8'>"
+      + "<title>" + escapeLyricsHtml(safeName) + "</title>"
+      + "<style>"
+      + "body{font-family:Arial,sans-serif;padding:40px;line-height:1.5;color:#111}"
+      + "h1{font-size:22px;margin:0 0 28px}"
+      + "p{margin:0 0 8px}"
+      + ".structure{margin-top:28px;padding-top:16px;border-top:1px solid #999;font-family:Consolas,monospace;font-size:12px;white-space:pre}"
+      + ".structure div{margin:0 0 4px}"
+      + "</style></head><body>"
+      + "<h1>" + escapeLyricsHtml(safeName) + "</h1>"
+      + body
+      + structureBody
+      + "</body></html>"
     );
+    printDocument.close();
 
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    setTimeout(() => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch (error) {
+        cleanupPrintFrame();
+      }
+    }, 50);
 
+    // Fallback cleanup for browsers that do not fire afterprint reliably.
+    setTimeout(cleanupPrintFrame, 60000);
     return;
   }
-
   else {
     return;
   }
@@ -15397,12 +15605,12 @@ function startAnimation() {
 
       applyMix();
 
+      // Audio transport is the source while playing; all three visual cursors use this same value.
+      masterCursorTime = getCurrentTime();
+
       updatePlayheads();
 
       updateMasterCursor();
-
-      masterCursorTime =
-        getCurrentTime();
 
       updateLyricsMasterCounter();
 
@@ -16725,8 +16933,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Lyrics Structure: исправлен Split во всех режимах; Shift выделяет только соседний диапазон; Delete превращает всё выделение в один пустой блок; JSON сохраняет и восстанавливает Structure; TXT сохраняет Structure как компактную блок-схему; убран заголовок Structure и расширена тайм-линия.
-   | 4.10.0
+Единый курсор Structure ↔ Lines ↔ Sequencer: Split использует один общий таймкод; выбор Structure/Lines взаимоисключающий; в Lines курсор позиционируется относительно границ строки и привязывается к ближайшему слову; перемещение курсора сохраняет Play/Pause/Loop; Master Timeline показывает секунды x.xx и автоматически прореживает деления до расстояния не менее ~1 см; тайм-линия Structure подсвечена серым; граница selected рисуется точно по геометрии блока.
+   | 4.10.4
 </div>
 
 <div class="row" id="build-down">
