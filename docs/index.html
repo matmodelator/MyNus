@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.11.3</title>
+  <title>MyNus 4.11.4</title>
 
 
  <style>
@@ -1589,11 +1589,23 @@
       pointer-events: none;
     }
 
-    .lyrics-structure-track,
-    .lyrics-structure-timeline {
+    .lyrics-structure-track {
       width: 100%;
       max-width: 100%;
       box-sizing: border-box;
+    }
+
+    .lyrics-structure-timeline {
+      width: calc(100% - 68px);
+      max-width: none;
+      margin-left: 34px;
+      margin-right: 34px;
+      box-sizing: border-box;
+    }
+
+    .lyrics-structure-tick.endpoint {
+      color: #e58aa8;
+      font-weight: 700;
     }
 
     .lyrics-structure-name-menu {
@@ -3432,7 +3444,7 @@
           00:00.00
         </div>
         <div id="lyricsEditorStats" class="lyrics-editor-status">
-          Lines: 0 | Selected: 0
+          Lines: 0 | Selected: 0 | Edited: —
         </div>
       </div>
 
@@ -3781,7 +3793,9 @@ function updateLyricsEditorStats() {
   if (!lyricsEditorStats) return;
   lyricsEditorStats.textContent =
     "Lines: " + lyricsEditorDraft.length + " | Selected: " +
-    (lyricsEditorSelectedLine >= 0 ? lyricsEditorSelectedLine + 1 : 0);
+    (lyricsEditorSelectedLine >= 0 ? lyricsEditorSelectedLine + 1 : 0) +
+    " | Edited: " +
+    (lyricsEditorEditLineIndex >= 0 ? lyricsEditorEditLineIndex + 1 : "—");
 }
 
 lyricsErrorClearBtn?.addEventListener("click", () => {
@@ -5959,9 +5973,11 @@ function drawMasterTimeline() {
       + "px";
 
 
-    masterRuler.appendChild(
-      mark
-    );
+    if (x < width - 1) {
+      masterRuler.appendChild(
+        mark
+      );
+    }
 
 
     const label =
@@ -12371,6 +12387,7 @@ function leaveLyricsEdit() {
 
   lyricsEditorEditLineIndex = -1;
   lyricsEditorCaretOffset = 0;
+  updateLyricsEditorStats();
 }
 
 function enterLyricsEditAt(line, row, textWrap, textArea, karaokeBox, clientX, clientY) {
@@ -13369,8 +13386,14 @@ function renderLyricsStructureTimeline(songEnd) {
     tick.style.left = (t / total * 100) + "%";
     tick.textContent = formatStructureTime(t);
     tick.dataset.time = String(t);
-    if (index === 0) tick.style.transform = "translateX(0)";
-    if (index === times.length - 1) tick.style.transform = "translateX(-100%)";
+    if (index === 0) {
+      tick.classList.add("endpoint");
+      tick.style.transform = "translateX(-100%)";
+    }
+    if (index === times.length - 1) {
+      tick.classList.add("endpoint");
+      tick.style.transform = "translateX(0)";
+    }
     lyricsStructureTimeline.appendChild(tick);
   });
 }
@@ -13641,7 +13664,7 @@ function initLyricsEditorWindowMovement() {
   let drag = null;
 
   lyricsEditorHeader.addEventListener("pointerdown", event => {
-    if (event.target.closest("button")) return;
+    if (event.target.closest("button, textarea, input, select")) return;
     const rect = lyricsEditorCard.getBoundingClientRect();
     lyricsEditorCard.style.position = "fixed";
     lyricsEditorCard.style.left = rect.left + "px";
@@ -13961,10 +13984,16 @@ function updateLyricsMasterCounter() {
 
   if (!lyricsMasterCounter) return;
 
+  const sequencerCounter =
+    String(timeDisplay?.textContent || timeDisplayTop?.textContent || "");
+
+  const vocalMatch =
+    sequencerCounter.match(/(?:^|\s\/\s)V:([^\s/]+)/);
+
   lyricsMasterCounter.textContent =
-    formatTime(
-      masterCursorTime
-    );
+    vocalMatch
+      ? vocalMatch[1]
+      : "-00:00.00";
 
   updateLyricsStructurePlayhead();
 
@@ -14021,6 +14050,7 @@ function openLyricsEditor() {
 
   updateLyricsUndoRedoButtons();
   renderLyricsEditor();
+  updateTimeDisplay();
   updateLyricsMasterCounter();
 
   lyricsTransportMode =
@@ -15752,11 +15782,11 @@ function startAnimation() {
 
       updateMasterCursor();
 
+      updateTimeDisplay();
+
       updateLyricsMasterCounter();
 
       updateLyricsTransportButtons();
-
-      updateTimeDisplay();
 
       followPlayhead();
 
@@ -17061,8 +17091,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Lyrics Editor: Play при активном Structure Loop теперь выходит из Loop в обычное воспроизведение без Pause. Добавлено белое поле 10 px сверху и снизу окна Lyrics Editor. Поле консоли сообщений стало редактируемым для copy/paste.
-   | 4.11.3
+Lyrics Editor: счетчик берёт значение V из Sequencer; добавлен Edited по строке карета; консоль принимает карет и больше не перехватывается drag окна. Structure: крайние значения шкалы вынесены за её границы и выделены розовым, шкала укорочена по краям. Sequencer: убрана двойная правая граница от совпадения конечной риски с рамкой.
+   | 4.11.4
 </div>
 
 <div class="row" id="build-down">
