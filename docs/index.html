@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.11.5</title>
+  <title>MyNus 5.0.0</title>
 
 
  <style>
@@ -1391,7 +1391,7 @@
     }
 
     /* ========================================
-       LYRICS FULL SCREEN / KARAOKE MODE 4.11.5
+       LYRICS FULL SCREEN / KARAOKE MODE 5.0.0
     ======================================== */
 
     .lyrics-mode-switch,
@@ -1462,7 +1462,7 @@
       right: 0;
       height: 64px;
       display: grid;
-      grid-template-columns: 1fr auto 1fr;
+      grid-template-columns: 1fr minmax(0, 2fr) 1fr;
       align-items: center;
       gap: 16px;
       padding: 0 24px;
@@ -1471,26 +1471,51 @@
     }
 
     .lyrics-fullscreen-track-name {
-      justify-self: start;
-      max-width: 42vw;
+      justify-self: center;
+      max-width: 52vw;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      text-align: center;
       font-size: 18px;
       font-weight: 600;
       color: #fff;
     }
 
     .lyrics-fullscreen-back {
-      justify-self: center;
+      justify-self: start;
+      padding: 7px 12px;
+      border: 1px solid #e58aa8;
+      border-radius: 6px;
+      background: rgba(229,138,168,.10);
+      color: #e58aa8;
+      text-decoration: none;
+    }
+
+    .lyrics-fullscreen-back:hover {
+      background: rgba(229,138,168,.20);
+      text-decoration: none;
+    }
+
+    .lyrics-fullscreen-brand {
+      justify-self: end;
+      font-size: 20px;
+      font-weight: 800;
+      color: #f3df72;
+      white-space: nowrap;
     }
 
     .lyrics-fullscreen-counter {
-      justify-self: end;
+      position: absolute;
+      left: 50%;
+      bottom: 170px;
+      transform: translateX(-50%);
+      z-index: 6;
       font-family: Consolas, monospace;
-      font-size: 18px;
+      font-size: 36px;
+      line-height: 1;
       font-weight: 700;
-      color: #fff;
+      color: #7fd8ff;
       white-space: nowrap;
     }
 
@@ -1509,7 +1534,7 @@
       font-size: clamp(34px, 5.1vw, 76px);
       line-height: 1.2;
       font-weight: 700;
-      color: #fff;
+      color: #c8ff70;
       white-space: normal;
     }
 
@@ -1530,12 +1555,12 @@
     }
 
     .lyrics-fullscreen-word.past {
-      color: #8f8f8f;
+      color: #92bd5b;
     }
 
     .lyrics-fullscreen-word.active {
       color: #000;
-      background: #fff;
+      background: #c8ff70;
     }
 
     .lyrics-editor-card.karaoke-fullscreen-mode > .lyrics-structure-row {
@@ -1552,22 +1577,40 @@
       color: #fff;
     }
 
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-endpoints {
+      height: 40px;
+      font-size: 18px;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-endpoint-value {
+      bottom: 5px;
+      color: #e58aa8;
+    }
+
     .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-track {
+      height: 48px;
       border-color: rgba(255,255,255,.55);
     }
 
     .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-segment {
       color: #fff;
       border-right-color: rgba(255,255,255,.42);
+      font-size: 20px;
+      padding-left: 10px;
+      padding-right: 10px;
     }
 
     .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-timeline {
+      height: 40px;
+      margin-top: 4px;
+      font-size: 18px;
       color: #aaa;
       background: rgba(255,255,255,.08);
     }
 
-    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-endpoint-value {
-      color: #e58aa8;
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-playhead {
+      width: 3px;
+      transform: translateX(-1.5px);
     }
 
     .lyrics-saveas-actions {
@@ -3587,10 +3630,11 @@
 
     <div id="lyricsFullScreenView" class="lyrics-fullscreen-view" aria-hidden="true">
       <div class="lyrics-fullscreen-topbar">
-        <div id="lyricsFullScreenTrackName" class="lyrics-fullscreen-track-name">No file selected</div>
         <button type="button" id="lyricsFullScreenBackBtn" class="lyrics-fullscreen-back">Lyrics Editor</button>
-        <div id="lyricsFullScreenCounter" class="lyrics-fullscreen-counter">-00:00.00</div>
+        <div id="lyricsFullScreenTrackName" class="lyrics-fullscreen-track-name">No file selected</div>
+        <div class="lyrics-fullscreen-brand">MyNus</div>
       </div>
+      <div id="lyricsFullScreenCounter" class="lyrics-fullscreen-counter">-00:00.00</div>
       <div class="lyrics-fullscreen-lines">
         <div id="lyricsFullScreenCurrent" class="lyrics-fullscreen-current"></div>
         <div id="lyricsFullScreenNext" class="lyrics-fullscreen-next"></div>
@@ -17407,8 +17451,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Lyrics: добавлен Full Screen karaoke mode. В Editor заголовок заменён цветным переключателем Full Screen; в режиме исполнения доступен обратный переключатель Lyrics Editor. Full Screen: чёрный фон, текущая строка крупно чуть выше центра, следующая строка ниже меньшим шрифтом, название трека сверху слева, V-счётчик сверху справа, Structure полностью внизу и синхронизирована с общим временем.
-   | 5.0.0
+Full Screen karaoke: переход Lyrics Editor оформлен розовой кнопкой слева сверху; название трека перенесено в центр верхней строки; MyNus добавлен справа сверху желтоватым. Текущая строка салатовая. Structure в Full Screen увеличена примерно в 2 раза по высоте. V-счётчик перенесён по центру над Structure, увеличен примерно в 2 раза и сделан голубоватым.
+   | 5.0.1
 </div>
 
 <div class="row" id="build-down">
