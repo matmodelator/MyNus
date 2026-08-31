@@ -1574,6 +1574,35 @@
       font-weight: 700;
     }
 
+    /* Separate upper row for the real start/end values. It occupies its own
+       height and does not change Structure/timeline width or time mapping. */
+    .lyrics-structure-endpoints {
+      position: relative;
+      width: 100%;
+      height: 20px;
+      box-sizing: border-box;
+      font-size: 10px;
+      color: #e58aa8;
+      font-weight: 700;
+      pointer-events: none;
+    }
+
+    .lyrics-structure-endpoint-value {
+      position: absolute;
+      bottom: 2px;
+      white-space: nowrap;
+    }
+
+    .lyrics-structure-endpoint-value.start { left: 0; }
+    .lyrics-structure-endpoint-value.end { right: 0; }
+
+    /* Endpoint tick anchors stay exactly at 0% / 100%; only their labels
+       live in the separate upper row. */
+    .lyrics-structure-tick.endpoint {
+      width: 1px;
+      transform: none;
+    }
+
     .lyrics-editor-karaoke-word.cursor-word {
       position: relative;
     }
@@ -1589,23 +1618,11 @@
       pointer-events: none;
     }
 
-    .lyrics-structure-track {
+    .lyrics-structure-track,
+    .lyrics-structure-timeline {
       width: 100%;
       max-width: 100%;
       box-sizing: border-box;
-    }
-
-    .lyrics-structure-timeline {
-      width: calc(100% - 68px);
-      max-width: none;
-      margin-left: 34px;
-      margin-right: 34px;
-      box-sizing: border-box;
-    }
-
-    .lyrics-structure-tick.endpoint {
-      color: #e58aa8;
-      font-weight: 700;
     }
 
     .lyrics-structure-name-menu {
@@ -3414,6 +3431,10 @@
 
     <div id="lyricsStructureRow" class="lyrics-structure-row">
       <div class="lyrics-structure-body">
+        <div id="lyricsStructureEndpoints" class="lyrics-structure-endpoints">
+          <span id="lyricsStructureStartValue" class="lyrics-structure-endpoint-value start">0:00</span>
+          <span id="lyricsStructureEndValue" class="lyrics-structure-endpoint-value end">0:00</span>
+        </div>
         <div id="lyricsStructureTrack" class="lyrics-structure-track">
           <span class="lyrics-structure-empty">—</span>
         </div>
@@ -3839,6 +3860,8 @@ const lyricsPlayLineBtn = document.getElementById("lyricsPlayLineBtn");
 const lyricsRepeatBtn = document.getElementById("lyricsRepeatBtn");
 const lyricsStructureTrack = document.getElementById("lyricsStructureTrack");
 const lyricsStructureTimeline = document.getElementById("lyricsStructureTimeline");
+const lyricsStructureStartValue = document.getElementById("lyricsStructureStartValue");
+const lyricsStructureEndValue = document.getElementById("lyricsStructureEndValue");
 const lyricsStructureNameMenu = document.getElementById("lyricsStructureNameMenu");
 const lyricsEditorCard = lyricsEditorDialog ? lyricsEditorDialog.querySelector(".lyrics-editor-card") : null;
 const lyricsEditorHeader = lyricsEditorDialog ? lyricsEditorDialog.querySelector(".lyrics-editor-header") : null;
@@ -13372,6 +13395,13 @@ function renderLyricsStructureTimeline(songEnd) {
   if (!lyricsStructureTimeline) return;
   lyricsStructureTimeline.innerHTML = "";
   const total = Math.max(0.001, Number(songEnd) || 0.001);
+
+  if (lyricsStructureStartValue) {
+    lyricsStructureStartValue.textContent = formatStructureTime(0);
+  }
+  if (lyricsStructureEndValue) {
+    lyricsStructureEndValue.textContent = formatStructureTime(total);
+  }
   let step = 15;
   if (total > 240) step = 30;
   if (total > 600) step = 60;
@@ -13384,16 +13414,22 @@ function renderLyricsStructureTimeline(songEnd) {
     const tick = document.createElement("span");
     tick.className = "lyrics-structure-tick";
     tick.style.left = (t / total * 100) + "%";
-    tick.textContent = formatStructureTime(t);
     tick.dataset.time = String(t);
-    if (index === 0) {
-      tick.classList.add("endpoint");
-      tick.style.transform = "translateX(-100%)";
+
+    const isStart = index === 0;
+    const isEnd = index === times.length - 1;
+
+    if (isStart || isEnd) {
+      tick.classList.add(
+        "endpoint",
+        isStart ? "endpoint-start" : "endpoint-end"
+      );
+      // Numeric endpoint values are rendered in the separate upper row.
+      // This span remains only as the exact 0% / 100% scale anchor.
+    } else {
+      tick.textContent = formatStructureTime(t);
     }
-    if (index === times.length - 1) {
-      tick.classList.add("endpoint");
-      tick.style.transform = "translateX(0)";
-    }
+
     lyricsStructureTimeline.appendChild(tick);
   });
 }
@@ -13981,22 +14017,17 @@ function updateLyricsTransportButtons() {
 
 
 function updateLyricsMasterCounter() {
-
   if (!lyricsMasterCounter) return;
 
   const sequencerCounter =
     String(timeDisplay?.textContent || timeDisplayTop?.textContent || "");
-
   const vocalMatch =
     sequencerCounter.match(/(?:^|\s\/\s)V:([^\s/]+)/);
 
   lyricsMasterCounter.textContent =
-    vocalMatch
-      ? vocalMatch[1]
-      : "-00:00.00";
+    vocalMatch ? vocalMatch[1] : "-00:00.00";
 
   updateLyricsStructurePlayhead();
-
 }
 
 
@@ -17091,7 +17122,7 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Lyrics Editor: счетчик берёт значение V из Sequencer; добавлен Edited по строке карета; консоль принимает карет и больше не перехватывается drag окна. Structure: крайние значения шкалы вынесены за её границы и выделены розовым, шкала укорочена по краям. Sequencer: убрана двойная правая граница от совпадения конечной риски с рамкой.
+вынесение вверх начальной и коненой точек
    | 4.11.4
 </div>
 
