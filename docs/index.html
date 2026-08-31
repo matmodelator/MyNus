@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.0.0</title>
+  <title>MyNus 5.0.2</title>
 
 
  <style>
@@ -1391,16 +1391,17 @@
     }
 
     /* ========================================
-       LYRICS FULL SCREEN / KARAOKE MODE 5.0.0
+       LYRICS FULL SCREEN / KARAOKE MODE 5.0.2
     ======================================== */
 
     .lyrics-mode-switch,
     .lyrics-fullscreen-back {
       appearance: none;
-      border: 0;
-      background: transparent;
-      padding: 0;
-      color: #d94f86;
+      padding: 7px 12px;
+      border: 1px solid #e58aa8;
+      border-radius: 6px;
+      background: rgba(229,138,168,.10);
+      color: #e58aa8;
       font: inherit;
       font-size: 16px;
       font-weight: 700;
@@ -1410,7 +1411,13 @@
 
     .lyrics-mode-switch:hover,
     .lyrics-fullscreen-back:hover {
-      text-decoration: underline;
+      background: rgba(229,138,168,.20);
+      text-decoration: none;
+    }
+
+    .lyrics-mode-switch:active,
+    .lyrics-fullscreen-back:active {
+      transform: translateY(1px);
     }
 
     .lyrics-fullscreen-view {
@@ -1484,17 +1491,6 @@
 
     .lyrics-fullscreen-back {
       justify-self: start;
-      padding: 7px 12px;
-      border: 1px solid #e58aa8;
-      border-radius: 6px;
-      background: rgba(229,138,168,.10);
-      color: #e58aa8;
-      text-decoration: none;
-    }
-
-    .lyrics-fullscreen-back:hover {
-      background: rgba(229,138,168,.20);
-      text-decoration: none;
     }
 
     .lyrics-fullscreen-brand {
@@ -1517,6 +1513,22 @@
       font-weight: 700;
       color: #7fd8ff;
       white-space: nowrap;
+    }
+
+    .lyrics-fullscreen-counter.pre-vocal {
+      font-size: 72px;
+    }
+
+    .lyrics-fullscreen-counter.countdown-3 {
+      color: #ff3b30;
+    }
+
+    .lyrics-fullscreen-counter.countdown-2 {
+      color: #ffd60a;
+    }
+
+    .lyrics-fullscreen-counter.countdown-1 {
+      color: #30d158;
     }
 
     .lyrics-fullscreen-lines {
@@ -1853,8 +1865,9 @@
       z-index: 10020;
       display: none;
       min-width: 150px;
-      max-height: 320px;
-      overflow-y: auto;
+      height: auto;
+      max-height: none;
+      overflow: visible;
       padding: 5px;
       background: #fff;
       border: 1px solid #b9b9b9;
@@ -12753,6 +12766,7 @@ function updateLyricsFullScreenView(currentTime) {
 
   if (lyricsFullScreenCounter) {
     lyricsFullScreenCounter.textContent = lyricsMasterCounter?.textContent || "-00:00.00";
+    updateLyricsFullScreenCounterStyle(lyricsFullScreenCounter.textContent);
   }
 
   const lines = Array.isArray(lyricsEditorDraft) ? lyricsEditorDraft : [];
@@ -13526,10 +13540,16 @@ function openLyricsStructureNameMenu(event, index) {
   lyricsStructureNameMenu.style.left =
     Math.max(8, Math.min(event.clientX, window.innerWidth - 170)) + "px";
 
-  lyricsStructureNameMenu.style.top =
-    Math.max(8, Math.min(event.clientY, window.innerHeight - 330)) + "px";
-
+  // Menu height follows its contents: no internal scroll.
+  lyricsStructureNameMenu.style.top = "8px";
   lyricsStructureNameMenu.classList.add("open");
+
+  const menuRect = lyricsStructureNameMenu.getBoundingClientRect();
+  const menuTop = Math.max(
+    8,
+    Math.min(event.clientY, window.innerHeight - menuRect.height - 8)
+  );
+  lyricsStructureNameMenu.style.top = menuTop + "px";
 }
 
 function clearLyricsStructureLoop() {
@@ -14336,6 +14356,38 @@ function updateLyricsTransportButtons() {
 }
 
 
+function updateLyricsFullScreenCounterStyle(value) {
+  if (!lyricsFullScreenCounter) return;
+
+  lyricsFullScreenCounter.classList.remove(
+    "pre-vocal",
+    "countdown-3",
+    "countdown-2",
+    "countdown-1"
+  );
+
+  const text = String(value || "").trim();
+  if (!text.startsWith("-")) return;
+
+  lyricsFullScreenCounter.classList.add("pre-vocal");
+
+  const match = text.match(/^-([0-9]+):([0-9]{2})(?:\.([0-9]+))?$/);
+  if (!match) return;
+
+  const minutes = Number(match[1]) || 0;
+  const seconds = Number(match[2]) || 0;
+  const fraction = match[3] ? Number("0." + match[3]) : 0;
+  const remaining = minutes * 60 + seconds + fraction;
+
+  if (remaining > 2 && remaining <= 3) {
+    lyricsFullScreenCounter.classList.add("countdown-3");
+  } else if (remaining > 1 && remaining <= 2) {
+    lyricsFullScreenCounter.classList.add("countdown-2");
+  } else if (remaining > 0 && remaining <= 1) {
+    lyricsFullScreenCounter.classList.add("countdown-1");
+  }
+}
+
 function updateLyricsMasterCounter() {
   if (!lyricsMasterCounter) return;
 
@@ -14349,6 +14401,7 @@ function updateLyricsMasterCounter() {
 
   if (lyricsFullScreenCounter) {
     lyricsFullScreenCounter.textContent = lyricsMasterCounter.textContent;
+    updateLyricsFullScreenCounterStyle(lyricsFullScreenCounter.textContent);
   }
 
   updateLyricsStructurePlayhead();
@@ -17451,8 +17504,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Full Screen karaoke: переход Lyrics Editor оформлен розовой кнопкой слева сверху; название трека перенесено в центр верхней строки; MyNus добавлен справа сверху желтоватым. Текущая строка салатовая. Structure в Full Screen увеличена примерно в 2 раза по высоте. V-счётчик перенесён по центру над Structure, увеличен примерно в 2 раза и сделан голубоватым.
-   | 5.0.1
+Full Screen: до нуля вокального V-счётчика размер увеличен ещё в 2 раза; последние 3 секунды: −3 красный, −2 жёлтый, −1 зелёный. Structure: меню названий без внутреннего скролла, высота автоматически по содержимому.
+   | 5.0.2
 </div>
 
 <div class="row" id="build-down">
