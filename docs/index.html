@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.11.2</title>
+  <title>MyNus 4.11.3</title>
 
 
  <style>
@@ -1228,6 +1228,9 @@
       min-height: 420px;
       display: flex;
       flex-direction: column;
+      padding-top: 10px;
+      padding-bottom: 10px;
+      box-sizing: border-box;
       background: white;
       border-radius: 10px;
       box-shadow: 0 18px 50px rgba(0,0,0,.28);
@@ -3365,7 +3368,7 @@
       >
         <div class="lyrics-editor-console-inline">
           <button type="button" id="lyricsErrorClearBtn">Clear</button>
-          <textarea id="lyricsEditorErrorConsole" readonly spellcheck="false" aria-label="Lyrics Editor messages"></textarea>
+          <textarea id="lyricsEditorErrorConsole" spellcheck="false" aria-label="Lyrics Editor messages"></textarea>
           <button type="button" id="lyricsErrorCopyBtn">Copy</button>
         </div>
       </div>
@@ -14469,6 +14472,29 @@ lyricsPlayMasterBtn.addEventListener(
   () => {
 
     if (
+      lyricsStructureTransportMode === "loop"
+      && Number.isFinite(lyricsStructureLoopStart)
+      && Number.isFinite(lyricsStructureLoopEnd)
+      && lyricsStructureLoopEnd > lyricsStructureLoopStart
+    ) {
+      clearLyricsStructureLoop();
+      lyricsTransportMode = "master";
+      fragmentStart = null;
+      fragmentEnd = null;
+      loopEnabled = false;
+      lyricsLoopPaused = false;
+
+      if (!isPlaying) {
+        syncAllTo(masterCursorTime);
+        playCurrentMode();
+      }
+
+      updateLyricsTransportButtons();
+      renderLyricsStructure();
+      return;
+    }
+
+    if (
       lyricsTransportMode === "line"
       &&
       loopEnabled
@@ -17035,8 +17061,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Lyrics Editor: Merge Before / Merge After / Delete теперь работают по строке карета (EDIT), а не по selectedLine. Repeat / Set Start / Set End приведены к размеру кнопок Save / Load (padding 6×10 px, font-size 11 px). Увеличены только вертикальные внутренние отступы окна Lyrics Editor: header 16 px, toolbar/rows/footer 14 px. Остальная логика не изменена.
-   | 4.11.2
+Lyrics Editor: Play при активном Structure Loop теперь выходит из Loop в обычное воспроизведение без Pause. Добавлено белое поле 10 px сверху и снизу окна Lyrics Editor. Поле консоли сообщений стало редактируемым для copy/paste.
+   | 4.11.3
 </div>
 
 <div class="row" id="build-down">
