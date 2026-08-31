@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 4.11.4</title>
+  <title>MyNus 4.11.5</title>
 
 
  <style>
@@ -1388,6 +1388,186 @@
       border: 1px solid #ccc;
       border-radius: 6px;
       font-size: 12px;
+    }
+
+    /* ========================================
+       LYRICS FULL SCREEN / KARAOKE MODE 4.11.5
+    ======================================== */
+
+    .lyrics-mode-switch,
+    .lyrics-fullscreen-back {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      padding: 0;
+      color: #d94f86;
+      font: inherit;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .lyrics-mode-switch:hover,
+    .lyrics-fullscreen-back:hover {
+      text-decoration: underline;
+    }
+
+    .lyrics-fullscreen-view {
+      display: none;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode {
+      position: fixed;
+      inset: 0 !important;
+      left: 0 !important;
+      top: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      width: 100vw;
+      height: 100vh;
+      max-width: none;
+      max-height: none;
+      min-width: 0;
+      min-height: 0;
+      padding: 0;
+      border-radius: 0;
+      resize: none;
+      overflow: hidden;
+      background: #000;
+      color: #fff;
+      box-shadow: none;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode > .lyrics-editor-header,
+    .lyrics-editor-card.karaoke-fullscreen-mode > .lyrics-editor-toolbar,
+    .lyrics-editor-card.karaoke-fullscreen-mode > .lyrics-editor-rows,
+    .lyrics-editor-card.karaoke-fullscreen-mode > .lyrics-editor-footer,
+    .lyrics-editor-card.karaoke-fullscreen-mode > #lyricsSpellPopup {
+      display: none !important;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-fullscreen-view {
+      position: absolute;
+      inset: 0;
+      display: block;
+      background: #000;
+      color: #fff;
+    }
+
+    .lyrics-fullscreen-topbar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 64px;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 16px;
+      padding: 0 24px;
+      box-sizing: border-box;
+      z-index: 5;
+    }
+
+    .lyrics-fullscreen-track-name {
+      justify-self: start;
+      max-width: 42vw;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 18px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .lyrics-fullscreen-back {
+      justify-self: center;
+    }
+
+    .lyrics-fullscreen-counter {
+      justify-self: end;
+      font-family: Consolas, monospace;
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      white-space: nowrap;
+    }
+
+    .lyrics-fullscreen-lines {
+      position: absolute;
+      left: 5vw;
+      right: 5vw;
+      top: 44%;
+      transform: translateY(-50%);
+      text-align: center;
+      z-index: 2;
+    }
+
+    .lyrics-fullscreen-current {
+      min-height: 1.35em;
+      font-size: clamp(34px, 5.1vw, 76px);
+      line-height: 1.2;
+      font-weight: 700;
+      color: #fff;
+      white-space: normal;
+    }
+
+    .lyrics-fullscreen-next {
+      margin-top: 28px;
+      min-height: 1.35em;
+      font-size: clamp(22px, 3vw, 44px);
+      line-height: 1.25;
+      font-weight: 500;
+      color: #8f8f8f;
+      white-space: normal;
+    }
+
+    .lyrics-fullscreen-word {
+      display: inline;
+      padding: 0 .05em;
+      border-radius: .12em;
+    }
+
+    .lyrics-fullscreen-word.past {
+      color: #8f8f8f;
+    }
+
+    .lyrics-fullscreen-word.active {
+      color: #000;
+      background: #fff;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode > .lyrics-structure-row {
+      position: absolute;
+      left: 24px;
+      right: 24px;
+      bottom: 18px;
+      display: flex;
+      min-height: 0;
+      padding: 4px 0 6px;
+      margin: 0;
+      border: 0;
+      z-index: 4;
+      color: #fff;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-track {
+      border-color: rgba(255,255,255,.55);
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-segment {
+      color: #fff;
+      border-right-color: rgba(255,255,255,.42);
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-timeline {
+      color: #aaa;
+      background: rgba(255,255,255,.08);
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-endpoint-value {
+      color: #e58aa8;
     }
 
     .lyrics-saveas-actions {
@@ -3389,7 +3569,7 @@
 <div id="lyricsEditorDialog" class="lyrics-editor-dialog">
   <div class="lyrics-editor-card">
     <div class="lyrics-editor-header">
-      <div class="lyrics-editor-title">Lyrics Editor</div>
+      <button type="button" id="lyricsModeSwitchBtn" class="lyrics-mode-switch" title="Switch Lyrics mode">Full Screen</button>
 
       <div
         id="lyricsEditorStatus"
@@ -3403,6 +3583,18 @@
       </div>
 
       <button type="button" id="closeLyricsEditorBtn">Close</button>
+    </div>
+
+    <div id="lyricsFullScreenView" class="lyrics-fullscreen-view" aria-hidden="true">
+      <div class="lyrics-fullscreen-topbar">
+        <div id="lyricsFullScreenTrackName" class="lyrics-fullscreen-track-name">No file selected</div>
+        <button type="button" id="lyricsFullScreenBackBtn" class="lyrics-fullscreen-back">Lyrics Editor</button>
+        <div id="lyricsFullScreenCounter" class="lyrics-fullscreen-counter">-00:00.00</div>
+      </div>
+      <div class="lyrics-fullscreen-lines">
+        <div id="lyricsFullScreenCurrent" class="lyrics-fullscreen-current"></div>
+        <div id="lyricsFullScreenNext" class="lyrics-fullscreen-next"></div>
+      </div>
     </div>
 
     <div class="lyrics-editor-toolbar">
@@ -3865,6 +4057,13 @@ const lyricsStructureEndValue = document.getElementById("lyricsStructureEndValue
 const lyricsStructureNameMenu = document.getElementById("lyricsStructureNameMenu");
 const lyricsEditorCard = lyricsEditorDialog ? lyricsEditorDialog.querySelector(".lyrics-editor-card") : null;
 const lyricsEditorHeader = lyricsEditorDialog ? lyricsEditorDialog.querySelector(".lyrics-editor-header") : null;
+const lyricsModeSwitchBtn = document.getElementById("lyricsModeSwitchBtn");
+const lyricsFullScreenView = document.getElementById("lyricsFullScreenView");
+const lyricsFullScreenBackBtn = document.getElementById("lyricsFullScreenBackBtn");
+const lyricsFullScreenTrackName = document.getElementById("lyricsFullScreenTrackName");
+const lyricsFullScreenCounter = document.getElementById("lyricsFullScreenCounter");
+const lyricsFullScreenCurrent = document.getElementById("lyricsFullScreenCurrent");
+const lyricsFullScreenNext = document.getElementById("lyricsFullScreenNext");
 const recentAudioMenu = document.getElementById("recentAudioMenu");
 
 
@@ -4319,6 +4518,7 @@ let lyricsStructureSelectedIndices = new Set();
 let lyricsStructureTransportMode = "play";
 let lyricsStructureLoopStart = null;
 let lyricsStructureLoopEnd = null;
+let lyricsFullScreenMode = false;
 let recentSelectedAudioFile = null;
 
 let lyricsUndoStack = [];
@@ -12500,8 +12700,84 @@ function splitTimeFromCaret(line, text, caretOffset) {
   return start + ratio * (end - start);
 }
 
+function updateLyricsFullScreenView(currentTime) {
+  if (!lyricsFullScreenMode || !lyricsEditorCard?.classList.contains("karaoke-fullscreen-mode")) return;
+
+  if (lyricsFullScreenTrackName) {
+    lyricsFullScreenTrackName.textContent = currentOriginalFile?.name || fileName?.textContent || "No file selected";
+  }
+
+  if (lyricsFullScreenCounter) {
+    lyricsFullScreenCounter.textContent = lyricsMasterCounter?.textContent || "-00:00.00";
+  }
+
+  const lines = Array.isArray(lyricsEditorDraft) ? lyricsEditorDraft : [];
+  if (!lines.length) {
+    if (lyricsFullScreenCurrent) lyricsFullScreenCurrent.textContent = "Lyrics: none";
+    if (lyricsFullScreenNext) lyricsFullScreenNext.textContent = "";
+    return;
+  }
+
+  let lineIndex = lines.findIndex(line =>
+    currentTime >= Number(line.start) && currentTime <= Number(line.end)
+  );
+
+  if (lineIndex < 0) {
+    lineIndex = lines.findIndex(line => Number(line.start) > currentTime);
+    if (lineIndex < 0) lineIndex = lines.length - 1;
+  }
+
+  const line = lines[lineIndex];
+  const nextLine = lines[lineIndex + 1];
+
+  if (lyricsFullScreenCurrent) {
+    lyricsFullScreenCurrent.innerHTML = "";
+    const words = Array.isArray(line?.words) ? line.words : [];
+    words.forEach(word => {
+      const span = document.createElement("span");
+      span.className = "lyrics-fullscreen-word";
+      span.textContent = String(word?.word || "") + " ";
+
+      const start = Number(word?.start);
+      const end = Number(word?.end);
+      if (Number.isFinite(start) && Number.isFinite(end)) {
+        if (currentTime >= start && currentTime < end) span.classList.add("active");
+        else if (currentTime >= end) span.classList.add("past");
+      }
+
+      lyricsFullScreenCurrent.appendChild(span);
+    });
+  }
+
+  if (lyricsFullScreenNext) {
+    lyricsFullScreenNext.textContent = nextLine ? lineText(nextLine) : "";
+  }
+}
+
+function setLyricsFullScreenMode(enabled) {
+  lyricsFullScreenMode = Boolean(enabled);
+  lyricsEditorCard?.classList.toggle("karaoke-fullscreen-mode", lyricsFullScreenMode);
+  lyricsFullScreenView?.setAttribute("aria-hidden", lyricsFullScreenMode ? "false" : "true");
+
+  if (lyricsModeSwitchBtn) lyricsModeSwitchBtn.textContent = "Full Screen";
+  if (lyricsFullScreenBackBtn) lyricsFullScreenBackBtn.textContent = "Lyrics Editor";
+
+  if (lyricsFullScreenMode) {
+    renderLyricsStructure();
+    updateLyricsMasterCounter();
+    updateLyricsFullScreenView(getCurrentTime());
+  } else {
+    renderLyricsStructure();
+    updateLyricsEditorKaraoke(getCurrentTime());
+  }
+}
+
+lyricsModeSwitchBtn?.addEventListener("click", () => setLyricsFullScreenMode(true));
+lyricsFullScreenBackBtn?.addEventListener("click", () => setLyricsFullScreenMode(false));
+
 function updateLyricsEditorKaraoke(currentTime) {
   if (!lyricsEditorDialog.classList.contains("open")) return;
+  updateLyricsFullScreenView(currentTime);
 
   const currentLineIndex = lyricsEditorDraft.findIndex(
     line => currentTime >= Number(line.start) && currentTime <= Number(line.end)
@@ -14027,6 +14303,10 @@ function updateLyricsMasterCounter() {
   lyricsMasterCounter.textContent =
     vocalMatch ? vocalMatch[1] : "-00:00.00";
 
+  if (lyricsFullScreenCounter) {
+    lyricsFullScreenCounter.textContent = lyricsMasterCounter.textContent;
+  }
+
   updateLyricsStructurePlayhead();
 }
 
@@ -14068,6 +14348,9 @@ function updateLyricsUndoRedoButtons() {
 }
 
 function openLyricsEditor() {
+  lyricsFullScreenMode = false;
+  lyricsEditorCard?.classList.remove("karaoke-fullscreen-mode");
+  lyricsFullScreenView?.setAttribute("aria-hidden", "true");
   lyricsStructureDraft = null;
   lyricsStructureSelectedIndex = -1;
   lyricsTranscriptionMode = false;
@@ -14104,6 +14387,8 @@ function openLyricsEditor() {
 }
 
 function closeLyricsEditor() {
+
+  setLyricsFullScreenMode(false);
 
   const current =
     getCurrentTime();
@@ -17122,8 +17407,8 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-вынесение вверх начальной и коненой точек
-   | 4.11.4
+Lyrics: добавлен Full Screen karaoke mode. В Editor заголовок заменён цветным переключателем Full Screen; в режиме исполнения доступен обратный переключатель Lyrics Editor. Full Screen: чёрный фон, текущая строка крупно чуть выше центра, следующая строка ниже меньшим шрифтом, название трека сверху слева, V-счётчик сверху справа, Structure полностью внизу и синхронизирована с общим временем.
+   | 5.0.0
 </div>
 
 <div class="row" id="build-down">
