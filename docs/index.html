@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.1.2</title>
+  <title>MyNus 5.1.4</title>
 
 
  <style>
@@ -981,8 +981,24 @@
       display: flex;
       justify-content: flex-end;
       align-items: center;
+      gap: 8px;
       min-width: 0;
     }
+
+    .project-side-btn {
+      flex: 0 0 auto;
+      padding: 5px 8px;
+      border: 1px solid #c7c7c7;
+      border-radius: 6px;
+      background: #f3f3f3;
+      color: #333;
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .project-side-btn:hover { background: #e7e7e7; }
 
     .shortcut-help {
       position: relative;
@@ -1391,7 +1407,7 @@
     }
 
     /* ========================================
-       LYRICS FULL SCREEN / KARAOKE MODE 5.1.2
+       LYRICS FULL SCREEN / KARAOKE MODE 5.1.4
     ======================================== */
 
     .lyrics-mode-switch,
@@ -1477,8 +1493,16 @@
       z-index: 5;
     }
 
-    .lyrics-fullscreen-track-name {
+    .lyrics-fullscreen-title-stack {
       justify-self: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .lyrics-fullscreen-track-name {
       max-width: 52vw;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -1488,6 +1512,57 @@
       font-weight: 600;
       color: #fff;
     }
+
+    .lyrics-fullscreen-playlist-wrap {
+      position: relative;
+    }
+
+    .lyrics-fullscreen-playlist-btn {
+      border: 0;
+      background: transparent;
+      color: #e58aa8;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 1px 8px;
+    }
+
+    .lyrics-fullscreen-playlist-menu {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 50;
+      min-width: 280px;
+      max-width: min(520px, 80vw);
+      max-height: 45vh;
+      overflow: auto;
+      padding: 6px;
+      border: 1px solid rgba(255,255,255,.28);
+      border-radius: 7px;
+      background: rgba(18,18,18,.97);
+      box-shadow: 0 10px 30px rgba(0,0,0,.45);
+    }
+
+    .lyrics-fullscreen-playlist-menu[hidden] { display: none !important; }
+
+    .lyrics-fullscreen-playlist-item {
+      display: block;
+      width: 100%;
+      border: 0;
+      border-radius: 5px;
+      padding: 7px 9px;
+      background: transparent;
+      color: #fff;
+      text-align: left;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .lyrics-fullscreen-playlist-item:hover { background: rgba(255,255,255,.12); }
+    .lyrics-fullscreen-playlist-item.active { color: #7fd8ff; }
 
     .lyrics-fullscreen-back {
       justify-self: start;
@@ -2534,6 +2609,7 @@
 
       <div class="transport-band">
         <div class="shortcut-legend">
+          <button type="button" id="loadProjectBtn" class="project-side-btn">Load Project</button>
           <div class="shortcut-help" tabindex="0">
             <span class="shortcut-help-button">Keys ?</span>
             <div class="shortcut-popup">
@@ -3443,6 +3519,7 @@
 
       <div class="transport-band">
         <div class="shortcut-legend">
+          <button type="button" id="saveProjectBtn" class="project-side-btn">SAVE Project</button>
           <div class="shortcut-help" tabindex="0">
             <span class="shortcut-help-button">Keys ?</span>
             <div class="shortcut-popup">
@@ -3916,7 +3993,13 @@
     <div id="lyricsFullScreenView" class="lyrics-fullscreen-view" aria-hidden="true">
       <div class="lyrics-fullscreen-topbar">
         <button type="button" id="lyricsFullScreenBackBtn" class="lyrics-fullscreen-back">Lyrics Editor</button>
-        <div id="lyricsFullScreenTrackName" class="lyrics-fullscreen-track-name">No file selected</div>
+        <div class="lyrics-fullscreen-title-stack">
+          <div id="lyricsFullScreenTrackName" class="lyrics-fullscreen-track-name">No file selected</div>
+          <div class="lyrics-fullscreen-playlist-wrap">
+            <button type="button" id="lyricsFullScreenPlaylistBtn" class="lyrics-fullscreen-playlist-btn">Play List</button>
+            <div id="lyricsFullScreenPlaylistMenu" class="lyrics-fullscreen-playlist-menu" hidden></div>
+          </div>
+        </div>
         <div class="lyrics-fullscreen-brand">MyNus</div>
       </div>
       <div id="lyricsFullScreenCounter" class="lyrics-fullscreen-counter">-00:00.00</div>
@@ -13102,8 +13185,8 @@ function updateLyricsFullScreenView(currentTime) {
   }
 
   if (lyricsFullScreenCounter) {
-    lyricsFullScreenCounter.textContent = lyricsMasterCounter?.textContent || "-00:00.00";
-    updateLyricsFullScreenCounterStyle(lyricsFullScreenCounter.textContent);
+    lyricsFullScreenCounter.textContent = "-" + formatTime(vocalRemaining);
+    updateLyricsFullScreenCounterStyle(vocalRemaining, vocalPhase);
   }
 
   const lines = Array.isArray(lyricsEditorDraft) ? lyricsEditorDraft : [];
@@ -13291,9 +13374,7 @@ function renderLyricsFullScreenTracksMenu() {
     drums: "Drums", bass: "Bass", guitar: "Guitar", piano: "Piano", other: "Other"
   };
 
-  if (!Object.keys(lyricsFullScreenTrackState).length) {
-    stemIds.forEach(stemId => { lyricsFullScreenTrackState[stemId] = cloneLyricsFullScreenSourceState(stemId); });
-  }
+  if (!Object.keys(lyricsFullScreenTrackState).length) resetLyricsFullScreenTrackState();
 
   stemIds.forEach(stemId => {
     const state = lyricsFullScreenTrackState[stemId] || cloneLyricsFullScreenSourceState(stemId);
@@ -13396,7 +13477,7 @@ function openLyricsFullScreenFxWindow(stemId, anchorRect) {
         <label class="lyrics-fullscreen-fx-row"><span>Reverb On</span><input type="checkbox" data-fsfx="reverbOn"><span></span></label>
         <label class="lyrics-fullscreen-fx-row"><span>Delay On</span><input type="checkbox" data-fsfx="delayOn"><span></span></label>
       </div>`;
-    document.body.appendChild(win);
+    (lyricsFullScreenView || lyricsEditorCard || document.body).appendChild(win);
     lyricsFullScreenFxWindows.set(stemId, win);
     win.querySelector('[data-close-fsfx="1"]')?.addEventListener("click", event => { event.stopPropagation(); win.hidden = true; });
     win.addEventListener("input", event => {
@@ -13413,6 +13494,7 @@ function openLyricsFullScreenFxWindow(stemId, anchorRect) {
     makeLyricsFullScreenPopupDraggable(win);
   }
   refreshLyricsFullScreenFxWindow(stemId, win);
+  win.hidden = false;
   placeLyricsFullScreenMenu(win, (anchorRect?.right || window.innerWidth/2) + 8, anchorRect?.top || 100);
 }
 
@@ -15097,7 +15179,7 @@ function updateLyricsTransportButtons() {
 }
 
 
-function updateLyricsFullScreenCounterStyle(value) {
+function updateLyricsFullScreenCounterStyle(remaining, phase) {
   if (!lyricsFullScreenCounter) return;
 
   lyricsFullScreenCounter.classList.remove(
@@ -15109,35 +15191,33 @@ function updateLyricsFullScreenCounterStyle(value) {
     "countdown-1"
   );
 
-  const text = String(value || "").trim();
-  if (!text.startsWith("-")) {
+  /*
+  Full Screen does NOT calculate V.
+  It only displays the same vocalRemaining already calculated by Sequencer.
+  The phase is used only to preserve the existing Full Screen styling.
+  */
+  if (phase !== "pre") {
     lyricsFullScreenCounter.classList.add("post-vocal");
     return;
   }
 
   lyricsFullScreenCounter.classList.add("pre-vocal");
 
-  const match = text.match(/^-([0-9]+):([0-9]{2})(?:\.([0-9]+))?$/);
-  if (!match) return;
+  const value = Math.max(0, Number(remaining) || 0);
 
-  const minutes = Number(match[1]) || 0;
-  const seconds = Number(match[2]) || 0;
-  const fraction = match[3] ? Number("0." + match[3]) : 0;
-  const remaining = minutes * 60 + seconds + fraction;
-
-  if (remaining <= 0) {
+  if (value <= 0) {
     lyricsFullScreenCounter.classList.remove("pre-vocal");
     lyricsFullScreenCounter.classList.add("post-vocal");
     return;
   }
 
-  if (remaining > 3) {
+  if (value > 3) {
     lyricsFullScreenCounter.classList.add("countdown-gray");
-  } else if (remaining > 2 && remaining <= 3) {
+  } else if (value > 2) {
     lyricsFullScreenCounter.classList.add("countdown-3");
-  } else if (remaining > 1 && remaining <= 2) {
+  } else if (value > 1) {
     lyricsFullScreenCounter.classList.add("countdown-2");
-  } else if (remaining > 0 && remaining <= 1) {
+  } else {
     lyricsFullScreenCounter.classList.add("countdown-1");
   }
 }
@@ -15154,8 +15234,8 @@ function updateLyricsMasterCounter() {
     vocalMatch ? vocalMatch[1] : "-00:00.00";
 
   if (lyricsFullScreenCounter) {
-    lyricsFullScreenCounter.textContent = lyricsMasterCounter.textContent;
-    updateLyricsFullScreenCounterStyle(lyricsFullScreenCounter.textContent);
+    lyricsFullScreenCounter.textContent = "-" + formatTime(vocalRemaining);
+    updateLyricsFullScreenCounterStyle(vocalRemaining, vocalPhase);
   }
 
   updateLyricsStructurePlayhead();
@@ -16741,6 +16821,9 @@ saveLyricsEditBtn.addEventListener(
   }
 );
 
+let vocalRemaining = 0;
+let vocalPhase = "none";
+
 function updateTimeDisplay() {
 
   const current =
@@ -16789,8 +16872,9 @@ const lyricsVocalEnd =
   : null;
 
 
-let vocalRemaining =
+vocalRemaining =
   0;
+vocalPhase = "none";
 
 
 /*
@@ -16813,6 +16897,7 @@ if (
   vocalRemaining =
     lyricsVocalStart
     - current;
+  vocalPhase = "pre";
 
 }
 
@@ -16837,6 +16922,7 @@ else if (
   vocalRemaining =
     lyricsVocalEnd
     - current;
+  vocalPhase = "active";
 
 }
 
@@ -16853,6 +16939,7 @@ else {
 
   vocalRemaining =
     0;
+  vocalPhase = "post";
 
 }
 
@@ -18292,6 +18379,309 @@ updateSelectionButtons();
 updateMasterHistoryButtons();
 
 
+// ========================================
+// PROJECT / FULL SCREEN PLAY LIST | 5.1.4
+// Projects are stored by server.py in C:\MyNus\Play List
+// ========================================
+const saveProjectBtn = document.getElementById("saveProjectBtn");
+const loadProjectBtn = document.getElementById("loadProjectBtn");
+const lyricsFullScreenPlaylistBtn = document.getElementById("lyricsFullScreenPlaylistBtn");
+const lyricsFullScreenPlaylistMenu = document.getElementById("lyricsFullScreenPlaylistMenu");
+let currentPlaylistProject = null;
+
+function projectSafeName() {
+  const raw = currentOriginalFile?.name || fileName?.textContent || "Project";
+  return String(raw)
+    .replace(/\.[^.]+$/, "")
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .trim() || "Project";
+}
+
+function cloneSerializable(value, fallback) {
+  try { return JSON.parse(JSON.stringify(value)); }
+  catch (_) { return fallback; }
+}
+
+function projectLyricsPayload() {
+  const lines = (lyricsEditorDraft?.length ? lyricsEditorDraft : karaokeLines || [])
+    .map(line => cloneSerializable(line, {}));
+  return {
+    language: lyricsData?.language || null,
+    text: lyricsData?.text || "",
+    words: cloneSerializable(lyricsData?.words || [], []),
+    lines,
+    structure: cloneSerializable(lyricsStructureDraft || [], [])
+  };
+}
+
+function projectSequencerPayload() {
+  return {
+    mode,
+    fragmentStart,
+    fragmentEnd,
+    stemState: cloneSerializable(stemState, {}),
+    stemCrop: cloneSerializable(stemCrop, {}),
+    fxSettings: cloneSerializable(fxSettings, {}),
+    pixelsPerSecond
+  };
+}
+
+async function saveCurrentProject() {
+  if (!currentOriginalFile) {
+    status.textContent = "SAVE Project: no source audio";
+    return;
+  }
+
+  const fd = new FormData();
+  fd.append("name", projectSafeName());
+  fd.append("manifest", JSON.stringify({
+    lyrics: projectLyricsPayload(),
+    sequencer: projectSequencerPayload(),
+    vocal_start: vocalStartTimeRaw,
+    vocal_end: vocalEndTimeRaw
+  }));
+  fd.append("source", currentOriginalFile, currentOriginalFile.name || "source.audio");
+
+  for (const stemId of stemIds) {
+    const url = currentStemURLs[stemId];
+    if (!url) continue;
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        const blob = await response.blob();
+        fd.append("stem_" + stemId, blob, stemId + ".wav");
+      }
+    } catch (_) {}
+  }
+
+  status.textContent = "Saving project...";
+  const response = await fetch("/projects/save", { method: "POST", body: fd });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "SAVE Project failed");
+
+  currentPlaylistProject = data.id || data.name;
+  status.textContent = "Project saved: " + (data.name || projectSafeName());
+  await refreshFullScreenPlaylist();
+}
+
+async function fetchProjects() {
+  const response = await fetch("/projects");
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "Play List unavailable");
+  return Array.isArray(data.projects) ? data.projects : [];
+}
+
+async function refreshFullScreenPlaylist() {
+  if (!lyricsFullScreenPlaylistMenu) return;
+  const projects = await fetchProjects();
+  lyricsFullScreenPlaylistMenu.replaceChildren();
+
+  if (!projects.length) {
+    const empty = document.createElement("div");
+    empty.className = "popup-state";
+    empty.textContent = "Play List is empty";
+    lyricsFullScreenPlaylistMenu.appendChild(empty);
+    return;
+  }
+
+  projects.forEach(project => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "lyrics-fullscreen-playlist-item";
+    const active = String(project.id) === String(currentPlaylistProject);
+    button.classList.toggle("active", active);
+    button.textContent = (active ? "▶ " : "") + project.name;
+    button.title = project.name;
+    button.addEventListener("click", async event => {
+      event.stopPropagation();
+      await loadProjectById(project.id, true);
+      lyricsFullScreenPlaylistMenu.hidden = true;
+    });
+    lyricsFullScreenPlaylistMenu.appendChild(button);
+  });
+}
+
+function restoreProjectSequencerState(saved) {
+  if (!saved || typeof saved !== "object") return;
+
+  if (saved.stemState && typeof saved.stemState === "object") {
+    stemIds.forEach(stemId => {
+      if (!saved.stemState[stemId]) return;
+      Object.assign(stemState[stemId], saved.stemState[stemId]);
+    });
+  }
+
+  if (saved.stemCrop && typeof saved.stemCrop === "object") {
+    stemIds.forEach(stemId => {
+      if (!saved.stemCrop[stemId]) return;
+      Object.assign(stemCrop[stemId], saved.stemCrop[stemId]);
+    });
+  }
+
+  if (saved.fxSettings && typeof saved.fxSettings === "object") {
+    Object.keys(fxSettings).forEach(target => {
+      if (saved.fxSettings[target]) Object.assign(fxSettings[target], saved.fxSettings[target]);
+    });
+  }
+
+  fragmentStart = Number.isFinite(Number(saved.fragmentStart)) ? Number(saved.fragmentStart) : null;
+  fragmentEnd = Number.isFinite(Number(saved.fragmentEnd)) ? Number(saved.fragmentEnd) : null;
+  if (["original", "mix", "master"].includes(saved.mode)) mode = saved.mode;
+}
+
+async function loadProjectById(id, keepFullScreen = false) {
+  pauseAll();
+
+  const response = await fetch("/projects/" + encodeURIComponent(id));
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "Load Project failed");
+
+  const sourceResponse = await fetch(data.source);
+  if (!sourceResponse.ok) throw new Error("Project source not found");
+  const sourceBlob = await sourceResponse.blob();
+  const sourceFile = new File(
+    [sourceBlob],
+    data.source_name || "source.audio",
+    { type: sourceBlob.type || "audio/mpeg" }
+  );
+
+  currentOriginalFile = sourceFile;
+  recentSelectedAudioFile = sourceFile;
+  fileName.textContent = data.source_name || data.name;
+  currentPlaylistProject = data.id;
+
+  if (originalFileURL) URL.revokeObjectURL(originalFileURL);
+  originalFileURL = URL.createObjectURL(sourceFile);
+  originalAudio.src = originalFileURL;
+
+  currentStemURLs = {};
+  stemIds.forEach(stemId => {
+    const url = data.stems?.[stemId] || null;
+    currentStemURLs[stemId] = url;
+    if (url) stemAudio[stemId].src = url;
+    else stemAudio[stemId]?.removeAttribute("src");
+  });
+
+  lyricsData = data.lyrics && Array.isArray(data.lyrics.words)
+    ? {
+        language: data.lyrics.language || null,
+        text: data.lyrics.text || "",
+        words: data.lyrics.words || []
+      }
+    : { language: null, text: "", words: [] };
+
+  if (Array.isArray(data.lyrics?.lines)) {
+    lyricsEditorDraft = cloneSerializable(data.lyrics.lines, []);
+    karaokeLines = cloneSerializable(data.lyrics.lines, []);
+  } else {
+    buildKaraokeLines();
+    lyricsEditorDraft = cloneKaraokeLines();
+  }
+
+  lyricsStructureDraft = Array.isArray(data.lyrics?.structure)
+    ? cloneSerializable(data.lyrics.structure, [])
+    : null;
+
+  vocalStartTimeRaw = Number.isFinite(Number(data.vocal_start)) ? Number(data.vocal_start) : null;
+  vocalEndTimeRaw = Number.isFinite(Number(data.vocal_end)) ? Number(data.vocal_end) : null;
+  vocalStartTime = vocalStartTimeRaw;
+  vocalEndTime = vocalEndTimeRaw;
+
+  restoreProjectSequencerState(data.sequencer);
+
+  const metadataLoads = [waitForMetadata(originalAudio)];
+  stemIds.forEach(stemId => {
+    if (currentStemURLs[stemId]) metadataLoads.push(waitForMetadata(stemAudio[stemId]));
+  });
+  await Promise.all(metadataLoads);
+
+  duration = originalAudio.duration || 0;
+  const waveformData = {};
+  stemIds.forEach(stemId => { waveformData[stemId] = currentStemURLs[stemId]; });
+  await loadWaveforms(sourceFile, waveformData);
+
+  const fitWidth = Math.max(1, masterTimeline.clientWidth);
+  const savedZoom = Number(data.sequencer?.pixelsPerSecond);
+  pixelsPerSecond = Number.isFinite(savedZoom) && savedZoom > 0
+    ? savedZoom
+    : (duration > 0 ? fitWidth / duration : 10);
+
+  zoomValue.textContent = pixelsPerSecond.toFixed(1) + " px/s";
+  if (zoomValueTop) zoomValueTop.textContent = zoomValue.textContent;
+  sharedScrollInner.style.width = getTimelineWidth() + "px";
+
+  updateEffectiveVocalRange();
+  resetTransport();
+  stemIds.forEach(stemId => applyFxSettings(stemId));
+  applyMix();
+  drawAllWaveforms();
+  drawMasterTimeline();
+  renderLyrics();
+  renderLyricsEditor();
+  renderLyricsStructureTimeline(duration);
+  updateModeButtons();
+  studio.style.display = "block";
+  status.textContent = "Project loaded: " + data.name;
+
+  if (keepFullScreen) {
+    if (!lyricsEditorDialog.classList.contains("open")) openLyricsEditor();
+    setLyricsFullScreenMode(true);
+  }
+
+  await refreshFullScreenPlaylist();
+}
+
+async function chooseProjectToLoad() {
+  const projects = await fetchProjects();
+  if (!projects.length) {
+    status.textContent = "Play List is empty";
+    return;
+  }
+
+  const names = projects.map((project, index) => `${index + 1}. ${project.name}`).join("\n");
+  const value = window.prompt("Load Project from Play List:\n" + names, "1");
+  if (value === null) return;
+
+  const number = Number(value);
+  const project = projects[number - 1] || projects.find(item => item.name === value);
+  if (project) await loadProjectById(project.id, false);
+}
+
+saveProjectBtn?.addEventListener("click", () => {
+  saveCurrentProject().catch(error => {
+    console.error(error);
+    status.textContent = error.message;
+  });
+});
+
+loadProjectBtn?.addEventListener("click", () => {
+  chooseProjectToLoad().catch(error => {
+    console.error(error);
+    status.textContent = error.message;
+  });
+});
+
+lyricsFullScreenPlaylistBtn?.addEventListener("click", async event => {
+  event.stopPropagation();
+  try {
+    await refreshFullScreenPlaylist();
+    lyricsFullScreenPlaylistMenu.hidden = !lyricsFullScreenPlaylistMenu.hidden;
+  } catch (error) {
+    console.error(error);
+    status.textContent = error.message;
+  }
+});
+
+document.addEventListener("click", event => {
+  if (
+    lyricsFullScreenPlaylistMenu &&
+    !event.target.closest(".lyrics-fullscreen-playlist-wrap")
+  ) {
+    lyricsFullScreenPlaylistMenu.hidden = true;
+  }
+});
+
+
 </script>
 
 
@@ -18303,37 +18693,7 @@ updateMasterHistoryButtons();
 ======================================== -->
 
 <div id="service-console">
-Full Screen: до нуля вокального V-счётчика размер увеличен ещё в 2 раза; последние 3 секунды: −3 красный, −2 жёлтый, −1 зелёный. Structure: меню названий без внутреннего скролла, высота автоматически по содержимому.
-   | 5.0.2
-</div>
-
-<div class="row">
-Full Screen: Space всегда управляет транспортом Play/Pause независимо от активного EDIT/карета в Lyrics Editor. | 5.0.3
-</div>
-
-<div class="row">
-Full Screen: ЛКМ по чёрному полю открывает меню тональности (−1 / исходная / +1); ПКМ открывает меню включения/выключения треков. Браузерное контекстное меню блокируется только на чёрном поле Full Screen. | 5.0.4
-</div>
-
-<div class="row">
-Full Screen: ЛКМ Tone — higher + / back to source ±n / lower −. ПКМ Tracks: слева от имени каждого трека горизонтальный Pan L–R, справа Level 0–100; имя трека включает/выключает его. Esc из Full Screen и Lyrics Editor всегда выходит напрямую в Sequencer. | 5.0.5
-</div>
-
-<div class="row">
-Full Screen: название песни увеличено с 18px до 20px. | 5.0.6
-</div>
-
-<div class="row">
-Full Screen / Sequencer: Lyrics + Edit заменены на Lyrics Editor / Full Screen; Tone и Tracks получили × и могут быть открыты одновременно, Backspace закрывает оба; добавлены Master Volume справа и Input Level слева с вертикальными шкалами, Page Up/Down открывает/закрывает обе; отдельный Full Screen Keys; транспорт Play / Rec / Back / Stop / Pause; Tab возвращает в Lyrics Editor; V-счётчик до −3 серый, затем −3 красный / −2 жёлтый / −1 зелёный / после 0 голубой; название песни 20px. | 5.1.0
-</div>
-
-<div class="row">
-Full Screen: Master Volume теперь реально регулирует общий уровень Original / Master / Mix; значки микрофона и динамика перенесены выше крайних таймкодов; обе вертикальные шкалы раскрываются вверх почти до верхнего бара. | 5.1.1
-</div>
-
-
-<div class="row">
-Full Screen: таймкод от 0 снова голубой; вертикальные Input/Master укорочены сверху на 5%; Tracks — Back to Source, заголовок над треками, Solo/Name/Mute, имя открывает временное окно playback FX с EQ; окна Tone/Tracks/FX перетаскиваются и масштабируются, Backspace закрывает все; Keys? раскрывается по наведению. | 5.1.2
+Full Screen: V использует ту же логику, что и Sequencer — до начала вокала обратный отсчёт серый; последние 3 секунды: красный → жёлтый → зелёный; после начала вокала — голубой. | 5.1.4
 </div>
 
 <div class="row" id="build-down">
