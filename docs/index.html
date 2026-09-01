@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.1.4</title>
+  <title>MyNus 5.1.7</title>
 
 
  <style>
@@ -1562,7 +1562,14 @@
     }
 
     .lyrics-fullscreen-playlist-item:hover { background: rgba(255,255,255,.12); }
-    .lyrics-fullscreen-playlist-item.active { color: #7fd8ff; }
+    .lyrics-fullscreen-playlist-item.current {
+      color: #7fd8ff;
+      cursor: default;
+      background: rgba(127,216,255,.08);
+    }
+    .lyrics-fullscreen-playlist-item.current:hover { background: rgba(127,216,255,.08); }
+    .lyrics-fullscreen-playlist-item.executed { color: #aaa; }
+    .lyrics-fullscreen-playlist-item.waiting { color: #fff; }
 
     .lyrics-fullscreen-back {
       justify-self: start;
@@ -3965,6 +3972,21 @@
   </div>
 </div>
 
+<!-- ========================================
+     SAVE PROJECT DIALOG | 5.1.7
+======================================== -->
+<div id="saveProjectDialog" class="export-dialog">
+  <div class="export-dialog-card">
+    <div class="export-dialog-title">Save Project</div>
+    <label for="saveProjectNameInput" style="display:block; margin:0 0 6px;">Project name</label>
+    <input id="saveProjectNameInput" type="text" autocomplete="off" style="width:100%; box-sizing:border-box; margin:0 0 12px;">
+    <div style="font-size:12px; opacity:.75; margin-bottom:12px;">C:\MyNus\PlayList</div>
+    <div class="export-format-grid" style="grid-template-columns:1fr 1fr;">
+      <button type="button" id="confirmSaveProjectBtn">Save</button>
+      <button type="button" id="cancelSaveProjectBtn">Cancel</button>
+    </div>
+  </div>
+</div>
 
 
 <!-- ========================================
@@ -3996,7 +4018,7 @@
         <div class="lyrics-fullscreen-title-stack">
           <div id="lyricsFullScreenTrackName" class="lyrics-fullscreen-track-name">No file selected</div>
           <div class="lyrics-fullscreen-playlist-wrap">
-            <button type="button" id="lyricsFullScreenPlaylistBtn" class="lyrics-fullscreen-playlist-btn">Play List</button>
+            <button type="button" id="lyricsFullScreenPlaylistBtn" class="lyrics-fullscreen-playlist-btn">PlayList</button>
             <div id="lyricsFullScreenPlaylistMenu" class="lyrics-fullscreen-playlist-menu" hidden></div>
           </div>
         </div>
@@ -18380,8 +18402,8 @@ updateMasterHistoryButtons();
 
 
 // ========================================
-// PROJECT / FULL SCREEN PLAY LIST | 5.1.4
-// Projects are stored by server.py in C:\MyNus\Play List
+// PROJECT / FULL SCREEN PLAYLIST | 5.1.7
+// Project = 12 audio slots + Lyrics.json + Project.json
 // ========================================
 const saveProjectBtn = document.getElementById("saveProjectBtn");
 const loadProjectBtn = document.getElementById("loadProjectBtn");
@@ -18389,8 +18411,14 @@ const lyricsFullScreenPlaylistBtn = document.getElementById("lyricsFullScreenPla
 const lyricsFullScreenPlaylistMenu = document.getElementById("lyricsFullScreenPlaylistMenu");
 let currentPlaylistProject = null;
 
+const projectTrackIds = [
+  "original", "vocals", "pitchCorrection", "harmonizer",
+  "drums", "bass", "guitar", "piano", "other",
+  "reserve1", "reserve2", "reserve3"
+];
+
 function projectSafeName() {
-  const raw = currentOriginalFile?.name || fileName?.textContent || "Project";
+  const raw = fileName?.textContent || currentPlaylistProject || "Project";
   return String(raw)
     .replace(/\.[^.]+$/, "")
     .replace(/[\\/:*?"<>|]+/g, "_")
@@ -18402,56 +18430,69 @@ function cloneSerializable(value, fallback) {
   catch (_) { return fallback; }
 }
 
-function projectLyricsPayload() {
-  const lines = (lyricsEditorDraft?.length ? lyricsEditorDraft : karaokeLines || [])
-    .map(line => cloneSerializable(line, {}));
+// Exactly the same JSON model used by Lyrics JSON export.
+function projectLyricsJson() {
+  const lines = (lyricsEditorDraft || []).map(line => ({
+    start: Number(line.start),
+    end: Number(line.end),
+    words: (line.words || []).map(word => ({ ...word }))
+  }));
   return {
     language: lyricsData?.language || null,
-    text: lyricsData?.text || "",
-    words: cloneSerializable(lyricsData?.words || [], []),
+    text: lines.map(line => line.words.map(word => word.word).join(" ")).join(" "),
     lines,
-    structure: cloneSerializable(lyricsStructureDraft || [], [])
+    structure: (lyricsStructureDraft || []).map(segment => ({
+      type: String(segment.type || ""),
+      label: String(segment.label || ""),
+      start: Number(segment.start),
+      end: Number(segment.end)
+    }))
   };
 }
 
-function projectSequencerPayload() {
+function projectStateJson() {
   return {
-    mode,
-    fragmentStart,
-    fragmentEnd,
-    stemState: cloneSerializable(stemState, {}),
-    stemCrop: cloneSerializable(stemCrop, {}),
-    fxSettings: cloneSerializable(fxSettings, {}),
-    pixelsPerSecond
+    version: "5.1.7",
+    sequencer: {
+      mode,
+      fragmentStart,
+      fragmentEnd,
+      stemState: cloneSerializable(stemState, {}),
+      stemCrop: cloneSerializable(stemCrop, {}),
+      fxSettings: cloneSerializable(fxSettings, {}),
+      pixelsPerSecond
+    },
+    vocal_start: vocalStartTimeRaw,
+    vocal_end: vocalEndTimeRaw,
+    track_slots: projectTrackIds
   };
 }
 
-async function saveCurrentProject() {
-  if (!currentOriginalFile) {
-    status.textContent = "SAVE Project: no source audio";
-    return;
-  }
+const saveProjectDialog = document.getElementById("saveProjectDialog");
+const saveProjectNameInput = document.getElementById("saveProjectNameInput");
+const confirmSaveProjectBtn = document.getElementById("confirmSaveProjectBtn");
+const cancelSaveProjectBtn = document.getElementById("cancelSaveProjectBtn");
 
+function projectTrackFilename(trackId, source) {
+  const raw = String(source?.filename || "");
+  const match = raw.match(/\.[A-Za-z0-9]+$/);
+  return trackId + (match ? match[0].toLowerCase() : ".bin");
+}
+
+async function saveCurrentProject(projectName) {
   const fd = new FormData();
-  fd.append("name", projectSafeName());
-  fd.append("manifest", JSON.stringify({
-    lyrics: projectLyricsPayload(),
-    sequencer: projectSequencerPayload(),
-    vocal_start: vocalStartTimeRaw,
-    vocal_end: vocalEndTimeRaw
-  }));
-  fd.append("source", currentOriginalFile, currentOriginalFile.name || "source.audio");
+  const name = String(projectName || "").trim() || projectSafeName();
+  fd.append("name", name);
+  fd.append("lyrics_json", JSON.stringify(projectLyricsJson()));
+  fd.append("project_json", JSON.stringify(projectStateJson()));
 
-  for (const stemId of stemIds) {
-    const url = currentStemURLs[stemId];
-    if (!url) continue;
-    try {
-      const response = await fetch(url);
-      if (response.ok) {
-        const blob = await response.blob();
-        fd.append("stem_" + stemId, blob, stemId + ".wav");
-      }
-    } catch (_) {}
+  // Use the existing per-track save source: getTrackBlob().
+  // Nine current audio tracks are saved; three reserve slots stay reserved.
+  const workingTrackIds = projectTrackIds.slice(0, 9);
+  for (const trackId of workingTrackIds) {
+    const source = await getTrackBlob(trackId);
+    if (!source?.blob) continue;
+    fd.append("track_" + trackId, source.blob, projectTrackFilename(trackId, source));
   }
 
   status.textContent = "Saving project...";
@@ -18460,70 +18501,69 @@ async function saveCurrentProject() {
   if (!response.ok) throw new Error(data.error || "SAVE Project failed");
 
   currentPlaylistProject = data.id || data.name;
-  status.textContent = "Project saved: " + (data.name || projectSafeName());
+  status.textContent = "Project saved: " + (data.name || name);
   await refreshFullScreenPlaylist();
 }
 
 async function fetchProjects() {
   const response = await fetch("/projects");
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "Play List unavailable");
+  if (!response.ok) throw new Error(data.error || "PlayList unavailable");
+  if (data.current) currentPlaylistProject = data.current;
   return Array.isArray(data.projects) ? data.projects : [];
+}
+
+async function markProjectInUse(id) {
+  const response = await fetch("/projects/use", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "PlayList update failed");
+  currentPlaylistProject = data.current || id;
+  return data;
 }
 
 async function refreshFullScreenPlaylist() {
   if (!lyricsFullScreenPlaylistMenu) return;
   const projects = await fetchProjects();
   lyricsFullScreenPlaylistMenu.replaceChildren();
-
   if (!projects.length) {
     const empty = document.createElement("div");
     empty.className = "popup-state";
-    empty.textContent = "Play List is empty";
+    empty.textContent = "PlayList is empty";
     lyricsFullScreenPlaylistMenu.appendChild(empty);
     return;
   }
-
   projects.forEach(project => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "lyrics-fullscreen-playlist-item";
-    const active = String(project.id) === String(currentPlaylistProject);
-    button.classList.toggle("active", active);
-    button.textContent = (active ? "▶ " : "") + project.name;
-    button.title = project.name;
-    button.addEventListener("click", async event => {
+    const isCurrent = project.status === "current" || String(project.id) === String(currentPlaylistProject);
+    const row = document.createElement(isCurrent ? "div" : "button");
+    if (!isCurrent) row.type = "button";
+    row.className = "lyrics-fullscreen-playlist-item " + (isCurrent ? "current" : (project.status || "waiting"));
+    const icon = isCurrent ? "▶ " : (project.status === "executed" ? "✓ " : "⤓ ");
+    row.textContent = icon + project.name;
+    row.title = isCurrent ? project.name + " — IN USE" : project.name + " — load project";
+    if (!isCurrent) row.addEventListener("click", async event => {
       event.stopPropagation();
       await loadProjectById(project.id, true);
       lyricsFullScreenPlaylistMenu.hidden = true;
     });
-    lyricsFullScreenPlaylistMenu.appendChild(button);
+    lyricsFullScreenPlaylistMenu.appendChild(row);
   });
 }
 
 function restoreProjectSequencerState(saved) {
   if (!saved || typeof saved !== "object") return;
-
-  if (saved.stemState && typeof saved.stemState === "object") {
-    stemIds.forEach(stemId => {
-      if (!saved.stemState[stemId]) return;
-      Object.assign(stemState[stemId], saved.stemState[stemId]);
-    });
-  }
-
-  if (saved.stemCrop && typeof saved.stemCrop === "object") {
-    stemIds.forEach(stemId => {
-      if (!saved.stemCrop[stemId]) return;
-      Object.assign(stemCrop[stemId], saved.stemCrop[stemId]);
-    });
-  }
-
-  if (saved.fxSettings && typeof saved.fxSettings === "object") {
-    Object.keys(fxSettings).forEach(target => {
-      if (saved.fxSettings[target]) Object.assign(fxSettings[target], saved.fxSettings[target]);
-    });
-  }
-
+  if (saved.stemState && typeof saved.stemState === "object") stemIds.forEach(stemId => {
+    if (saved.stemState[stemId]) Object.assign(stemState[stemId], saved.stemState[stemId]);
+  });
+  if (saved.stemCrop && typeof saved.stemCrop === "object") stemIds.forEach(stemId => {
+    if (saved.stemCrop[stemId]) Object.assign(stemCrop[stemId], saved.stemCrop[stemId]);
+  });
+  if (saved.fxSettings && typeof saved.fxSettings === "object") Object.keys(fxSettings).forEach(target => {
+    if (saved.fxSettings[target]) Object.assign(fxSettings[target], saved.fxSettings[target]);
+  });
   fragmentStart = Number.isFinite(Number(saved.fragmentStart)) ? Number(saved.fragmentStart) : null;
   fragmentEnd = Number.isFinite(Number(saved.fragmentEnd)) ? Number(saved.fragmentEnd) : null;
   if (["original", "mix", "master"].includes(saved.mode)) mode = saved.mode;
@@ -18531,81 +18571,63 @@ function restoreProjectSequencerState(saved) {
 
 async function loadProjectById(id, keepFullScreen = false) {
   pauseAll();
-
   const response = await fetch("/projects/" + encodeURIComponent(id));
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "Load Project failed");
 
-  const sourceResponse = await fetch(data.source);
-  if (!sourceResponse.ok) throw new Error("Project source not found");
-  const sourceBlob = await sourceResponse.blob();
-  const sourceFile = new File(
-    [sourceBlob],
-    data.source_name || "source.audio",
-    { type: sourceBlob.type || "audio/mpeg" }
-  );
+  const project = data.project || {};
+  const lyrics = data.lyrics || {};
+  const tracks = data.tracks || {};
+  const originalUrl = tracks.original || null;
+  if (!originalUrl) throw new Error("Project Original track not found");
 
-  currentOriginalFile = sourceFile;
-  recentSelectedAudioFile = sourceFile;
-  fileName.textContent = data.source_name || data.name;
-  currentPlaylistProject = data.id;
+  const originalResponse = await fetch(originalUrl);
+  if (!originalResponse.ok) throw new Error("Project Original track not found");
+  const originalBlob = await originalResponse.blob();
+  const originalFile = new File([originalBlob], "original.audio", { type: originalBlob.type || "audio/mpeg" });
 
+  currentOriginalFile = originalFile;
+  recentSelectedAudioFile = originalFile;
+  fileName.textContent = data.name || id;
+  currentPlaylistProject = data.id || id;
   if (originalFileURL) URL.revokeObjectURL(originalFileURL);
-  originalFileURL = URL.createObjectURL(sourceFile);
+  originalFileURL = URL.createObjectURL(originalFile);
   originalAudio.src = originalFileURL;
 
   currentStemURLs = {};
   stemIds.forEach(stemId => {
-    const url = data.stems?.[stemId] || null;
+    const url = tracks[stemId] || null;
     currentStemURLs[stemId] = url;
     if (url) stemAudio[stemId].src = url;
     else stemAudio[stemId]?.removeAttribute("src");
   });
 
-  lyricsData = data.lyrics && Array.isArray(data.lyrics.words)
-    ? {
-        language: data.lyrics.language || null,
-        text: data.lyrics.text || "",
-        words: data.lyrics.words || []
-      }
-    : { language: null, text: "", words: [] };
+  lyricsEditorDraft = Array.isArray(lyrics.lines) ? cloneSerializable(lyrics.lines, []) : [];
+  karaokeLines = cloneSerializable(lyricsEditorDraft, []);
+  lyricsStructureDraft = Array.isArray(lyrics.structure) ? cloneSerializable(lyrics.structure, []) : null;
+  lyricsData = {
+    language: lyrics.language || null,
+    text: lyrics.text || "",
+    words: karaokeLines.flatMap(line => line.words || [])
+  };
 
-  if (Array.isArray(data.lyrics?.lines)) {
-    lyricsEditorDraft = cloneSerializable(data.lyrics.lines, []);
-    karaokeLines = cloneSerializable(data.lyrics.lines, []);
-  } else {
-    buildKaraokeLines();
-    lyricsEditorDraft = cloneKaraokeLines();
-  }
-
-  lyricsStructureDraft = Array.isArray(data.lyrics?.structure)
-    ? cloneSerializable(data.lyrics.structure, [])
-    : null;
-
-  vocalStartTimeRaw = Number.isFinite(Number(data.vocal_start)) ? Number(data.vocal_start) : null;
-  vocalEndTimeRaw = Number.isFinite(Number(data.vocal_end)) ? Number(data.vocal_end) : null;
+  vocalStartTimeRaw = Number.isFinite(Number(project.vocal_start)) ? Number(project.vocal_start) : null;
+  vocalEndTimeRaw = Number.isFinite(Number(project.vocal_end)) ? Number(project.vocal_end) : null;
   vocalStartTime = vocalStartTimeRaw;
   vocalEndTime = vocalEndTimeRaw;
-
-  restoreProjectSequencerState(data.sequencer);
+  restoreProjectSequencerState(project.sequencer);
 
   const metadataLoads = [waitForMetadata(originalAudio)];
-  stemIds.forEach(stemId => {
-    if (currentStemURLs[stemId]) metadataLoads.push(waitForMetadata(stemAudio[stemId]));
-  });
+  stemIds.forEach(stemId => { if (currentStemURLs[stemId]) metadataLoads.push(waitForMetadata(stemAudio[stemId])); });
   await Promise.all(metadataLoads);
-
   duration = originalAudio.duration || 0;
   const waveformData = {};
   stemIds.forEach(stemId => { waveformData[stemId] = currentStemURLs[stemId]; });
-  await loadWaveforms(sourceFile, waveformData);
+  await loadWaveforms(originalFile, waveformData);
 
   const fitWidth = Math.max(1, masterTimeline.clientWidth);
-  const savedZoom = Number(data.sequencer?.pixelsPerSecond);
-  pixelsPerSecond = Number.isFinite(savedZoom) && savedZoom > 0
-    ? savedZoom
-    : (duration > 0 ? fitWidth / duration : 10);
-
+  const savedZoom = Number(project.sequencer?.pixelsPerSecond);
+  pixelsPerSecond = Number.isFinite(savedZoom) && savedZoom > 0 ? savedZoom : (duration > 0 ? fitWidth / duration : 10);
   zoomValue.textContent = pixelsPerSecond.toFixed(1) + " px/s";
   if (zoomValueTop) zoomValueTop.textContent = zoomValue.textContent;
   sharedScrollInner.style.width = getTimelineWidth() + "px";
@@ -18621,37 +18643,69 @@ async function loadProjectById(id, keepFullScreen = false) {
   renderLyricsStructureTimeline(duration);
   updateModeButtons();
   studio.style.display = "block";
-  status.textContent = "Project loaded: " + data.name;
-
+  await markProjectInUse(data.id || id);
+  status.textContent = "Project loaded: " + (data.name || id);
   if (keepFullScreen) {
     if (!lyricsEditorDialog.classList.contains("open")) openLyricsEditor();
     setLyricsFullScreenMode(true);
   }
-
   await refreshFullScreenPlaylist();
 }
 
 async function chooseProjectToLoad() {
   const projects = await fetchProjects();
-  if (!projects.length) {
-    status.textContent = "Play List is empty";
-    return;
-  }
-
-  const names = projects.map((project, index) => `${index + 1}. ${project.name}`).join("\n");
-  const value = window.prompt("Load Project from Play List:\n" + names, "1");
+  if (!projects.length) { status.textContent = "PlayList is empty"; return; }
+  const icons = { executed: "✓", current: "▶", waiting: "⤓" };
+  const names = projects.map((project, index) => `${index + 1}. ${icons[project.status] || "⤓"} ${project.name}`).join("\n");
+  const value = window.prompt("Load Project from PlayList:\n" + names, "1");
   if (value === null) return;
-
   const number = Number(value);
   const project = projects[number - 1] || projects.find(item => item.name === value);
-  if (project) await loadProjectById(project.id, false);
+  if (project && project.status !== "current") await loadProjectById(project.id, false);
 }
 
 saveProjectBtn?.addEventListener("click", () => {
-  saveCurrentProject().catch(error => {
+  saveProjectNameInput.value = projectSafeName();
+  saveProjectDialog.classList.add("open");
+  requestAnimationFrame(() => {
+    saveProjectNameInput.focus();
+    saveProjectNameInput.select();
+  });
+});
+
+cancelSaveProjectBtn?.addEventListener("click", () => {
+  saveProjectDialog.classList.remove("open");
+});
+
+saveProjectDialog?.addEventListener("click", event => {
+  if (event.target === saveProjectDialog) saveProjectDialog.classList.remove("open");
+});
+
+confirmSaveProjectBtn?.addEventListener("click", async () => {
+  const name = String(saveProjectNameInput.value || "").trim();
+  if (!name) {
+    saveProjectNameInput.focus();
+    return;
+  }
+  confirmSaveProjectBtn.disabled = true;
+  try {
+    await saveCurrentProject(name);
+    saveProjectDialog.classList.remove("open");
+  } catch (error) {
     console.error(error);
     status.textContent = error.message;
-  });
+  } finally {
+    confirmSaveProjectBtn.disabled = false;
+  }
+});
+
+saveProjectNameInput?.addEventListener("keydown", event => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    confirmSaveProjectBtn.click();
+  } else if (event.key === "Escape") {
+    saveProjectDialog.classList.remove("open");
+  }
 });
 
 loadProjectBtn?.addEventListener("click", () => {
@@ -18693,7 +18747,8 @@ document.addEventListener("click", event => {
 ======================================== -->
 
 <div id="service-console">
-Full Screen: V использует ту же логику, что и Sequencer — до начала вокала обратный отсчёт серый; последние 3 секунды: красный → жёлтый → зелёный; после начала вокала — голубой. | 5.1.4
+PlayList: вертикальная очередь проектов — ✓ executed / ▶ current / ⤓ waiting. Текущий проект некликабельный; загрузка любого другого проекта делает его текущим; предыдущий текущий переходит в executed. Состояние очереди и текущий проект сохраняются сервером между F5 и перезапусками. | 5.1.5
+PROJECT SAVE/LOAD: новый механизм с нуля. SAVE Project сначала открывает форму имени проекта; затем сохраняет 9 рабочих аудиодорожек через существующий механизм getTrackBlob(), Lyrics.json и Project.json. 3 audio slots зарезервированы. | 5.1.7
 </div>
 
 <div class="row" id="build-down">
