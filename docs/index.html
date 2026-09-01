@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.0.3</title>
+  <title>MyNus 5.0.5</title>
 
 
  <style>
@@ -1391,7 +1391,7 @@
     }
 
     /* ========================================
-       LYRICS FULL SCREEN / KARAOKE MODE 5.0.3
+       LYRICS FULL SCREEN / KARAOKE MODE 5.0.5
     ======================================== */
 
     .lyrics-mode-switch,
@@ -1529,6 +1529,112 @@
 
     .lyrics-fullscreen-counter.countdown-1 {
       color: #30d158;
+    }
+
+
+    .lyrics-fullscreen-popup {
+      position: fixed;
+      z-index: 30;
+      min-width: 190px;
+      padding: 6px;
+      border: 1px solid rgba(255,255,255,.28);
+      border-radius: 8px;
+      background: rgba(18,18,18,.96);
+      box-shadow: 0 10px 30px rgba(0,0,0,.5);
+      color: #fff;
+      font-size: 15px;
+    }
+
+    .lyrics-fullscreen-popup[hidden] { display: none !important; }
+
+    .lyrics-fullscreen-popup-title {
+      padding: 5px 8px 7px;
+      color: #aaa;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    .lyrics-fullscreen-popup button {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 8px 10px;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      color: #fff;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .lyrics-fullscreen-popup button:hover { background: rgba(255,255,255,.12); }
+    .lyrics-fullscreen-popup button.active { color: #e58aa8; }
+    .lyrics-fullscreen-popup .popup-state { color: #999; font-size: 12px; }
+    .lyrics-fullscreen-popup button.active .popup-state { color: #e58aa8; }
+
+    #lyricsFullScreenTracksMenu {
+      min-width: min(820px, calc(100vw - 16px));
+    }
+
+    .lyrics-fullscreen-track-row {
+      display: grid;
+      grid-template-columns: minmax(210px, 1fr) minmax(120px, 180px) minmax(230px, 1fr);
+      align-items: center;
+      gap: 14px;
+      padding: 7px 8px;
+      border-radius: 5px;
+    }
+
+    .lyrics-fullscreen-track-row:hover { background: rgba(255,255,255,.06); }
+
+    .lyrics-fullscreen-track-control {
+      display: grid;
+      grid-template-columns: auto auto minmax(90px, 1fr) auto;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      color: #aaa;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .lyrics-fullscreen-track-control.level {
+      grid-template-columns: auto auto minmax(90px, 1fr) auto;
+    }
+
+    .lyrics-fullscreen-track-control input[type="range"] {
+      width: 100%;
+      min-width: 90px;
+      margin: 0;
+      cursor: pointer;
+    }
+
+    .lyrics-fullscreen-track-name-toggle {
+      width: 100%;
+      justify-content: center !important;
+      gap: 8px !important;
+      padding: 7px 8px !important;
+      text-align: center !important;
+      white-space: nowrap;
+    }
+
+    .lyrics-fullscreen-track-name-toggle:not(.active) {
+      color: #777 !important;
+      text-decoration: line-through;
+    }
+
+    @media (max-width: 760px) {
+      #lyricsFullScreenTracksMenu { min-width: calc(100vw - 16px); }
+      .lyrics-fullscreen-track-row {
+        grid-template-columns: 1fr;
+        gap: 5px;
+      }
+      .lyrics-fullscreen-track-name-toggle { grid-row: 1; }
     }
 
     .lyrics-fullscreen-lines {
@@ -3648,6 +3754,16 @@
         <div class="lyrics-fullscreen-brand">MyNus</div>
       </div>
       <div id="lyricsFullScreenCounter" class="lyrics-fullscreen-counter">-00:00.00</div>
+
+      <div id="lyricsFullScreenPitchMenu" class="lyrics-fullscreen-popup" hidden>
+        <div class="lyrics-fullscreen-popup-title">Tone</div>
+        <button type="button" data-fullscreen-pitch="up">higher <span class="popup-state">+</span></button>
+        <button type="button" data-fullscreen-pitch="reset">back to source <span id="lyricsFullScreenPitchValue" class="popup-state">0</span></button>
+        <button type="button" data-fullscreen-pitch="down">lower <span class="popup-state">−</span></button>
+      </div>
+      <div id="lyricsFullScreenTracksMenu" class="lyrics-fullscreen-popup" hidden>
+        <div class="lyrics-fullscreen-popup-title">Треки</div>
+      </div>
       <div class="lyrics-fullscreen-lines">
         <div id="lyricsFullScreenCurrent" class="lyrics-fullscreen-current"></div>
         <div id="lyricsFullScreenNext" class="lyrics-fullscreen-next"></div>
@@ -12812,7 +12928,169 @@ function updateLyricsFullScreenView(currentTime) {
   }
 }
 
+
+let lyricsFullScreenPitchSemitones = 0;
+const lyricsFullScreenPitchMenu = document.getElementById("lyricsFullScreenPitchMenu");
+const lyricsFullScreenTracksMenu = document.getElementById("lyricsFullScreenTracksMenu");
+const lyricsFullScreenPitchValue = document.getElementById("lyricsFullScreenPitchValue");
+
+function closeLyricsFullScreenMenus() {
+  if (lyricsFullScreenPitchMenu) lyricsFullScreenPitchMenu.hidden = true;
+  if (lyricsFullScreenTracksMenu) lyricsFullScreenTracksMenu.hidden = true;
+}
+
+function placeLyricsFullScreenMenu(menu, clientX, clientY) {
+  if (!menu) return;
+  menu.hidden = false;
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+  const rect = menu.getBoundingClientRect();
+  const pad = 8;
+  const left = Math.max(pad, Math.min(clientX, window.innerWidth - rect.width - pad));
+  const top = Math.max(pad, Math.min(clientY, window.innerHeight - rect.height - pad));
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+}
+
+function applyLyricsFullScreenPitch() {
+  const rate = Math.pow(2, lyricsFullScreenPitchSemitones / 12);
+  const audioList = [originalAudio, masterAudio, ...Object.values(stemAudio)].filter(Boolean);
+  audioList.forEach(audio => {
+    try {
+      audio.preservesPitch = false;
+      audio.mozPreservesPitch = false;
+      audio.webkitPreservesPitch = false;
+      audio.playbackRate = rate;
+    } catch (_) {}
+  });
+  if (lyricsFullScreenPitchValue) {
+    const value = lyricsFullScreenPitchSemitones;
+    lyricsFullScreenPitchValue.textContent = (value > 0 ? "+" : "") + value;
+  }
+}
+
+function renderLyricsFullScreenTracksMenu() {
+  if (!lyricsFullScreenTracksMenu) return;
+  const title = lyricsFullScreenTracksMenu.querySelector(".lyrics-fullscreen-popup-title");
+  lyricsFullScreenTracksMenu.replaceChildren();
+  if (title) lyricsFullScreenTracksMenu.appendChild(title);
+
+  const labels = {
+    vocals: "Vocals",
+    pitchCorrection: "Pitch Correct",
+    harmonizer: "Harmonizer",
+    drums: "Drums",
+    bass: "Bass",
+    guitar: "Guitar",
+    piano: "Piano",
+    other: "Other"
+  };
+
+  stemIds.forEach(stemId => {
+    const row = document.createElement("div");
+    row.className = "lyrics-fullscreen-track-row";
+
+    const panWrap = document.createElement("label");
+    panWrap.className = "lyrics-fullscreen-track-control pan";
+    const panLabel = document.createElement("span");
+    panLabel.textContent = "Pan";
+    const panL = document.createElement("span");
+    panL.textContent = "L";
+    const pan = document.createElement("input");
+    pan.type = "range";
+    pan.min = "-100";
+    pan.max = "100";
+    pan.step = "1";
+    pan.value = String(Number(fxSettings[stemId]?.pan) || 0);
+    pan.title = "Pan L — R";
+    const panR = document.createElement("span");
+    panR.textContent = "R";
+    panWrap.append(panLabel, panL, pan, panR);
+
+    const name = document.createElement("button");
+    name.type = "button";
+    name.className = "lyrics-fullscreen-track-name-toggle";
+    name.classList.toggle("active", !stemState[stemId].muted);
+    name.textContent = labels[stemId] || stemId;
+    name.title = stemState[stemId].muted ? "Track OFF — click to switch ON" : "Track ON — click to switch OFF";
+
+    const levelWrap = document.createElement("label");
+    levelWrap.className = "lyrics-fullscreen-track-control level";
+    const levelLabel = document.createElement("span");
+    levelLabel.textContent = "Level";
+    const level0 = document.createElement("span");
+    level0.textContent = "0";
+    const level = document.createElement("input");
+    level.type = "range";
+    level.min = "0";
+    level.max = "100";
+    level.step = "1";
+    level.value = String(Math.round((Number(stemState[stemId].volume) || 0) * 100));
+    level.title = "Level 0 — 100";
+    const level100 = document.createElement("span");
+    level100.textContent = "100";
+    levelWrap.append(levelLabel, level0, level, level100);
+
+    name.addEventListener("click", event => {
+      event.stopPropagation();
+      activateMixMode();
+      stemState[stemId].muted = !stemState[stemId].muted;
+      updateMixButtons();
+      applyMix();
+      name.classList.toggle("active", !stemState[stemId].muted);
+      name.title = stemState[stemId].muted ? "Track OFF — click to switch ON" : "Track ON — click to switch OFF";
+    });
+
+    pan.addEventListener("input", event => {
+      event.stopPropagation();
+      activateMixMode();
+      fxSettings[stemId].pan = Number(pan.value);
+      applyFxSettings(stemId);
+    });
+
+    level.addEventListener("input", event => {
+      event.stopPropagation();
+      activateMixMode();
+      stemState[stemId].volume = Number(level.value) / 100;
+      applyMix();
+    });
+
+    row.append(panWrap, name, levelWrap);
+    lyricsFullScreenTracksMenu.appendChild(row);
+  });
+}
+
+lyricsFullScreenPitchMenu?.addEventListener("click", event => {
+  const button = event.target.closest("[data-fullscreen-pitch]");
+  if (!button) return;
+  event.stopPropagation();
+  const action = button.dataset.fullscreenPitch;
+  if (action === "down") lyricsFullScreenPitchSemitones = Math.max(-12, lyricsFullScreenPitchSemitones - 1);
+  if (action === "up") lyricsFullScreenPitchSemitones = Math.min(12, lyricsFullScreenPitchSemitones + 1);
+  if (action === "reset") lyricsFullScreenPitchSemitones = 0;
+  applyLyricsFullScreenPitch();
+});
+
+lyricsFullScreenView?.addEventListener("click", event => {
+  if (!lyricsFullScreenMode) return;
+  if (event.target.closest("button, .lyrics-fullscreen-popup")) return;
+  closeLyricsFullScreenMenus();
+  placeLyricsFullScreenMenu(lyricsFullScreenPitchMenu, event.clientX, event.clientY);
+});
+
+lyricsFullScreenView?.addEventListener("contextmenu", event => {
+  if (!lyricsFullScreenMode) return;
+  if (event.target.closest("button, .lyrics-fullscreen-popup")) return;
+  event.preventDefault();
+  closeLyricsFullScreenMenus();
+  renderLyricsFullScreenTracksMenu();
+  placeLyricsFullScreenMenu(lyricsFullScreenTracksMenu, event.clientX, event.clientY);
+});
+
+window.addEventListener("resize", closeLyricsFullScreenMenus);
+
 function setLyricsFullScreenMode(enabled) {
+  closeLyricsFullScreenMenus();
   lyricsFullScreenMode = Boolean(enabled);
   lyricsEditorCard?.classList.toggle("karaoke-fullscreen-mode", lyricsFullScreenMode);
   lyricsFullScreenView?.setAttribute("aria-hidden", lyricsFullScreenMode ? "false" : "true");
@@ -17114,6 +17392,13 @@ window.addEventListener(
       );
 
 
+    // Lyrics Editor / Full Screen: Esc always exits directly to Sequencer.
+    if (event.code === "Escape" && lyricsEditorDialog?.classList.contains("open")) {
+      event.preventDefault();
+      closeLyricsEditor();
+      return;
+    }
+
     // Full Screen: Space always controls transport, regardless of Lines EDIT/caret.
     if (event.code === "Space") {
       if (lyricsFullScreenMode) {
@@ -17519,6 +17804,14 @@ Full Screen: до нуля вокального V-счётчика размер 
 
 <div class="row">
 Full Screen: Space всегда управляет транспортом Play/Pause независимо от активного EDIT/карета в Lyrics Editor. | 5.0.3
+</div>
+
+<div class="row">
+Full Screen: ЛКМ по чёрному полю открывает меню тональности (−1 / исходная / +1); ПКМ открывает меню включения/выключения треков. Браузерное контекстное меню блокируется только на чёрном поле Full Screen. | 5.0.4
+</div>
+
+<div class="row">
+Full Screen: ЛКМ Tone — higher + / back to source ±n / lower −. ПКМ Tracks: слева от имени каждого трека горизонтальный Pan L–R, справа Level 0–100; имя трека включает/выключает его. Esc из Full Screen и Lyrics Editor всегда выходит напрямую в Sequencer. | 5.0.5
 </div>
 
 <div class="row" id="build-down">
