@@ -1,5 +1,5 @@
 # ========================================
-# PLAYLIST / SAVE / LOAD PROJECT | 5.1.9
+# PLAYLIST / SAVE / LOAD PROJECT | 5.1.8
 # ========================================
 
 # ========================================
@@ -1305,7 +1305,7 @@ def transcribe_to_ru():
 
 
 # ========================================
-# MYNUS PlayList PROJECTS | 5.1.9
+# MYNUS PlayList PROJECTS | 5.1.8
 # ========================================
 def _project_id(value):
     value = secure_filename(str(value or "Project")) or "Project"
@@ -1451,119 +1451,63 @@ def use_project():
     return jsonify({"ok": True, **_playlist_projects_payload()})
 
 
-@app.route("/projects/select-folder", methods=["POST"])
-def select_project_folder():
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        selected = filedialog.askdirectory(
-            title="Select folder for MyNus project",
-            initialdir=PLAYLIST_DIR
-        )
-        root.destroy()
-        return jsonify({"ok": True, "path": selected or ""})
-    except Exception as exc:
-        print(f"[PROJECT SAVE] FOLDER PICKER ERROR: {exc}", flush=True)
-        return jsonify({"error": "Folder selection failed: " + str(exc)}), 500
-
-
 @app.route("/projects/save", methods=["POST"])
 def save_project():
     project_name = str(request.form.get("name") or "Project").strip() or "Project"
     project_id = _project_id(project_name)
-    save_root_raw = str(request.form.get("save_path") or PLAYLIST_DIR).strip() or PLAYLIST_DIR
-    save_root = os.path.abspath(os.path.expanduser(save_root_raw))
-    folder = os.path.join(save_root, project_id)
+    folder = os.path.join(PLAYLIST_DIR, project_id)
     temp_folder = folder + ".saving"
-
-    print("\n" + "=" * 72, flush=True)
-    print(f"[PROJECT SAVE] START | name={project_name!r} | id={project_id!r}", flush=True)
-    print(f"[PROJECT SAVE] TARGET | {folder}", flush=True)
+    if os.path.isdir(temp_folder):
+        shutil.rmtree(temp_folder)
+    os.makedirs(temp_folder, exist_ok=True)
+    tracks_dir = os.path.join(temp_folder, "tracks")
+    os.makedirs(tracks_dir, exist_ok=True)
 
     try:
-        os.makedirs(save_root, exist_ok=True)
-        if os.path.isdir(temp_folder):
-            shutil.rmtree(temp_folder)
-        os.makedirs(temp_folder, exist_ok=True)
-        tracks_dir = os.path.join(temp_folder, "tracks")
-        os.makedirs(tracks_dir, exist_ok=True)
-
         lyrics_json = json.loads(request.form.get("lyrics_json") or "{}")
         project_json = json.loads(request.form.get("project_json") or "{}")
-        print("[PROJECT SAVE] JSON | Lyrics.json received", flush=True)
-        print("[PROJECT SAVE] JSON | Project.json received", flush=True)
-
-        track_ids = [
-            "original", "vocals", "pitchCorrection", "harmonizer",
-            "drums", "bass", "guitar", "piano", "other",
-            "reserve1", "reserve2", "reserve3"
-        ]
-        track_files = {}
-        saved_count = 0
-        for track_id in track_ids:
-            upload = request.files.get("track_" + track_id)
-            if upload is None or not upload.filename:
-                track_files[track_id] = None
-                print(f"[PROJECT SAVE] TRACK | {track_id}: empty", flush=True)
-                continue
-            ext = os.path.splitext(upload.filename)[1].lower() or ".bin"
-            if ext == ".audio":
-                ext = ".bin"
-            filename = track_id + ext
-            target_file = os.path.join(tracks_dir, filename)
-            upload.save(target_file)
-            size = os.path.getsize(target_file)
-            track_files[track_id] = filename
-            saved_count += 1
-            print(f"[PROJECT SAVE] TRACK | {track_id}: {filename} | {size} bytes", flush=True)
-
-        if not track_files.get("original"):
-            raise ValueError("Original track not received")
-
-        project_json["version"] = "5.1.9"
-        project_json["id"] = project_id
-        project_json["name"] = project_name
-        project_json["tracks"] = track_files
-
-        lyrics_path = os.path.join(temp_folder, "Lyrics.json")
-        project_path = os.path.join(temp_folder, "Project.json")
-        with open(lyrics_path, "w", encoding="utf-8") as fh:
-            json.dump(lyrics_json, fh, ensure_ascii=False, indent=2)
-        with open(project_path, "w", encoding="utf-8") as fh:
-            json.dump(project_json, fh, ensure_ascii=False, indent=2)
-        print(f"[PROJECT SAVE] FILE | Lyrics.json | {os.path.getsize(lyrics_path)} bytes", flush=True)
-        print(f"[PROJECT SAVE] FILE | Project.json | {os.path.getsize(project_path)} bytes", flush=True)
-
-        if os.path.isdir(folder):
-            shutil.rmtree(folder)
-        os.replace(temp_folder, folder)
-
-        in_playlist = os.path.normcase(os.path.abspath(save_root)) == os.path.normcase(os.path.abspath(PLAYLIST_DIR))
-        if in_playlist:
-            _set_current_project(project_id)
-            playlist_payload = _playlist_projects_payload()
-        else:
-            playlist_payload = {"projects": [], "current": None}
-
-        print(f"[PROJECT SAVE] SUCCESS | tracks={saved_count} | {folder}", flush=True)
-        print("=" * 72 + "\n", flush=True)
-        return jsonify({
-            "ok": True,
-            "id": project_id,
-            "name": project_name,
-            "path": folder,
-            "in_playlist": in_playlist,
-            **playlist_payload
-        })
-
     except Exception as exc:
         shutil.rmtree(temp_folder, ignore_errors=True)
-        print(f"[PROJECT SAVE] ERROR | {type(exc).__name__}: {exc}", flush=True)
-        print("=" * 72 + "\n", flush=True)
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": "Invalid project JSON: " + str(exc)}), 400
+
+    track_ids = [
+        "original", "vocals", "pitchCorrection", "harmonizer",
+        "drums", "bass", "guitar", "piano", "other",
+        "reserve1", "reserve2", "reserve3"
+    ]
+    track_files = {}
+    for track_id in track_ids:
+        upload = request.files.get("track_" + track_id)
+        if upload is None or not upload.filename:
+            track_files[track_id] = None
+            continue
+        ext = os.path.splitext(upload.filename)[1].lower()
+        if not ext or ext == ".audio":
+            guessed = os.path.splitext(upload.filename)[1].lower()
+            ext = guessed if guessed and guessed != ".audio" else ".bin"
+        filename = track_id + ext
+        upload.save(os.path.join(tracks_dir, filename))
+        track_files[track_id] = filename
+
+    if not track_files.get("original"):
+        shutil.rmtree(temp_folder, ignore_errors=True)
+        return jsonify({"error": "Original track not received"}), 400
+
+    project_json["version"] = "5.1.8"
+    project_json["id"] = project_id
+    project_json["name"] = project_name
+    project_json["tracks"] = track_files
+
+    with open(os.path.join(temp_folder, "Lyrics.json"), "w", encoding="utf-8") as fh:
+        json.dump(lyrics_json, fh, ensure_ascii=False, indent=2)
+    with open(os.path.join(temp_folder, "Project.json"), "w", encoding="utf-8") as fh:
+        json.dump(project_json, fh, ensure_ascii=False, indent=2)
+
+    if os.path.isdir(folder):
+        shutil.rmtree(folder)
+    os.replace(temp_folder, folder)
+    _set_current_project(project_id)
+    return jsonify({"ok": True, "id": project_id, "name": project_name, **_playlist_projects_payload()})
 
 
 @app.route("/projects/<project_id>", methods=["GET"])
@@ -1610,8 +1554,8 @@ def print_restart_command():
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("MyNus Server 5.1.9")
-    print("5.1.9: Project SAVE — выбор имени и папки, системный Browse, явное подтверждение успеха и подробный серверный лог сохранения.")
+    print("MyNus Server 5.1.6")
+    print("5.1.5: PlayList — очередь проектов: executed / current / waiting; Save/Load полного проекта в C:\\MyNus\\PlayList; состояние очереди сохраняется между перезапусками.")
     print("=" * 72 + "\n")
 
     try:
