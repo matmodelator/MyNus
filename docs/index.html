@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.1.1</title>
+  <title>MyNus 5.1.2</title>
 
 
  <style>
@@ -1391,7 +1391,7 @@
     }
 
     /* ========================================
-       LYRICS FULL SCREEN / KARAOKE MODE 5.1.1
+       LYRICS FULL SCREEN / KARAOKE MODE 5.1.2
     ======================================== */
 
     .lyrics-mode-switch,
@@ -1519,6 +1519,11 @@
       font-size: 72px;
     }
 
+    .lyrics-fullscreen-counter.post-vocal {
+      color: #7fd8ff !important;
+      font-size: 36px;
+    }
+
     .lyrics-fullscreen-counter.countdown-gray {
       color: #777;
     }
@@ -1540,6 +1545,7 @@
       position: fixed;
       z-index: 30;
       min-width: 190px;
+      min-height: 70px;
       padding: 6px;
       border: 1px solid rgba(255,255,255,.28);
       border-radius: 8px;
@@ -1547,6 +1553,8 @@
       box-shadow: 0 10px 30px rgba(0,0,0,.5);
       color: #fff;
       font-size: 15px;
+      resize: both;
+      overflow: auto;
     }
 
     .lyrics-fullscreen-popup[hidden] { display: none !important; }
@@ -1565,6 +1573,28 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
+      cursor: move;
+      user-select: none;
+    }
+
+    .lyrics-fullscreen-popup-back {
+      width: 32px !important;
+      min-width: 32px !important;
+      padding: 2px 7px !important;
+      justify-content: center !important;
+      color: #ddd !important;
+      font-size: 20px !important;
+      line-height: 1 !important;
+    }
+
+    .lyrics-fullscreen-tracks-title {
+      padding: 2px 8px 8px;
+      text-align: center;
+      color: #aaa;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
     }
 
     .lyrics-fullscreen-popup-close {
@@ -1640,7 +1670,7 @@
       flex-direction: column;
       align-items: center;
       gap: 8px;
-      height: calc(100vh - 215px);
+      height: calc(95vh - 215px);
       max-height: none;
       min-height: 240px;
       padding: 10px 7px;
@@ -1687,14 +1717,43 @@
 
     .lyrics-fullscreen-track-row {
       display: grid;
-      grid-template-columns: minmax(210px, 1fr) minmax(120px, 180px) minmax(230px, 1fr);
+      grid-template-columns: 72px minmax(150px, 1fr) 72px;
       align-items: center;
-      gap: 14px;
+      gap: 8px;
       padding: 7px 8px;
       border-radius: 5px;
     }
 
     .lyrics-fullscreen-track-row:hover { background: rgba(255,255,255,.06); }
+
+    .lyrics-fullscreen-track-solo,
+    .lyrics-fullscreen-track-mute {
+      justify-content: center !important;
+      padding: 6px 8px !important;
+      font-size: 12px !important;
+    }
+
+    .lyrics-fullscreen-track-solo.active,
+    .lyrics-fullscreen-track-mute.active {
+      color: #e58aa8 !important;
+    }
+
+    .lyrics-fullscreen-track-name-open {
+      width: 100%;
+      justify-content: center !important;
+      gap: 8px !important;
+      padding: 7px 8px !important;
+      text-align: center !important;
+      white-space: nowrap;
+    }
+
+    .lyrics-fullscreen-track-secondary {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      padding: 0 6px 4px;
+    }
 
     .lyrics-fullscreen-track-control {
       display: grid;
@@ -1707,10 +1766,6 @@
       white-space: nowrap;
     }
 
-    .lyrics-fullscreen-track-control.level {
-      grid-template-columns: auto auto minmax(90px, 1fr) auto;
-    }
-
     .lyrics-fullscreen-track-control input[type="range"] {
       width: 100%;
       min-width: 90px;
@@ -1718,19 +1773,26 @@
       cursor: pointer;
     }
 
-    .lyrics-fullscreen-track-name-toggle {
-      width: 100%;
-      justify-content: center !important;
-      gap: 8px !important;
-      padding: 7px 8px !important;
-      text-align: center !important;
-      white-space: nowrap;
+    .lyrics-fullscreen-fx-window {
+      min-width: 360px;
     }
 
-    .lyrics-fullscreen-track-name-toggle:not(.active) {
-      color: #777 !important;
-      text-decoration: line-through;
+    .lyrics-fullscreen-fx-grid {
+      display: grid;
+      gap: 8px;
+      padding: 8px;
     }
+
+    .lyrics-fullscreen-fx-row {
+      display: grid;
+      grid-template-columns: 92px minmax(130px,1fr) 52px;
+      gap: 8px;
+      align-items: center;
+      color: #bbb;
+      font-size: 12px;
+    }
+
+    .lyrics-fullscreen-fx-row input[type="range"] { width: 100%; }
 
     @media (max-width: 760px) {
       #lyricsFullScreenTracksMenu { min-width: calc(100vw - 16px); }
@@ -1738,7 +1800,7 @@
         grid-template-columns: 1fr;
         gap: 5px;
       }
-      .lyrics-fullscreen-track-name-toggle { grid-row: 1; }
+      .lyrics-fullscreen-track-name-open { grid-row: 1; }
     }
 
     .lyrics-fullscreen-lines {
@@ -3861,12 +3923,12 @@
 
       <div class="lyrics-fullscreen-bottom-controls">
         <div class="lyrics-fullscreen-keys-wrap">
-          <button type="button" id="lyricsFullScreenKeysBtn" class="lyrics-fullscreen-mini-btn">Keys</button>
+          <button type="button" id="lyricsFullScreenKeysBtn" class="lyrics-fullscreen-mini-btn">Keys?</button>
           <div id="lyricsFullScreenKeysMenu" class="lyrics-fullscreen-keys-menu" hidden>
             <div><span>Space</span><span>Play / Pause</span></div>
             <div><span>Tab</span><span>Lyrics Editor</span></div>
             <div><span>Esc</span><span>Sequencer</span></div>
-            <div><span>Backspace</span><span>Close Tone + Tracks</span></div>
+            <div><span>Backspace</span><span>Close all Full Screen windows</span></div>
             <div><span>Page Up</span><span>Open Input + Master</span></div>
             <div><span>Page Down</span><span>Close Input + Master</span></div>
           </div>
@@ -3902,7 +3964,11 @@
         <button type="button" data-fullscreen-pitch="down">lower <span class="popup-state">−</span></button>
       </div>
       <div id="lyricsFullScreenTracksMenu" class="lyrics-fullscreen-popup" hidden>
-        <div class="lyrics-fullscreen-popup-head"><div class="lyrics-fullscreen-popup-title">Tracks</div><button type="button" class="lyrics-fullscreen-popup-close" data-close-fullscreen-menu="tracks" aria-label="Close">×</button></div>
+        <div class="lyrics-fullscreen-popup-head">
+          <button type="button" class="lyrics-fullscreen-popup-back" id="lyricsFullScreenTracksResetBtn" title="Back to Source" aria-label="Back to Source">←</button>
+          <button type="button" class="lyrics-fullscreen-popup-close" data-close-fullscreen-menu="tracks" aria-label="Close">×</button>
+        </div>
+        <div class="lyrics-fullscreen-tracks-title">Tracks</div>
       </div>
       <div class="lyrics-fullscreen-lines">
         <div id="lyricsFullScreenCurrent" class="lyrics-fullscreen-current"></div>
@@ -7277,21 +7343,19 @@ function updateMixButtons() {
 function applyMix() {
 
   const anySolo =
-    stemIds.some(
-      stemId =>
-        stemState[
-          stemId
-        ].solo
+    stemIds.some(stemId =>
+      lyricsFullScreenMode && lyricsFullScreenTrackState?.[stemId]
+        ? Boolean(lyricsFullScreenTrackState[stemId].solo)
+        : Boolean(stemState[stemId].solo)
     );
 
 
   stemIds.forEach(
     stemId => {
 
-      const state =
-        stemState[
-          stemId
-        ];
+      const sourceState = stemState[stemId];
+      const fsState = lyricsFullScreenMode ? lyricsFullScreenTrackState?.[stemId] : null;
+      const state = fsState || sourceState;
 
 
       const current =
@@ -7364,6 +7428,7 @@ function applyMix() {
   );
 
 
+  if (lyricsFullScreenMode) applyLyricsFullScreenTrackFxNodes();
   updatePlayheads();
 
 }
@@ -13089,10 +13154,70 @@ let lyricsFullScreenPitchSemitones = 0;
 const lyricsFullScreenPitchMenu = document.getElementById("lyricsFullScreenPitchMenu");
 const lyricsFullScreenTracksMenu = document.getElementById("lyricsFullScreenTracksMenu");
 const lyricsFullScreenPitchValue = document.getElementById("lyricsFullScreenPitchValue");
+const lyricsFullScreenTracksResetBtn = document.getElementById("lyricsFullScreenTracksResetBtn");
+
+let lyricsFullScreenTrackState = {};
+const lyricsFullScreenFxWindows = new Map();
+
+function cloneLyricsFullScreenSourceState(stemId) {
+  const fx = fxSettings[stemId] || defaultFxSettings;
+  const st = stemState[stemId] || {};
+  return {
+    volume: Number(st.volume ?? 1),
+    muted: Boolean(st.muted),
+    solo: Boolean(st.solo),
+    pan: Number(fx.pan || 0),
+    eqLow: Number(fx.eqLow || 0),
+    eqLowMid: Number(fx.eqLowMid || 0),
+    eqMid: Number(fx.eqMid || 0),
+    eqHighMid: Number(fx.eqHighMid || 0),
+    eqHigh: Number(fx.eqHigh || 0),
+    reverbOn: Boolean(fx.reverbOn),
+    reverbAmount: Number(fx.reverbAmount || 0),
+    delayOn: Boolean(fx.delayOn),
+    delayTime: Number(fx.delayTime || 0),
+    delayFeedback: Number(fx.delayFeedback || 0)
+  };
+}
+
+function resetLyricsFullScreenTrackState() {
+  lyricsFullScreenTrackState = {};
+  stemIds.forEach(stemId => {
+    lyricsFullScreenTrackState[stemId] = cloneLyricsFullScreenSourceState(stemId);
+  });
+  applyMix();
+  applyLyricsFullScreenTrackFxNodes();
+  renderLyricsFullScreenTracksMenu();
+  lyricsFullScreenFxWindows.forEach((win, stemId) => refreshLyricsFullScreenFxWindow(stemId, win));
+}
+
+function restoreSequencerFxAfterFullScreen() {
+  stemIds.forEach(stemId => applyFxSettings(stemId));
+  applyMix();
+}
+
+function applyLyricsFullScreenTrackFxNodes() {
+  if (!lyricsFullScreenMode || !mixAudioContext) return;
+  stemIds.forEach(stemId => {
+    const state = lyricsFullScreenTrackState[stemId];
+    const nodes = getFxNodes(stemId);
+    if (!state || !nodes?.eq?.length) return;
+    const eq = [state.eqLow, state.eqLowMid, state.eqMid, state.eqHighMid, state.eqHigh];
+    nodes.eq.forEach((node, i) => { node.gain.value = Number(eq[i] || 0); });
+    if (nodes.pan) nodes.pan.pan.value = Math.max(-1, Math.min(1, Number(state.pan || 0) / 100));
+    if (nodes.reverbDry) nodes.reverbDry.gain.value = 1;
+    if (nodes.reverbWet) nodes.reverbWet.gain.value = state.reverbOn ? Math.max(0, Math.min(1, state.reverbAmount / 100)) : 0;
+    if (nodes.delay) nodes.delay.delayTime.value = state.delayOn ? Math.max(0, state.delayTime / 1000) : 0;
+    if (nodes.delayFeedback) nodes.delayFeedback.gain.value = state.delayOn ? Math.max(0, Math.min(.95, state.delayFeedback / 100)) : 0;
+    if (nodes.delayDry) nodes.delayDry.gain.value = 1;
+    if (nodes.delayWet) nodes.delayWet.gain.value = state.delayOn ? .65 : 0;
+  });
+}
 
 function closeLyricsFullScreenMenus() {
   if (lyricsFullScreenPitchMenu) lyricsFullScreenPitchMenu.hidden = true;
   if (lyricsFullScreenTracksMenu) lyricsFullScreenTracksMenu.hidden = true;
+  lyricsFullScreenFxWindows.forEach(win => { win.hidden = true; });
 }
 
 function placeLyricsFullScreenMenu(menu, clientX, clientY) {
@@ -13106,6 +13231,34 @@ function placeLyricsFullScreenMenu(menu, clientX, clientY) {
   const top = Math.max(pad, Math.min(clientY, window.innerHeight - rect.height - pad));
   menu.style.left = left + "px";
   menu.style.top = top + "px";
+}
+
+function makeLyricsFullScreenPopupDraggable(menu) {
+  if (!menu || menu.dataset.dragReady === "1") return;
+  menu.dataset.dragReady = "1";
+  const head = menu.querySelector(".lyrics-fullscreen-popup-head");
+  if (!head) return;
+  head.addEventListener("pointerdown", event => {
+    if (event.target.closest("button,input")) return;
+    const rect = menu.getBoundingClientRect();
+    const dx = event.clientX - rect.left;
+    const dy = event.clientY - rect.top;
+    head.setPointerCapture?.(event.pointerId);
+    const move = e => {
+      const maxLeft = Math.max(8, window.innerWidth - menu.offsetWidth - 8);
+      const maxTop = Math.max(8, window.innerHeight - menu.offsetHeight - 8);
+      menu.style.left = Math.max(8, Math.min(maxLeft, e.clientX - dx)) + "px";
+      menu.style.top = Math.max(8, Math.min(maxTop, e.clientY - dy)) + "px";
+    };
+    const up = () => {
+      head.removeEventListener("pointermove", move);
+      head.removeEventListener("pointerup", up);
+      head.removeEventListener("pointercancel", up);
+    };
+    head.addEventListener("pointermove", move);
+    head.addEventListener("pointerup", up);
+    head.addEventListener("pointercancel", up);
+  });
 }
 
 function applyLyricsFullScreenPitch() {
@@ -13128,94 +13281,143 @@ function applyLyricsFullScreenPitch() {
 function renderLyricsFullScreenTracksMenu() {
   if (!lyricsFullScreenTracksMenu) return;
   const head = lyricsFullScreenTracksMenu.querySelector(".lyrics-fullscreen-popup-head");
+  const title = lyricsFullScreenTracksMenu.querySelector(".lyrics-fullscreen-tracks-title");
   lyricsFullScreenTracksMenu.replaceChildren();
   if (head) lyricsFullScreenTracksMenu.appendChild(head);
+  if (title) lyricsFullScreenTracksMenu.appendChild(title);
 
   const labels = {
-    vocals: "Vocals",
-    pitchCorrection: "Pitch Correct",
-    harmonizer: "Harmonizer",
-    drums: "Drums",
-    bass: "Bass",
-    guitar: "Guitar",
-    piano: "Piano",
-    other: "Other"
+    vocals: "Vocals", pitchCorrection: "Pitch Correct", harmonizer: "Harmonizer",
+    drums: "Drums", bass: "Bass", guitar: "Guitar", piano: "Piano", other: "Other"
   };
 
+  if (!Object.keys(lyricsFullScreenTrackState).length) {
+    stemIds.forEach(stemId => { lyricsFullScreenTrackState[stemId] = cloneLyricsFullScreenSourceState(stemId); });
+  }
+
   stemIds.forEach(stemId => {
+    const state = lyricsFullScreenTrackState[stemId] || cloneLyricsFullScreenSourceState(stemId);
+    lyricsFullScreenTrackState[stemId] = state;
     const row = document.createElement("div");
     row.className = "lyrics-fullscreen-track-row";
 
-    const panWrap = document.createElement("label");
-    panWrap.className = "lyrics-fullscreen-track-control pan";
-    const panLabel = document.createElement("span");
-    panLabel.textContent = "Pan";
-    const panL = document.createElement("span");
-    panL.textContent = "L";
-    const pan = document.createElement("input");
-    pan.type = "range";
-    pan.min = "-100";
-    pan.max = "100";
-    pan.step = "1";
-    pan.value = String(Number(fxSettings[stemId]?.pan) || 0);
-    pan.title = "Pan L — R";
-    const panR = document.createElement("span");
-    panR.textContent = "R";
-    panWrap.append(panLabel, panL, pan, panR);
+    const solo = document.createElement("button");
+    solo.type = "button";
+    solo.className = "lyrics-fullscreen-track-solo";
+    solo.textContent = "Solo";
+    solo.classList.toggle("active", state.solo);
 
     const name = document.createElement("button");
     name.type = "button";
-    name.className = "lyrics-fullscreen-track-name-toggle";
-    name.classList.toggle("active", !stemState[stemId].muted);
+    name.className = "lyrics-fullscreen-track-name-open";
     name.textContent = labels[stemId] || stemId;
-    name.title = stemState[stemId].muted ? "Track OFF — click to switch ON" : "Track ON — click to switch OFF";
+    name.title = "Playback effects";
+
+    const mute = document.createElement("button");
+    mute.type = "button";
+    mute.className = "lyrics-fullscreen-track-mute";
+    mute.textContent = "Mute";
+    mute.classList.toggle("active", state.muted);
+
+    const secondary = document.createElement("div");
+    secondary.className = "lyrics-fullscreen-track-secondary";
+
+    const panWrap = document.createElement("label");
+    panWrap.className = "lyrics-fullscreen-track-control pan";
+    panWrap.innerHTML = '<span>Pan</span><span>L</span>';
+    const pan = document.createElement("input");
+    pan.type = "range"; pan.min = "-100"; pan.max = "100"; pan.step = "1"; pan.value = String(state.pan);
+    pan.title = "Pan L — R";
+    panWrap.appendChild(pan);
+    const panR = document.createElement("span"); panR.textContent = "R"; panWrap.appendChild(panR);
 
     const levelWrap = document.createElement("label");
     levelWrap.className = "lyrics-fullscreen-track-control level";
-    const levelLabel = document.createElement("span");
-    levelLabel.textContent = "Level";
-    const level0 = document.createElement("span");
-    level0.textContent = "0";
+    levelWrap.innerHTML = '<span>Level</span><span>0</span>';
     const level = document.createElement("input");
-    level.type = "range";
-    level.min = "0";
-    level.max = "100";
-    level.step = "1";
-    level.value = String(Math.round((Number(stemState[stemId].volume) || 0) * 100));
+    level.type = "range"; level.min = "0"; level.max = "100"; level.step = "1"; level.value = String(Math.round(state.volume * 100));
     level.title = "Level 0 — 100";
-    const level100 = document.createElement("span");
-    level100.textContent = "100";
-    levelWrap.append(levelLabel, level0, level, level100);
+    levelWrap.appendChild(level);
+    const level100 = document.createElement("span"); level100.textContent = "100"; levelWrap.appendChild(level100);
 
+    solo.addEventListener("click", event => {
+      event.stopPropagation();
+      state.solo = !state.solo;
+      solo.classList.toggle("active", state.solo);
+      applyMix();
+    });
+    mute.addEventListener("click", event => {
+      event.stopPropagation();
+      state.muted = !state.muted;
+      mute.classList.toggle("active", state.muted);
+      applyMix();
+    });
     name.addEventListener("click", event => {
       event.stopPropagation();
-      activateMixMode();
-      stemState[stemId].muted = !stemState[stemId].muted;
-      updateMixButtons();
-      applyMix();
-      name.classList.toggle("active", !stemState[stemId].muted);
-      name.title = stemState[stemId].muted ? "Track OFF — click to switch ON" : "Track ON — click to switch OFF";
+      openLyricsFullScreenFxWindow(stemId, name.getBoundingClientRect());
     });
-
     pan.addEventListener("input", event => {
-      event.stopPropagation();
-      activateMixMode();
-      fxSettings[stemId].pan = Number(pan.value);
-      applyFxSettings(stemId);
+      event.stopPropagation(); state.pan = Number(pan.value); applyLyricsFullScreenTrackFxNodes();
     });
-
     level.addEventListener("input", event => {
-      event.stopPropagation();
-      activateMixMode();
-      stemState[stemId].volume = Number(level.value) / 100;
-      applyMix();
+      event.stopPropagation(); state.volume = Number(level.value) / 100; applyMix();
     });
 
-    row.append(panWrap, name, levelWrap);
+    secondary.append(panWrap, levelWrap);
+    row.append(solo, name, mute, secondary);
     lyricsFullScreenTracksMenu.appendChild(row);
+  });
+  makeLyricsFullScreenPopupDraggable(lyricsFullScreenTracksMenu);
+}
+
+function refreshLyricsFullScreenFxWindow(stemId, win) {
+  const state = lyricsFullScreenTrackState[stemId];
+  if (!state || !win) return;
+  win.querySelectorAll("[data-fsfx]").forEach(input => {
+    const key = input.dataset.fsfx;
+    if (input.type === "checkbox") input.checked = Boolean(state[key]);
+    else input.value = String(state[key]);
+    const out = win.querySelector(`[data-fsfx-value="${key}"]`);
+    if (out) out.textContent = String(state[key]);
   });
 }
 
+function openLyricsFullScreenFxWindow(stemId, anchorRect) {
+  let win = lyricsFullScreenFxWindows.get(stemId);
+  if (!win) {
+    const labels = {vocals:"Vocals",pitchCorrection:"Pitch Correct",harmonizer:"Harmonizer",drums:"Drums",bass:"Bass",guitar:"Guitar",piano:"Piano",other:"Other"};
+    win = document.createElement("div");
+    win.className = "lyrics-fullscreen-popup lyrics-fullscreen-fx-window";
+    win.hidden = true;
+    win.innerHTML = `
+      <div class="lyrics-fullscreen-popup-head"><div class="lyrics-fullscreen-popup-title">${labels[stemId] || stemId} FX</div><button type="button" class="lyrics-fullscreen-popup-close" data-close-fsfx="1">×</button></div>
+      <div class="lyrics-fullscreen-fx-grid">
+        ${[["eqLow","EQ Low",-12,12],["eqLowMid","EQ Low Mid",-12,12],["eqMid","EQ Mid",-12,12],["eqHighMid","EQ High Mid",-12,12],["eqHigh","EQ High",-12,12],["reverbAmount","Reverb",0,100],["delayTime","Delay ms",0,1000],["delayFeedback","Feedback",0,90]].map(([k,l,min,max])=>`<label class="lyrics-fullscreen-fx-row"><span>${l}</span><input type="range" min="${min}" max="${max}" step="1" data-fsfx="${k}"><span data-fsfx-value="${k}"></span></label>`).join("")}
+        <label class="lyrics-fullscreen-fx-row"><span>Reverb On</span><input type="checkbox" data-fsfx="reverbOn"><span></span></label>
+        <label class="lyrics-fullscreen-fx-row"><span>Delay On</span><input type="checkbox" data-fsfx="delayOn"><span></span></label>
+      </div>`;
+    document.body.appendChild(win);
+    lyricsFullScreenFxWindows.set(stemId, win);
+    win.querySelector('[data-close-fsfx="1"]')?.addEventListener("click", event => { event.stopPropagation(); win.hidden = true; });
+    win.addEventListener("input", event => {
+      const input = event.target.closest("[data-fsfx]");
+      if (!input) return;
+      const state = lyricsFullScreenTrackState[stemId];
+      if (!state) return;
+      const key = input.dataset.fsfx;
+      state[key] = input.type === "checkbox" ? input.checked : Number(input.value);
+      const out = win.querySelector(`[data-fsfx-value="${key}"]`);
+      if (out) out.textContent = String(state[key]);
+      applyLyricsFullScreenTrackFxNodes();
+    });
+    makeLyricsFullScreenPopupDraggable(win);
+  }
+  refreshLyricsFullScreenFxWindow(stemId, win);
+  placeLyricsFullScreenMenu(win, (anchorRect?.right || window.innerWidth/2) + 8, anchorRect?.top || 100);
+}
+
+makeLyricsFullScreenPopupDraggable(lyricsFullScreenPitchMenu);
+makeLyricsFullScreenPopupDraggable(lyricsFullScreenTracksMenu);
 lyricsFullScreenPitchMenu?.addEventListener("click", event => {
   const close = event.target.closest('[data-close-fullscreen-menu="pitch"]');
   if (close) {
@@ -13234,6 +13436,12 @@ lyricsFullScreenPitchMenu?.addEventListener("click", event => {
 });
 
 lyricsFullScreenTracksMenu?.addEventListener("click", event => {
+  const reset = event.target.closest("#lyricsFullScreenTracksResetBtn");
+  if (reset) {
+    event.stopPropagation();
+    resetLyricsFullScreenTrackState();
+    return;
+  }
   const close = event.target.closest('[data-close-fullscreen-menu="tracks"]');
   if (!close) return;
   event.stopPropagation();
@@ -13289,15 +13497,9 @@ let lyricsFullScreenMasterLevel = 1;
 
 function applyLyricsFullScreenMasterLevel() {
   const level = Math.max(0, Math.min(1, Number(lyricsFullScreenMasterLevel) || 0));
-
-  if (originalAudio && originalVolume) {
-    originalAudio.volume = Math.max(0, Math.min(1, (Number(originalVolume.value) || 0) / 100 * level));
-  }
-
-  if (masterAudio && masterVolume) {
-    masterAudio.volume = Math.max(0, Math.min(1, (Number(masterVolume.value) || 0) / 100 * level));
-  }
-
+  if (originalAudio && originalVolume) originalAudio.volume = Math.max(0, Math.min(1, (Number(originalVolume.value) || 0) / 100 * level));
+  if (masterAudio && masterVolume) masterAudio.volume = Math.max(0, Math.min(1, (Number(masterVolume.value) || 0) / 100 * level));
+  Object.values(stemAudio || {}).forEach(audio => { if (audio && !mixAudioContext) audio.volume = level; });
   applyMix();
 }
 
@@ -13308,9 +13510,12 @@ lyricsFullScreenVolumeRange?.addEventListener("input", () => {
   applyLyricsFullScreenMasterLevel();
 });
 
-lyricsFullScreenKeysBtn?.addEventListener("click", event => {
-  event.stopPropagation();
-  if (lyricsFullScreenKeysMenu) lyricsFullScreenKeysMenu.hidden = !lyricsFullScreenKeysMenu.hidden;
+const lyricsFullScreenKeysWrap = lyricsFullScreenKeysBtn?.closest(".lyrics-fullscreen-keys-wrap");
+lyricsFullScreenKeysWrap?.addEventListener("mouseenter", () => {
+  if (lyricsFullScreenKeysMenu) lyricsFullScreenKeysMenu.hidden = false;
+});
+lyricsFullScreenKeysWrap?.addEventListener("mouseleave", () => {
+  if (lyricsFullScreenKeysMenu) lyricsFullScreenKeysMenu.hidden = true;
 });
 
 lyricsFullScreenPlayBtn?.addEventListener("click", event => {
@@ -13351,14 +13556,16 @@ function setLyricsFullScreenMode(enabled) {
   if (lyricsFullScreenBackBtn) lyricsFullScreenBackBtn.textContent = "Lyrics Editor";
 
   if (lyricsFullScreenMode) {
-    if (lyricsFullScreenVolumeRange && masterVolume) {
-      lyricsFullScreenVolumeRange.value = masterVolume.value;
-      if (lyricsFullScreenVolumeValue) lyricsFullScreenVolumeValue.textContent = masterVolume.value;
-    }
+    lyricsFullScreenMasterLevel = 1;
+    if (lyricsFullScreenVolumeRange) lyricsFullScreenVolumeRange.value = "100";
+    if (lyricsFullScreenVolumeValue) lyricsFullScreenVolumeValue.textContent = "100";
+    resetLyricsFullScreenTrackState();
+    applyLyricsFullScreenMasterLevel();
     renderLyricsStructure();
     updateLyricsMasterCounter();
     updateLyricsFullScreenView(getCurrentTime());
   } else {
+    restoreSequencerFxAfterFullScreen();
     renderLyricsStructure();
     updateLyricsEditorKaraoke(getCurrentTime());
   }
@@ -14895,6 +15102,7 @@ function updateLyricsFullScreenCounterStyle(value) {
 
   lyricsFullScreenCounter.classList.remove(
     "pre-vocal",
+    "post-vocal",
     "countdown-gray",
     "countdown-3",
     "countdown-2",
@@ -14902,7 +15110,10 @@ function updateLyricsFullScreenCounterStyle(value) {
   );
 
   const text = String(value || "").trim();
-  if (!text.startsWith("-")) return;
+  if (!text.startsWith("-")) {
+    lyricsFullScreenCounter.classList.add("post-vocal");
+    return;
+  }
 
   lyricsFullScreenCounter.classList.add("pre-vocal");
 
@@ -14913,6 +15124,12 @@ function updateLyricsFullScreenCounterStyle(value) {
   const seconds = Number(match[2]) || 0;
   const fraction = match[3] ? Number("0." + match[3]) : 0;
   const remaining = minutes * 60 + seconds + fraction;
+
+  if (remaining <= 0) {
+    lyricsFullScreenCounter.classList.remove("pre-vocal");
+    lyricsFullScreenCounter.classList.add("post-vocal");
+    return;
+  }
 
   if (remaining > 3) {
     lyricsFullScreenCounter.classList.add("countdown-gray");
@@ -18112,6 +18329,11 @@ Full Screen / Sequencer: Lyrics + Edit заменены на Lyrics Editor / Ful
 
 <div class="row">
 Full Screen: Master Volume теперь реально регулирует общий уровень Original / Master / Mix; значки микрофона и динамика перенесены выше крайних таймкодов; обе вертикальные шкалы раскрываются вверх почти до верхнего бара. | 5.1.1
+</div>
+
+
+<div class="row">
+Full Screen: таймкод от 0 снова голубой; вертикальные Input/Master укорочены сверху на 5%; Tracks — Back to Source, заголовок над треками, Solo/Name/Mute, имя открывает временное окно playback FX с EQ; окна Tone/Tracks/FX перетаскиваются и масштабируются, Backspace закрывает все; Keys? раскрывается по наведению. | 5.1.2
 </div>
 
 <div class="row" id="build-down">
