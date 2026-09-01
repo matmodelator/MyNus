@@ -1,5 +1,5 @@
 # ========================================
-# чистка старого говна 4.7.15
+# выбор языка WhisperX 4.7.16
 # ========================================
 
 # ========================================
@@ -80,6 +80,28 @@ def separate():
 
     audio = request.files["audio"]
 
+    lyrics_language = (
+        request.form.get(
+            "lyrics_language",
+            "auto"
+        )
+        .strip()
+        .lower()
+    )
+
+    allowed_lyrics_languages = {
+        "auto",
+        "ru",
+        "en",
+        "it",
+        "es",
+        "fr",
+        "uk"
+    }
+
+    if lyrics_language not in allowed_lyrics_languages:
+        lyrics_language = "auto"
+
     if audio.filename == "":
 
         return jsonify({
@@ -149,7 +171,8 @@ def separate():
         args=(
             job_id,
             input_path,
-            job_result_dir
+            job_result_dir,
+            lyrics_language
         ),
         daemon=True
     )
@@ -244,7 +267,10 @@ def detect_vocal_range(
 # WHISPERX LYRICS
 # ========================================
 
-def detect_lyrics(vocal_path):
+def detect_lyrics(
+    vocal_path,
+    lyrics_language="auto"
+):
 
     import whisperx
     import torch
@@ -281,9 +307,18 @@ def detect_lyrics(vocal_path):
     # TRANSCRIBE FULL VOCALS
     # ========================================
 
+    transcribe_kwargs = {
+        "batch_size": 4
+    }
+
+    if lyrics_language != "auto":
+        transcribe_kwargs[
+            "language"
+        ] = lyrics_language
+
     result = model.transcribe(
         audio,
-        batch_size=4
+        **transcribe_kwargs
     )
 
     # ========================================
@@ -949,7 +984,8 @@ def detect_lyrics(vocal_path):
 def run_demucs(
     job_id,
     input_path,
-    job_result_dir
+    job_result_dir,
+    lyrics_language="auto"
 ):
 
     command = [
@@ -1154,7 +1190,8 @@ def run_demucs(
         lyrics = detect_lyrics(
             stem_targets[
                 "vocals"
-            ]
+            ],
+            lyrics_language
         )
 
 
