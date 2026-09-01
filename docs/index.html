@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.1.0</title>
+  <title>MyNus 5.1.1</title>
 
 
  <style>
@@ -1391,7 +1391,7 @@
     }
 
     /* ========================================
-       LYRICS FULL SCREEN / KARAOKE MODE 5.1.0
+       LYRICS FULL SCREEN / KARAOKE MODE 5.1.1
     ======================================== */
 
     .lyrics-mode-switch,
@@ -1624,7 +1624,7 @@
 
     .lyrics-fullscreen-side-control {
       position: absolute;
-      bottom: 91px;
+      bottom: 146px;
       z-index: 9;
       display: flex;
       flex-direction: column;
@@ -1640,8 +1640,8 @@
       flex-direction: column;
       align-items: center;
       gap: 8px;
-      height: calc(100vh - 150px);
-      max-height: 620px;
+      height: calc(100vh - 215px);
+      max-height: none;
       min-height: 240px;
       padding: 10px 7px;
       border: 1px solid rgba(255,255,255,.26);
@@ -6965,7 +6965,7 @@ originalVolume.addEventListener(
 
 
     originalAudio.volume =
-      value / 100;
+      (value / 100) * (typeof lyricsFullScreenMasterLevel === "number" ? lyricsFullScreenMasterLevel : 1);
 
 
     originalVolumeValue.textContent =
@@ -6986,7 +6986,7 @@ masterVolume.addEventListener(
 
 
     masterAudio.volume =
-      value / 100;
+      (value / 100) * (typeof lyricsFullScreenMasterLevel === "number" ? lyricsFullScreenMasterLevel : 1);
 
 
     masterVolumeValue.textContent =
@@ -7328,7 +7328,7 @@ function applyMix() {
 
       const level =
         enabled
-        ? state.volume
+        ? state.volume * (typeof lyricsFullScreenMasterLevel === "number" ? lyricsFullScreenMasterLevel : 1)
         : 0;
 
 
@@ -8675,9 +8675,9 @@ function ensureMixAudioGraph() {
 
 
   masterAudio.volume =
-    Number(
+    (Number(
       masterVolume.value
-    ) / 100;
+    ) / 100) * (typeof lyricsFullScreenMasterLevel === "number" ? lyricsFullScreenMasterLevel : 1);
 
 
   applyMix();
@@ -13285,15 +13285,27 @@ lyricsFullScreenMicRange?.addEventListener("input", () => {
   if (lyricsFullScreenMicValue) lyricsFullScreenMicValue.textContent = String(lyricsFullScreenInputLevel);
 });
 
+let lyricsFullScreenMasterLevel = 1;
+
+function applyLyricsFullScreenMasterLevel() {
+  const level = Math.max(0, Math.min(1, Number(lyricsFullScreenMasterLevel) || 0));
+
+  if (originalAudio && originalVolume) {
+    originalAudio.volume = Math.max(0, Math.min(1, (Number(originalVolume.value) || 0) / 100 * level));
+  }
+
+  if (masterAudio && masterVolume) {
+    masterAudio.volume = Math.max(0, Math.min(1, (Number(masterVolume.value) || 0) / 100 * level));
+  }
+
+  applyMix();
+}
+
 lyricsFullScreenVolumeRange?.addEventListener("input", () => {
   const value = Math.max(0, Math.min(100, Number(lyricsFullScreenVolumeRange.value) || 0));
-  if (masterVolume) {
-    masterVolume.value = String(value);
-    masterVolume.dispatchEvent(new Event("input", { bubbles: true }));
-  } else if (masterAudio) {
-    masterAudio.volume = value / 100;
-  }
+  lyricsFullScreenMasterLevel = value / 100;
   if (lyricsFullScreenVolumeValue) lyricsFullScreenVolumeValue.textContent = String(value);
+  applyLyricsFullScreenMasterLevel();
 });
 
 lyricsFullScreenKeysBtn?.addEventListener("click", event => {
@@ -18096,6 +18108,10 @@ Full Screen: название песни увеличено с 18px до 20px. |
 
 <div class="row">
 Full Screen / Sequencer: Lyrics + Edit заменены на Lyrics Editor / Full Screen; Tone и Tracks получили × и могут быть открыты одновременно, Backspace закрывает оба; добавлены Master Volume справа и Input Level слева с вертикальными шкалами, Page Up/Down открывает/закрывает обе; отдельный Full Screen Keys; транспорт Play / Rec / Back / Stop / Pause; Tab возвращает в Lyrics Editor; V-счётчик до −3 серый, затем −3 красный / −2 жёлтый / −1 зелёный / после 0 голубой; название песни 20px. | 5.1.0
+</div>
+
+<div class="row">
+Full Screen: Master Volume теперь реально регулирует общий уровень Original / Master / Mix; значки микрофона и динамика перенесены выше крайних таймкодов; обе вертикальные шкалы раскрываются вверх почти до верхнего бара. | 5.1.1
 </div>
 
 <div class="row" id="build-down">
