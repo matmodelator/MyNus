@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.0.6</title>
+  <title>MyNus 5.1.0</title>
 
 
  <style>
@@ -1391,7 +1391,7 @@
     }
 
     /* ========================================
-       LYRICS FULL SCREEN / KARAOKE MODE 5.0.6
+       LYRICS FULL SCREEN / KARAOKE MODE 5.1.0
     ======================================== */
 
     .lyrics-mode-switch,
@@ -1519,6 +1519,10 @@
       font-size: 72px;
     }
 
+    .lyrics-fullscreen-counter.countdown-gray {
+      color: #777;
+    }
+
     .lyrics-fullscreen-counter.countdown-3 {
       color: #ff3b30;
     }
@@ -1554,6 +1558,106 @@
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: .05em;
+    }
+
+    .lyrics-fullscreen-popup-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .lyrics-fullscreen-popup-close {
+      width: auto !important;
+      padding: 2px 7px !important;
+      justify-content: center !important;
+      color: #aaa !important;
+      font-size: 20px !important;
+      line-height: 1 !important;
+    }
+
+    .lyrics-fullscreen-bottom-controls {
+      position: absolute;
+      left: 50%;
+      bottom: 118px;
+      transform: translateX(-50%);
+      z-index: 8;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .lyrics-fullscreen-mini-btn,
+    .lyrics-fullscreen-transport-icons button,
+    .lyrics-fullscreen-side-icon {
+      border: 1px solid rgba(255,255,255,.28);
+      border-radius: 6px;
+      background: rgba(255,255,255,.06);
+      color: #ddd;
+      cursor: pointer;
+    }
+
+    .lyrics-fullscreen-mini-btn { padding: 5px 9px; }
+    .lyrics-fullscreen-transport-icons { display: flex; align-items: center; gap: 5px; }
+    .lyrics-fullscreen-transport-icons button { width: 31px; height: 29px; padding: 0; font-size: 15px; }
+    .lyrics-fullscreen-transport-icons button:hover,
+    .lyrics-fullscreen-mini-btn:hover,
+    .lyrics-fullscreen-side-icon:hover { background: rgba(255,255,255,.14); }
+
+    .lyrics-fullscreen-keys-wrap { position: relative; }
+    .lyrics-fullscreen-keys-menu {
+      position: absolute;
+      left: 0;
+      bottom: calc(100% + 6px);
+      min-width: 235px;
+      padding: 7px 9px;
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 7px;
+      background: rgba(18,18,18,.97);
+      color: #ddd;
+      font-size: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.45);
+    }
+    .lyrics-fullscreen-keys-menu[hidden] { display:none !important; }
+    .lyrics-fullscreen-keys-menu > div { display:flex; justify-content:space-between; gap:18px; padding:4px 2px; }
+    .lyrics-fullscreen-keys-menu > div > span:first-child { color:#fff; font-weight:700; }
+
+    .lyrics-fullscreen-side-control {
+      position: absolute;
+      bottom: 91px;
+      z-index: 9;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .lyrics-fullscreen-side-control.left { left: 24px; }
+    .lyrics-fullscreen-side-control.right { right: 24px; }
+    .lyrics-fullscreen-side-icon { width: 38px; height: 32px; padding: 0; font-size: 18px; }
+    .lyrics-fullscreen-vertical-scale {
+      position: absolute;
+      bottom: 38px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      height: calc(100vh - 150px);
+      max-height: 620px;
+      min-height: 240px;
+      padding: 10px 7px;
+      border: 1px solid rgba(255,255,255,.26);
+      border-radius: 8px;
+      background: rgba(18,18,18,.94);
+      box-sizing: border-box;
+    }
+    .lyrics-fullscreen-vertical-scale[hidden] { display:none !important; }
+    .lyrics-fullscreen-vertical-scale .scale-value { font: 700 12px Consolas, monospace; color:#ddd; }
+    .lyrics-fullscreen-vertical-scale input[type="range"] {
+      writing-mode: vertical-lr;
+      direction: rtl;
+      width: 24px;
+      height: 100%;
+      min-height: 190px;
+      cursor: pointer;
     }
 
     .lyrics-fullscreen-popup button {
@@ -3172,8 +3276,8 @@
     <div class="track">
 
       <div class="lyrics-controls">
-        <span>Lyrics</span>
-        <button type="button" id="editLyricsBtn">Edit</button>
+        <button type="button" id="editLyricsBtn">Lyrics Editor</button>
+        <button type="button" id="openLyricsFullScreenBtn">Full Screen</button>
       </div>
 
       <div
@@ -3755,14 +3859,50 @@
       </div>
       <div id="lyricsFullScreenCounter" class="lyrics-fullscreen-counter">-00:00.00</div>
 
+      <div class="lyrics-fullscreen-bottom-controls">
+        <div class="lyrics-fullscreen-keys-wrap">
+          <button type="button" id="lyricsFullScreenKeysBtn" class="lyrics-fullscreen-mini-btn">Keys</button>
+          <div id="lyricsFullScreenKeysMenu" class="lyrics-fullscreen-keys-menu" hidden>
+            <div><span>Space</span><span>Play / Pause</span></div>
+            <div><span>Tab</span><span>Lyrics Editor</span></div>
+            <div><span>Esc</span><span>Sequencer</span></div>
+            <div><span>Backspace</span><span>Close Tone + Tracks</span></div>
+            <div><span>Page Up</span><span>Open Input + Master</span></div>
+            <div><span>Page Down</span><span>Close Input + Master</span></div>
+          </div>
+        </div>
+        <div class="lyrics-fullscreen-transport-icons">
+          <button type="button" id="lyricsFullScreenPlayBtn" title="Play">▶</button>
+          <button type="button" id="lyricsFullScreenRecBtn" title="Rec">●</button>
+          <button type="button" id="lyricsFullScreenBackTransportBtn" title="Back">⏮</button>
+          <button type="button" id="lyricsFullScreenStopBtn" title="Stop">■</button>
+          <button type="button" id="lyricsFullScreenPauseBtn" title="Pause">⏸</button>
+        </div>
+      </div>
+
+      <div class="lyrics-fullscreen-side-control left">
+        <button type="button" id="lyricsFullScreenMicBtn" class="lyrics-fullscreen-side-icon" title="Input Level">🎤</button>
+        <div id="lyricsFullScreenMicScale" class="lyrics-fullscreen-vertical-scale" hidden>
+          <span class="scale-value" id="lyricsFullScreenMicValue">100</span>
+          <input id="lyricsFullScreenMicRange" type="range" min="0" max="100" value="100" orient="vertical" aria-label="Input Level">
+        </div>
+      </div>
+      <div class="lyrics-fullscreen-side-control right">
+        <button type="button" id="lyricsFullScreenVolumeBtn" class="lyrics-fullscreen-side-icon" title="Master Volume">🔊</button>
+        <div id="lyricsFullScreenVolumeScale" class="lyrics-fullscreen-vertical-scale" hidden>
+          <span class="scale-value" id="lyricsFullScreenVolumeValue">100</span>
+          <input id="lyricsFullScreenVolumeRange" type="range" min="0" max="100" value="100" orient="vertical" aria-label="Master Volume">
+        </div>
+      </div>
+
       <div id="lyricsFullScreenPitchMenu" class="lyrics-fullscreen-popup" hidden>
-        <div class="lyrics-fullscreen-popup-title">Tone</div>
+        <div class="lyrics-fullscreen-popup-head"><div class="lyrics-fullscreen-popup-title">Tone</div><button type="button" class="lyrics-fullscreen-popup-close" data-close-fullscreen-menu="pitch" aria-label="Close">×</button></div>
         <button type="button" data-fullscreen-pitch="up">higher <span class="popup-state">+</span></button>
         <button type="button" data-fullscreen-pitch="reset">back to source <span id="lyricsFullScreenPitchValue" class="popup-state">0</span></button>
         <button type="button" data-fullscreen-pitch="down">lower <span class="popup-state">−</span></button>
       </div>
       <div id="lyricsFullScreenTracksMenu" class="lyrics-fullscreen-popup" hidden>
-        <div class="lyrics-fullscreen-popup-title">Треки</div>
+        <div class="lyrics-fullscreen-popup-head"><div class="lyrics-fullscreen-popup-title">Tracks</div><button type="button" class="lyrics-fullscreen-popup-close" data-close-fullscreen-menu="tracks" aria-label="Close">×</button></div>
       </div>
       <div class="lyrics-fullscreen-lines">
         <div id="lyricsFullScreenCurrent" class="lyrics-fullscreen-current"></div>
@@ -4146,6 +4286,7 @@ const lyricsMasterCounter =
   document.getElementById("lyricsMasterCounter");
 
 const editLyricsBtn = document.getElementById("editLyricsBtn");
+const openLyricsFullScreenBtn = document.getElementById("openLyricsFullScreenBtn");
 const lyricsEditorDialog = document.getElementById("lyricsEditorDialog");
 const closeLyricsEditorBtn = document.getElementById("closeLyricsEditorBtn");
 const cancelLyricsEditBtn = document.getElementById("cancelLyricsEditBtn");
@@ -4237,6 +4378,21 @@ const lyricsFullScreenTrackName = document.getElementById("lyricsFullScreenTrack
 const lyricsFullScreenCounter = document.getElementById("lyricsFullScreenCounter");
 const lyricsFullScreenCurrent = document.getElementById("lyricsFullScreenCurrent");
 const lyricsFullScreenNext = document.getElementById("lyricsFullScreenNext");
+const lyricsFullScreenKeysBtn = document.getElementById("lyricsFullScreenKeysBtn");
+const lyricsFullScreenKeysMenu = document.getElementById("lyricsFullScreenKeysMenu");
+const lyricsFullScreenPlayBtn = document.getElementById("lyricsFullScreenPlayBtn");
+const lyricsFullScreenRecBtn = document.getElementById("lyricsFullScreenRecBtn");
+const lyricsFullScreenBackTransportBtn = document.getElementById("lyricsFullScreenBackTransportBtn");
+const lyricsFullScreenStopBtn = document.getElementById("lyricsFullScreenStopBtn");
+const lyricsFullScreenPauseBtn = document.getElementById("lyricsFullScreenPauseBtn");
+const lyricsFullScreenMicBtn = document.getElementById("lyricsFullScreenMicBtn");
+const lyricsFullScreenMicScale = document.getElementById("lyricsFullScreenMicScale");
+const lyricsFullScreenMicRange = document.getElementById("lyricsFullScreenMicRange");
+const lyricsFullScreenMicValue = document.getElementById("lyricsFullScreenMicValue");
+const lyricsFullScreenVolumeBtn = document.getElementById("lyricsFullScreenVolumeBtn");
+const lyricsFullScreenVolumeScale = document.getElementById("lyricsFullScreenVolumeScale");
+const lyricsFullScreenVolumeRange = document.getElementById("lyricsFullScreenVolumeRange");
+const lyricsFullScreenVolumeValue = document.getElementById("lyricsFullScreenVolumeValue");
 const recentAudioMenu = document.getElementById("recentAudioMenu");
 
 
@@ -12971,9 +13127,9 @@ function applyLyricsFullScreenPitch() {
 
 function renderLyricsFullScreenTracksMenu() {
   if (!lyricsFullScreenTracksMenu) return;
-  const title = lyricsFullScreenTracksMenu.querySelector(".lyrics-fullscreen-popup-title");
+  const head = lyricsFullScreenTracksMenu.querySelector(".lyrics-fullscreen-popup-head");
   lyricsFullScreenTracksMenu.replaceChildren();
-  if (title) lyricsFullScreenTracksMenu.appendChild(title);
+  if (head) lyricsFullScreenTracksMenu.appendChild(head);
 
   const labels = {
     vocals: "Vocals",
@@ -13061,6 +13217,12 @@ function renderLyricsFullScreenTracksMenu() {
 }
 
 lyricsFullScreenPitchMenu?.addEventListener("click", event => {
+  const close = event.target.closest('[data-close-fullscreen-menu="pitch"]');
+  if (close) {
+    event.stopPropagation();
+    lyricsFullScreenPitchMenu.hidden = true;
+    return;
+  }
   const button = event.target.closest("[data-fullscreen-pitch]");
   if (!button) return;
   event.stopPropagation();
@@ -13071,23 +13233,101 @@ lyricsFullScreenPitchMenu?.addEventListener("click", event => {
   applyLyricsFullScreenPitch();
 });
 
+lyricsFullScreenTracksMenu?.addEventListener("click", event => {
+  const close = event.target.closest('[data-close-fullscreen-menu="tracks"]');
+  if (!close) return;
+  event.stopPropagation();
+  lyricsFullScreenTracksMenu.hidden = true;
+});
+
 lyricsFullScreenView?.addEventListener("click", event => {
   if (!lyricsFullScreenMode) return;
-  if (event.target.closest("button, .lyrics-fullscreen-popup")) return;
-  closeLyricsFullScreenMenus();
+  if (event.target.closest("button, input, .lyrics-fullscreen-popup, .lyrics-fullscreen-keys-menu")) return;
   placeLyricsFullScreenMenu(lyricsFullScreenPitchMenu, event.clientX, event.clientY);
 });
 
 lyricsFullScreenView?.addEventListener("contextmenu", event => {
   if (!lyricsFullScreenMode) return;
-  if (event.target.closest("button, .lyrics-fullscreen-popup")) return;
+  if (event.target.closest(".lyrics-fullscreen-side-icon")) return;
+  if (event.target.closest("button, input, .lyrics-fullscreen-popup, .lyrics-fullscreen-keys-menu")) return;
   event.preventDefault();
-  closeLyricsFullScreenMenus();
   renderLyricsFullScreenTracksMenu();
   placeLyricsFullScreenMenu(lyricsFullScreenTracksMenu, event.clientX, event.clientY);
 });
 
-window.addEventListener("resize", closeLyricsFullScreenMenus);
+function setLyricsFullScreenMeters(opened) {
+  if (lyricsFullScreenMicScale) lyricsFullScreenMicScale.hidden = !opened;
+  if (lyricsFullScreenVolumeScale) lyricsFullScreenVolumeScale.hidden = !opened;
+}
+
+function toggleLyricsFullScreenScale(scale) {
+  if (!scale) return;
+  scale.hidden = !scale.hidden;
+}
+
+lyricsFullScreenMicBtn?.addEventListener("contextmenu", event => {
+  if (!lyricsFullScreenMode) return;
+  event.preventDefault();
+  event.stopPropagation();
+  toggleLyricsFullScreenScale(lyricsFullScreenMicScale);
+});
+
+lyricsFullScreenVolumeBtn?.addEventListener("contextmenu", event => {
+  if (!lyricsFullScreenMode) return;
+  event.preventDefault();
+  event.stopPropagation();
+  toggleLyricsFullScreenScale(lyricsFullScreenVolumeScale);
+});
+
+let lyricsFullScreenInputLevel = 100;
+lyricsFullScreenMicRange?.addEventListener("input", () => {
+  lyricsFullScreenInputLevel = Number(lyricsFullScreenMicRange.value) || 0;
+  if (lyricsFullScreenMicValue) lyricsFullScreenMicValue.textContent = String(lyricsFullScreenInputLevel);
+});
+
+lyricsFullScreenVolumeRange?.addEventListener("input", () => {
+  const value = Math.max(0, Math.min(100, Number(lyricsFullScreenVolumeRange.value) || 0));
+  if (masterVolume) {
+    masterVolume.value = String(value);
+    masterVolume.dispatchEvent(new Event("input", { bubbles: true }));
+  } else if (masterAudio) {
+    masterAudio.volume = value / 100;
+  }
+  if (lyricsFullScreenVolumeValue) lyricsFullScreenVolumeValue.textContent = String(value);
+});
+
+lyricsFullScreenKeysBtn?.addEventListener("click", event => {
+  event.stopPropagation();
+  if (lyricsFullScreenKeysMenu) lyricsFullScreenKeysMenu.hidden = !lyricsFullScreenKeysMenu.hidden;
+});
+
+lyricsFullScreenPlayBtn?.addEventListener("click", event => {
+  event.stopPropagation();
+  if (!isPlaying) playCurrentMode();
+  updateLyricsTransportButtons();
+});
+lyricsFullScreenRecBtn?.addEventListener("click", event => {
+  event.stopPropagation();
+  if (masterRecording) stopMasterRecording(); else startMasterRecording();
+});
+lyricsFullScreenBackTransportBtn?.addEventListener("click", event => {
+  event.stopPropagation();
+  startBtn?.click();
+});
+lyricsFullScreenStopBtn?.addEventListener("click", event => {
+  event.stopPropagation();
+  stopBtn?.click();
+});
+lyricsFullScreenPauseBtn?.addEventListener("click", event => {
+  event.stopPropagation();
+  if (isPlaying) pauseAll(); else playCurrentMode();
+  updateLyricsTransportButtons();
+});
+
+window.addEventListener("resize", () => {
+  closeLyricsFullScreenMenus();
+  if (lyricsFullScreenKeysMenu) lyricsFullScreenKeysMenu.hidden = true;
+});
 
 function setLyricsFullScreenMode(enabled) {
   closeLyricsFullScreenMenus();
@@ -13099,6 +13339,10 @@ function setLyricsFullScreenMode(enabled) {
   if (lyricsFullScreenBackBtn) lyricsFullScreenBackBtn.textContent = "Lyrics Editor";
 
   if (lyricsFullScreenMode) {
+    if (lyricsFullScreenVolumeRange && masterVolume) {
+      lyricsFullScreenVolumeRange.value = masterVolume.value;
+      if (lyricsFullScreenVolumeValue) lyricsFullScreenVolumeValue.textContent = masterVolume.value;
+    }
     renderLyricsStructure();
     updateLyricsMasterCounter();
     updateLyricsFullScreenView(getCurrentTime());
@@ -14639,6 +14883,7 @@ function updateLyricsFullScreenCounterStyle(value) {
 
   lyricsFullScreenCounter.classList.remove(
     "pre-vocal",
+    "countdown-gray",
     "countdown-3",
     "countdown-2",
     "countdown-1"
@@ -14657,7 +14902,9 @@ function updateLyricsFullScreenCounterStyle(value) {
   const fraction = match[3] ? Number("0." + match[3]) : 0;
   const remaining = minutes * 60 + seconds + fraction;
 
-  if (remaining > 2 && remaining <= 3) {
+  if (remaining > 3) {
+    lyricsFullScreenCounter.classList.add("countdown-gray");
+  } else if (remaining > 2 && remaining <= 3) {
     lyricsFullScreenCounter.classList.add("countdown-3");
   } else if (remaining > 1 && remaining <= 2) {
     lyricsFullScreenCounter.classList.add("countdown-2");
@@ -14854,6 +15101,10 @@ function getSelectedLyricsLine() {
 }
 
 editLyricsBtn.addEventListener("click", openLyricsEditor);
+openLyricsFullScreenBtn?.addEventListener("click", () => {
+  openLyricsEditor();
+  setLyricsFullScreenMode(true);
+});
 closeLyricsEditorBtn.addEventListener("click", closeLyricsEditor);
 cancelLyricsEditBtn.addEventListener("click", closeLyricsEditor);
 
@@ -17399,6 +17650,31 @@ window.addEventListener(
       return;
     }
 
+    // Full Screen-only navigation and popup controls.
+    if (lyricsFullScreenMode && event.code === "Tab") {
+      event.preventDefault();
+      setLyricsFullScreenMode(false);
+      return;
+    }
+
+    if (lyricsFullScreenMode && event.code === "Backspace") {
+      event.preventDefault();
+      closeLyricsFullScreenMenus();
+      return;
+    }
+
+    if (lyricsFullScreenMode && event.code === "PageUp") {
+      event.preventDefault();
+      setLyricsFullScreenMeters(true);
+      return;
+    }
+
+    if (lyricsFullScreenMode && event.code === "PageDown") {
+      event.preventDefault();
+      setLyricsFullScreenMeters(false);
+      return;
+    }
+
     // Full Screen: Space always controls transport, regardless of Lines EDIT/caret.
     if (event.code === "Space") {
       if (lyricsFullScreenMode) {
@@ -17816,6 +18092,10 @@ Full Screen: ЛКМ Tone — higher + / back to source ±n / lower −. ПКМ T
 
 <div class="row">
 Full Screen: название песни увеличено с 18px до 20px. | 5.0.6
+</div>
+
+<div class="row">
+Full Screen / Sequencer: Lyrics + Edit заменены на Lyrics Editor / Full Screen; Tone и Tracks получили × и могут быть открыты одновременно, Backspace закрывает оба; добавлены Master Volume справа и Input Level слева с вертикальными шкалами, Page Up/Down открывает/закрывает обе; отдельный Full Screen Keys; транспорт Play / Rec / Back / Stop / Pause; Tab возвращает в Lyrics Editor; V-счётчик до −3 серый, затем −3 красный / −2 жёлтый / −1 зелёный / после 0 голубой; название песни 20px. | 5.1.0
 </div>
 
 <div class="row" id="build-down">
