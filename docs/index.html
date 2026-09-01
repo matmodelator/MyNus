@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.0.2</title>
+  <title>MyNus 5.0.3</title>
 
 
  <style>
@@ -1391,7 +1391,7 @@
     }
 
     /* ========================================
-       LYRICS FULL SCREEN / KARAOKE MODE 5.0.2
+       LYRICS FULL SCREEN / KARAOKE MODE 5.0.3
     ======================================== */
 
     .lyrics-mode-switch,
@@ -17114,8 +17114,17 @@ window.addEventListener(
       );
 
 
-    // Space mode is defined only by Lines EDIT, never by focus/blur.
+    // Full Screen: Space always controls transport, regardless of Lines EDIT/caret.
     if (event.code === "Space") {
+      if (lyricsFullScreenMode) {
+        event.preventDefault();
+        if (isPlaying) pauseAll();
+        else playCurrentMode();
+        updateLyricsTransportButtons();
+        return;
+      }
+
+      // Lyrics Editor: active EDIT/caret keeps Space as text input.
       if (lyricsEditorEditLineIndex >= 0) {
         const edit = getLyricsEditContext();
         if (edit && event.target !== edit.textArea) {
@@ -17506,6 +17515,10 @@ updateMasterHistoryButtons();
 <div id="service-console">
 Full Screen: до нуля вокального V-счётчика размер увеличен ещё в 2 раза; последние 3 секунды: −3 красный, −2 жёлтый, −1 зелёный. Structure: меню названий без внутреннего скролла, высота автоматически по содержимому.
    | 5.0.2
+</div>
+
+<div class="row">
+Full Screen: Space всегда управляет транспортом Play/Pause независимо от активного EDIT/карета в Lyrics Editor. | 5.0.3
 </div>
 
 <div class="row" id="build-down">
