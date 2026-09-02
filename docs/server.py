@@ -1,5 +1,5 @@
 # ========================================
-# SAVE / LOAD PROJECT | 5.1.9
+# PLAYLIST / SAVE / LOAD PROJECT | 5.1.10
 # ========================================
 
 # ========================================
@@ -41,11 +41,13 @@ RESULT_DIR = os.path.join(BASE_DIR, "results")
 EXPORT_DIR = os.path.join(BASE_DIR, "exports")
 PLAYLIST_DIR = os.path.join(BASE_DIR, "PlayList")
 PLAYLIST_STATE_PATH = os.path.join(PLAYLIST_DIR, "_playlist_state.json")
+PROJECTS_DIR = os.path.join(BASE_DIR, "Projects")
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(RESULT_DIR, exist_ok=True)
 os.makedirs(EXPORT_DIR, exist_ok=True)
 os.makedirs(PLAYLIST_DIR, exist_ok=True)
+os.makedirs(PROJECTS_DIR, exist_ok=True)
 
 
 # ========================================
@@ -1305,7 +1307,7 @@ def transcribe_to_ru():
 
 
 # ========================================
-# MYNUS PlayList PROJECTS | 5.1.9
+# MYNUS PlayList + standalone Projects | 5.1.10
 # ========================================
 def _project_id(value):
     value = secure_filename(str(value or "Project")) or "Project"
@@ -1461,7 +1463,7 @@ def select_project_folder():
         root.attributes("-topmost", True)
         selected = filedialog.askdirectory(
             title="Select folder for MyNus project",
-            initialdir=PLAYLIST_DIR
+            initialdir=PROJECTS_DIR
         )
         root.destroy()
         return jsonify({"ok": True, "path": selected or ""})
@@ -1474,9 +1476,34 @@ def select_project_folder():
 def save_project():
     project_name = str(request.form.get("name") or "Project").strip() or "Project"
     project_id = _project_id(project_name)
-    save_root_raw = str(request.form.get("save_path") or PLAYLIST_DIR).strip() or PLAYLIST_DIR
+    save_root_raw = str(request.form.get("save_path") or PROJECTS_DIR).strip() or PROJECTS_DIR
     save_root = os.path.abspath(os.path.expanduser(save_root_raw))
+    conflict_action = str(request.form.get("conflict_action") or "").strip().lower()
     folder = os.path.join(save_root, project_id)
+
+    if os.path.isdir(folder):
+        if conflict_action == "copy":
+            base_name = project_name
+            copy_number = 2
+            while True:
+                copy_name = f"{base_name} ({copy_number})"
+                copy_id = _project_id(copy_name)
+                copy_folder = os.path.join(save_root, copy_id)
+                if not os.path.exists(copy_folder):
+                    project_name = copy_name
+                    project_id = copy_id
+                    folder = copy_folder
+                    break
+                copy_number += 1
+        elif conflict_action != "overwrite":
+            return jsonify({
+                "error": "Project already exists",
+                "conflict": True,
+                "id": project_id,
+                "name": project_name,
+                "path": folder
+            }), 409
+
     temp_folder = folder + ".saving"
 
     print("\n" + "=" * 72, flush=True)
@@ -1523,7 +1550,7 @@ def save_project():
         if not track_files.get("original"):
             raise ValueError("Original track not received")
 
-        project_json["version"] = "5.1.9"
+        project_json["version"] = "5.1.10"
         project_json["id"] = project_id
         project_json["name"] = project_name
         project_json["tracks"] = track_files
@@ -1541,22 +1568,13 @@ def save_project():
             shutil.rmtree(folder)
         os.replace(temp_folder, folder)
 
-        in_playlist = os.path.normcase(os.path.abspath(save_root)) == os.path.normcase(os.path.abspath(PLAYLIST_DIR))
-        if in_playlist:
-            _set_current_project(project_id)
-            playlist_payload = _playlist_projects_payload()
-        else:
-            playlist_payload = {"projects": [], "current": None}
-
         print(f"[PROJECT SAVE] SUCCESS | tracks={saved_count} | {folder}", flush=True)
         print("=" * 72 + "\n", flush=True)
         return jsonify({
             "ok": True,
             "id": project_id,
             "name": project_name,
-            "path": folder,
-            "in_playlist": in_playlist,
-            **playlist_payload
+            "path": folder
         })
 
     except Exception as exc:
@@ -1564,6 +1582,64 @@ def save_project():
         print(f"[PROJECT SAVE] ERROR | {type(exc).__name__}: {exc}", flush=True)
         print("=" * 72 + "\n", flush=True)
         return jsonify({"error": str(exc)}), 500
+
+
+def _saved_projects_payload():
+    projects = []
+    for project_id in sorted(os.listdir(PROJECTS_DIR), key=str.lower):
+        folder = os.path.join(PROJECTS_DIR, project_id)
+        project_path = os.path.join(folder, "Project.json")
+        lyrics_path = os.path.join(folder, "Lyrics.json")
+        if not os.path.isdir(folder) or not os.path.isfile(project_path) or not os.path.isfile(lyrics_path):
+            continue
+        try:
+            with open(project_path, "r", encoding="utf-8") as fh:
+                project = json.load(fh)
+            project_name = project.get("name") or project_id
+        except Exception:
+            project_name = project_id
+        projects.append({"id": project_id, "name": project_name})
+    return {"projects": projects, "root": PROJECTS_DIR}
+
+
+@app.route("/saved-projects", methods=["GET"])
+def list_saved_projects():
+    return jsonify(_saved_projects_payload())
+
+
+@app.route("/saved-projects/<project_id>", methods=["GET"])
+def get_saved_project(project_id):
+    project_id = _project_id(project_id)
+    folder = os.path.join(PROJECTS_DIR, project_id)
+    project_path = os.path.join(folder, "Project.json")
+    lyrics_path = os.path.join(folder, "Lyrics.json")
+    if not os.path.isfile(project_path) or not os.path.isfile(lyrics_path):
+        return jsonify({"error": "Project not found"}), 404
+    with open(project_path, "r", encoding="utf-8") as fh:
+        project = json.load(fh)
+    with open(lyrics_path, "r", encoding="utf-8") as fh:
+        lyrics = json.load(fh)
+    tracks = {}
+    for track_id, filename in (project.get("tracks") or {}).items():
+        tracks[track_id] = (
+            "/saved-projects/{}/track/{}".format(project_id, filename)
+            if filename else None
+        )
+    return jsonify({
+        "id": project_id,
+        "name": project.get("name") or project_id,
+        "project": project,
+        "lyrics": lyrics,
+        "tracks": tracks
+    })
+
+
+@app.route("/saved-projects/<project_id>/track/<path:filename>", methods=["GET"])
+def saved_project_track_file(project_id, filename):
+    return send_from_directory(
+        os.path.join(PROJECTS_DIR, _project_id(project_id), "tracks"),
+        filename
+    )
 
 
 @app.route("/projects/<project_id>", methods=["GET"])
@@ -1610,8 +1686,8 @@ def print_restart_command():
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("MyNus Server 5.1.9")
-    print("5.1.9: Project SAVE — выбор имени и папки, системный Browse, явное подтверждение успеха и подробный серверный лог сохранения.")
+    print("MyNus Server 5.1.10")
+    print(r"5.1.10: Projects отделён от Full Screen PlayList; C:\MyNus\Projects создаётся автоматически; SAVE поддерживает Overwrite / Rename / Save Copy и произвольный путь.")
     print("=" * 72 + "\n")
 
     try:
