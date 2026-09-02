@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.1.7</title>
+  <title>MyNus 5.1.9</title>
 
 
  <style>
@@ -3973,17 +3973,36 @@
 </div>
 
 <!-- ========================================
-     SAVE PROJECT DIALOG | 5.1.7
+     SAVE PROJECT DIALOG | 5.1.9
 ======================================== -->
 <div id="saveProjectDialog" class="export-dialog">
   <div class="export-dialog-card">
     <div class="export-dialog-title">Save Project</div>
     <label for="saveProjectNameInput" style="display:block; margin:0 0 6px;">Project name</label>
     <input id="saveProjectNameInput" type="text" autocomplete="off" style="width:100%; box-sizing:border-box; margin:0 0 12px;">
-    <div style="font-size:12px; opacity:.75; margin-bottom:12px;">C:\MyNus\PlayList</div>
+    <label for="saveProjectPathInput" style="display:block; margin:0 0 6px;">Save to</label>
+    <div style="display:grid; grid-template-columns:1fr auto; gap:6px; margin-bottom:12px;">
+      <input id="saveProjectPathInput" type="text" autocomplete="off" value="C:\MyNus\PlayList" style="width:100%; box-sizing:border-box;">
+      <button type="button" id="browseSaveProjectPathBtn">Browse…</button>
+    </div>
+    <div id="saveProjectMessage" style="min-height:18px; font-size:12px; margin-bottom:10px;"></div>
     <div class="export-format-grid" style="grid-template-columns:1fr 1fr;">
       <button type="button" id="confirmSaveProjectBtn">Save</button>
       <button type="button" id="cancelSaveProjectBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================
+     LOAD PROJECT DIALOG | 5.1.9
+======================================== -->
+<div id="loadProjectDialog" class="export-dialog">
+  <div class="export-dialog-card">
+    <div class="export-dialog-title">Load Project</div>
+    <div style="font-size:12px; opacity:.75; margin-bottom:10px;">C:\MyNus\PlayList</div>
+    <div id="loadProjectList" style="display:grid; gap:6px; max-height:360px; overflow:auto; margin-bottom:12px;"></div>
+    <div class="export-format-grid" style="grid-template-columns:1fr;">
+      <button type="button" id="cancelLoadProjectBtn">Cancel</button>
     </div>
   </div>
 </div>
@@ -11114,59 +11133,33 @@ document
   );
 
 
-async function getTrackBlob(
-  track
-) {
-
-  if (
-    track === "original"
-  ) {
-
+async function getTrackBlob(track) {
+  if (track === "original") {
     return {
-      blob:
-        currentOriginalFile,
-      filename:
-        currentOriginalFile
-        ? currentOriginalFile.name
-        : "original.bin"
+      blob: currentOriginalFile,
+      filename: currentOriginalFile?.name || "original.bin"
     };
-
   }
 
+  if (stemIds.includes(track)) {
+    // Generated effect tracks live in generatedTrackURLs. Use them explicitly.
+    const url = generatedTrackURLs?.[track] || currentStemURLs?.[track] || stemAudio?.[track]?.src || null;
+    if (!url) return { blob: null, filename: track + ".bin" };
 
-  if (
-    stemIds.includes(
-      track
-    )
-  ) {
-
-    const response =
-      await fetch(
-        currentStemURLs[
-          track
-        ]
-      );
-
-
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Track read failed: " + track);
+    const blob = await response.blob();
+    const isGenerated = track === "pitchCorrection" || track === "harmonizer";
     return {
-      blob:
-        await response.blob(),
-      filename:
-        track
-        + ".mp3"
+      blob,
+      filename: track + (isGenerated ? ".wav" : ".mp3")
     };
-
   }
-
 
   return {
-    blob:
-      savedMasterBlob
-      || masterBlob,
-    filename:
-      "master.wav"
+    blob: savedMasterBlob || masterBlob,
+    filename: "master.wav"
   };
-
 }
 
 
@@ -18402,7 +18395,7 @@ updateMasterHistoryButtons();
 
 
 // ========================================
-// PROJECT / FULL SCREEN PLAYLIST | 5.1.7
+// PROJECT / FULL SCREEN PLAYLIST | 5.1.9
 // Project = 12 audio slots + Lyrics.json + Project.json
 // ========================================
 const saveProjectBtn = document.getElementById("saveProjectBtn");
@@ -18452,7 +18445,7 @@ function projectLyricsJson() {
 
 function projectStateJson() {
   return {
-    version: "5.1.7",
+    version: "5.1.9",
     sequencer: {
       mode,
       fragmentStart,
@@ -18470,8 +18463,14 @@ function projectStateJson() {
 
 const saveProjectDialog = document.getElementById("saveProjectDialog");
 const saveProjectNameInput = document.getElementById("saveProjectNameInput");
+const saveProjectPathInput = document.getElementById("saveProjectPathInput");
+const browseSaveProjectPathBtn = document.getElementById("browseSaveProjectPathBtn");
+const saveProjectMessage = document.getElementById("saveProjectMessage");
 const confirmSaveProjectBtn = document.getElementById("confirmSaveProjectBtn");
 const cancelSaveProjectBtn = document.getElementById("cancelSaveProjectBtn");
+const loadProjectDialog = document.getElementById("loadProjectDialog");
+const loadProjectList = document.getElementById("loadProjectList");
+const cancelLoadProjectBtn = document.getElementById("cancelLoadProjectBtn");
 
 function projectTrackFilename(trackId, source) {
   const raw = String(source?.filename || "");
@@ -18479,10 +18478,12 @@ function projectTrackFilename(trackId, source) {
   return trackId + (match ? match[0].toLowerCase() : ".bin");
 }
 
-async function saveCurrentProject(projectName) {
+async function saveCurrentProject(projectName, savePath) {
   const fd = new FormData();
   const name = String(projectName || "").trim() || projectSafeName();
+  const targetPath = String(savePath || "").trim();
   fd.append("name", name);
+  fd.append("save_path", targetPath);
   fd.append("lyrics_json", JSON.stringify(projectLyricsJson()));
   fd.append("project_json", JSON.stringify(projectStateJson()));
 
@@ -18501,7 +18502,10 @@ async function saveCurrentProject(projectName) {
   if (!response.ok) throw new Error(data.error || "SAVE Project failed");
 
   currentPlaylistProject = data.id || data.name;
+  const savedPath = data.path || targetPath || "C:\\MyNus\\PlayList";
   status.textContent = "Project saved: " + (data.name || name);
+  if (saveProjectMessage) saveProjectMessage.textContent = "Saved successfully: " + savedPath;
+  window.alert("Project saved successfully:\n" + savedPath);
   await refreshFullScreenPlaylist();
 }
 
@@ -18555,79 +18559,113 @@ async function refreshFullScreenPlaylist() {
 
 function restoreProjectSequencerState(saved) {
   if (!saved || typeof saved !== "object") return;
-  if (saved.stemState && typeof saved.stemState === "object") stemIds.forEach(stemId => {
-    if (saved.stemState[stemId]) Object.assign(stemState[stemId], saved.stemState[stemId]);
+
+  stemIds.forEach(stemId => {
+    if (saved.stemState?.[stemId]) Object.assign(stemState[stemId], saved.stemState[stemId]);
+    if (saved.stemCrop?.[stemId]) Object.assign(stemCrop[stemId], saved.stemCrop[stemId]);
   });
-  if (saved.stemCrop && typeof saved.stemCrop === "object") stemIds.forEach(stemId => {
-    if (saved.stemCrop[stemId]) Object.assign(stemCrop[stemId], saved.stemCrop[stemId]);
-  });
-  if (saved.fxSettings && typeof saved.fxSettings === "object") Object.keys(fxSettings).forEach(target => {
-    if (saved.fxSettings[target]) Object.assign(fxSettings[target], saved.fxSettings[target]);
-  });
+
+  if (saved.fxSettings && typeof saved.fxSettings === "object") {
+    Object.keys(fxSettings).forEach(target => {
+      if (saved.fxSettings[target]) Object.assign(fxSettings[target], saved.fxSettings[target]);
+    });
+  }
+
   fragmentStart = Number.isFinite(Number(saved.fragmentStart)) ? Number(saved.fragmentStart) : null;
   fragmentEnd = Number.isFinite(Number(saved.fragmentEnd)) ? Number(saved.fragmentEnd) : null;
   if (["original", "mix", "master"].includes(saved.mode)) mode = saved.mode;
 }
 
+function restoreProjectLyricsJson(lyrics) {
+  const savedLines = Array.isArray(lyrics?.lines) ? cloneSerializable(lyrics.lines, []) : [];
+  lyricsEditorDraft = savedLines;
+  karaokeLines = cloneSerializable(savedLines, []);
+  lyricsStructureDraft = Array.isArray(lyrics?.structure) ? cloneSerializable(lyrics.structure, []) : [];
+  lyricsData = {
+    language: lyrics?.language || null,
+    text: String(lyrics?.text || ""),
+    words: savedLines.flatMap(line => Array.isArray(line.words) ? line.words : [])
+  };
+}
+
 async function loadProjectById(id, keepFullScreen = false) {
   pauseAll();
+  status.textContent = "Loading project...";
+
   const response = await fetch("/projects/" + encodeURIComponent(id));
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "Load Project failed");
+  if (!response.ok) throw new Error(data.error || "LOAD Project failed");
 
   const project = data.project || {};
   const lyrics = data.lyrics || {};
   const tracks = data.tracks || {};
-  const originalUrl = tracks.original || null;
-  if (!originalUrl) throw new Error("Project Original track not found");
+  if (!tracks.original) throw new Error("Project Original track not found");
 
-  const originalResponse = await fetch(originalUrl);
+  // Original is restored as the Original track.
+  const originalResponse = await fetch(tracks.original);
   if (!originalResponse.ok) throw new Error("Project Original track not found");
   const originalBlob = await originalResponse.blob();
-  const originalFile = new File([originalBlob], "original.audio", { type: originalBlob.type || "audio/mpeg" });
+  const originalFile = new File(
+    [originalBlob],
+    project.tracks?.original || "original.audio",
+    { type: originalBlob.type || "audio/mpeg" }
+  );
 
   currentOriginalFile = originalFile;
   recentSelectedAudioFile = originalFile;
   fileName.textContent = data.name || id;
   currentPlaylistProject = data.id || id;
+
   if (originalFileURL) URL.revokeObjectURL(originalFileURL);
   originalFileURL = URL.createObjectURL(originalFile);
   originalAudio.src = originalFileURL;
+
+  // Restore every current stem directly into its existing MyNus track.
+  // Generated effect tracks are ordinary saved tracks on LOAD; they do not need regeneration.
+  for (const trackId of ["pitchCorrection", "harmonizer"]) {
+    if (generatedTrackURLs[trackId]?.startsWith("blob:")) {
+      try { URL.revokeObjectURL(generatedTrackURLs[trackId]); } catch (_) {}
+    }
+    generatedTrackURLs[trackId] = null;
+  }
 
   currentStemURLs = {};
   stemIds.forEach(stemId => {
     const url = tracks[stemId] || null;
     currentStemURLs[stemId] = url;
-    if (url) stemAudio[stemId].src = url;
-    else stemAudio[stemId]?.removeAttribute("src");
+    if (url) {
+      stemAudio[stemId].src = url;
+      stemAudio[stemId].load();
+      document.getElementById(stemId + "TrackRow")?.style.setProperty("display", "grid");
+    } else {
+      stemAudio[stemId]?.removeAttribute("src");
+      waveformData[stemId] = null;
+    }
   });
 
-  lyricsEditorDraft = Array.isArray(lyrics.lines) ? cloneSerializable(lyrics.lines, []) : [];
-  karaokeLines = cloneSerializable(lyricsEditorDraft, []);
-  lyricsStructureDraft = Array.isArray(lyrics.structure) ? cloneSerializable(lyrics.structure, []) : null;
-  lyricsData = {
-    language: lyrics.language || null,
-    text: lyrics.text || "",
-    words: karaokeLines.flatMap(line => line.words || [])
-  };
+  restoreProjectLyricsJson(lyrics);
+  restoreProjectSequencerState(project.sequencer || {});
 
   vocalStartTimeRaw = Number.isFinite(Number(project.vocal_start)) ? Number(project.vocal_start) : null;
   vocalEndTimeRaw = Number.isFinite(Number(project.vocal_end)) ? Number(project.vocal_end) : null;
   vocalStartTime = vocalStartTimeRaw;
   vocalEndTime = vocalEndTimeRaw;
-  restoreProjectSequencerState(project.sequencer);
 
   const metadataLoads = [waitForMetadata(originalAudio)];
-  stemIds.forEach(stemId => { if (currentStemURLs[stemId]) metadataLoads.push(waitForMetadata(stemAudio[stemId])); });
+  stemIds.forEach(stemId => {
+    if (currentStemURLs[stemId]) metadataLoads.push(waitForMetadata(stemAudio[stemId]));
+  });
   await Promise.all(metadataLoads);
-  duration = originalAudio.duration || 0;
-  const waveformData = {};
-  stemIds.forEach(stemId => { waveformData[stemId] = currentStemURLs[stemId]; });
-  await loadWaveforms(originalFile, waveformData);
 
-  const fitWidth = Math.max(1, masterTimeline.clientWidth);
+  duration = originalAudio.duration || 0;
+  await loadWaveforms(originalFile, currentStemURLs);
+
   const savedZoom = Number(project.sequencer?.pixelsPerSecond);
-  pixelsPerSecond = Number.isFinite(savedZoom) && savedZoom > 0 ? savedZoom : (duration > 0 ? fitWidth / duration : 10);
+  const fitWidth = Math.max(1, masterTimeline.clientWidth);
+  pixelsPerSecond = Number.isFinite(savedZoom) && savedZoom > 0
+    ? savedZoom
+    : (duration > 0 ? fitWidth / duration : 10);
+
   zoomValue.textContent = pixelsPerSecond.toFixed(1) + " px/s";
   if (zoomValueTop) zoomValueTop.textContent = zoomValue.textContent;
   sharedScrollInner.style.width = getTimelineWidth() + "px";
@@ -18641,10 +18679,13 @@ async function loadProjectById(id, keepFullScreen = false) {
   renderLyrics();
   renderLyricsEditor();
   renderLyricsStructureTimeline(duration);
-  updateModeButtons();
+  updateCropButtons();
+  updateMixButtons();
   studio.style.display = "block";
+
   await markProjectInUse(data.id || id);
   status.textContent = "Project loaded: " + (data.name || id);
+
   if (keepFullScreen) {
     if (!lyricsEditorDialog.classList.contains("open")) openLyricsEditor();
     setLyricsFullScreenMode(true);
@@ -18652,25 +18693,64 @@ async function loadProjectById(id, keepFullScreen = false) {
   await refreshFullScreenPlaylist();
 }
 
-async function chooseProjectToLoad() {
+async function openLoadProjectDialog() {
   const projects = await fetchProjects();
-  if (!projects.length) { status.textContent = "PlayList is empty"; return; }
-  const icons = { executed: "✓", current: "▶", waiting: "⤓" };
-  const names = projects.map((project, index) => `${index + 1}. ${icons[project.status] || "⤓"} ${project.name}`).join("\n");
-  const value = window.prompt("Load Project from PlayList:\n" + names, "1");
-  if (value === null) return;
-  const number = Number(value);
-  const project = projects[number - 1] || projects.find(item => item.name === value);
-  if (project && project.status !== "current") await loadProjectById(project.id, false);
+  loadProjectList.replaceChildren();
+
+  if (!projects.length) {
+    const empty = document.createElement("div");
+    empty.className = "popup-state";
+    empty.textContent = "PlayList is empty";
+    loadProjectList.appendChild(empty);
+  } else {
+    const icons = { executed: "✓", current: "▶", waiting: "⤓" };
+    projects.forEach(project => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = (icons[project.status] || "⤓") + " " + project.name;
+      button.style.textAlign = "left";
+      button.title = "Load project";
+      button.addEventListener("click", async () => {
+        try {
+          await loadProjectById(project.id, false);
+          loadProjectDialog.classList.remove("open");
+        } catch (error) {
+          console.error(error);
+          status.textContent = error.message;
+        }
+      });
+      loadProjectList.appendChild(button);
+    });
+  }
+
+  loadProjectDialog.classList.add("open");
 }
 
 saveProjectBtn?.addEventListener("click", () => {
   saveProjectNameInput.value = projectSafeName();
+  if (saveProjectPathInput && !saveProjectPathInput.value.trim()) saveProjectPathInput.value = "C:\\MyNus\\PlayList";
+  if (saveProjectMessage) saveProjectMessage.textContent = "";
   saveProjectDialog.classList.add("open");
   requestAnimationFrame(() => {
     saveProjectNameInput.focus();
     saveProjectNameInput.select();
   });
+});
+
+
+browseSaveProjectPathBtn?.addEventListener("click", async () => {
+  browseSaveProjectPathBtn.disabled = true;
+  try {
+    const response = await fetch("/projects/select-folder", { method: "POST" });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Folder selection failed");
+    if (data.path) saveProjectPathInput.value = data.path;
+  } catch (error) {
+    console.error(error);
+    if (saveProjectMessage) saveProjectMessage.textContent = error.message;
+  } finally {
+    browseSaveProjectPathBtn.disabled = false;
+  }
 });
 
 cancelSaveProjectBtn?.addEventListener("click", () => {
@@ -18683,13 +18763,19 @@ saveProjectDialog?.addEventListener("click", event => {
 
 confirmSaveProjectBtn?.addEventListener("click", async () => {
   const name = String(saveProjectNameInput.value || "").trim();
+  const savePath = String(saveProjectPathInput?.value || "").trim();
   if (!name) {
     saveProjectNameInput.focus();
     return;
   }
+  if (!savePath) {
+    saveProjectPathInput?.focus();
+    return;
+  }
   confirmSaveProjectBtn.disabled = true;
+  if (saveProjectMessage) saveProjectMessage.textContent = "Saving…";
   try {
-    await saveCurrentProject(name);
+    await saveCurrentProject(name, savePath);
     saveProjectDialog.classList.remove("open");
   } catch (error) {
     console.error(error);
@@ -18709,10 +18795,18 @@ saveProjectNameInput?.addEventListener("keydown", event => {
 });
 
 loadProjectBtn?.addEventListener("click", () => {
-  chooseProjectToLoad().catch(error => {
+  openLoadProjectDialog().catch(error => {
     console.error(error);
     status.textContent = error.message;
   });
+});
+
+cancelLoadProjectBtn?.addEventListener("click", () => {
+  loadProjectDialog.classList.remove("open");
+});
+
+loadProjectDialog?.addEventListener("click", event => {
+  if (event.target === loadProjectDialog) loadProjectDialog.classList.remove("open");
 });
 
 lyricsFullScreenPlaylistBtn?.addEventListener("click", async event => {
@@ -18748,7 +18842,7 @@ document.addEventListener("click", event => {
 
 <div id="service-console">
 PlayList: вертикальная очередь проектов — ✓ executed / ▶ current / ⤓ waiting. Текущий проект некликабельный; загрузка любого другого проекта делает его текущим; предыдущий текущий переходит в executed. Состояние очереди и текущий проект сохраняются сервером между F5 и перезапусками. | 5.1.5
-PROJECT SAVE/LOAD: новый механизм с нуля. SAVE Project сначала открывает форму имени проекта; затем сохраняет 9 рабочих аудиодорожек через существующий механизм getTrackBlob(), Lyrics.json и Project.json. 3 audio slots зарезервированы. | 5.1.7
+PROJECT SAVE: форма Save Project теперь содержит имя и путь; Browse открывает системный выбор папки через сервер; после SAVE показывается явное сообщение об успехе; сервер пишет подробный лог SAVE по JSON и каждой дорожке. | 5.1.9
 </div>
 
 <div class="row" id="build-down">
