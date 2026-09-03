@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.1.11</title>
+  <title>MyNus 5.1.12</title>
 
 
  <style>
@@ -3980,7 +3980,7 @@
 </div>
 
 <!-- ========================================
-     SAVE PROJECT DIALOG | 5.1.11
+     SAVE PROJECT DIALOG | 5.1.12
 ======================================== -->
 <div id="saveProjectDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -4001,7 +4001,7 @@
 </div>
 
 <!-- ========================================
-     LOAD PROJECT DIALOG | 5.1.11
+     LOAD PROJECT DIALOG | 5.1.12
 ======================================== -->
 <div id="loadProjectDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -4015,7 +4015,7 @@
 </div>
 
 <!-- ========================================
-     PROJECT SAVE CONFLICT | 5.1.11
+     PROJECT SAVE CONFLICT | 5.1.12
 ======================================== -->
 <div id="projectConflictDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -4032,7 +4032,7 @@
 
 
 <!-- ========================================
-     KARAOKE SONG FINISHED | 5.1.11
+     KARAOKE SONG FINISHED | 5.1.12
 ======================================== -->
 <div id="karaokeFinishedDialog" class="export-dialog" style="z-index:5000;">
   <div class="export-dialog-card">
@@ -18458,7 +18458,7 @@ updateMasterHistoryButtons();
 
 
 // ========================================
-// PROJECT / FULL SCREEN PLAYLIST | 5.1.11
+// PROJECT / FULL SCREEN PLAYLIST | 5.1.12
 // Project = 12 audio slots + Lyrics.json + Project.json
 // ========================================
 const saveProjectBtn = document.getElementById("saveProjectBtn");
@@ -18524,7 +18524,7 @@ function projectLyricsJson() {
 
 function projectStateJson() {
   return {
-    version: "5.1.11",
+    version: "5.1.12",
     sequencer: {
       mode,
       fragmentStart,
@@ -18726,8 +18726,7 @@ async function runKaraokeFinishAction(action) {
       await loadProjectById(nextProject.id, true, "playlist");
     } else if (action === "other") {
       closeKaraokeFinishedDialog();
-      await refreshFullScreenPlaylist();
-      lyricsFullScreenPlaylistMenu.hidden = false;
+      await loadProjectById("", true, "folder");
     }
   } catch (error) {
     console.error(error);
@@ -18804,12 +18803,24 @@ async function loadProjectById(id, keepFullScreen = false, source = "projects") 
   pauseAll();
   status.textContent = "Loading project...";
 
-  const projectUrl = source === "playlist"
-    ? "/projects/" + encodeURIComponent(id)
-    : "/saved-projects/" + encodeURIComponent(id);
-  const response = await fetch(projectUrl);
+  // Every entry point uses the SAME full project loader below.
+  // Only the source of Project.json / Lyrics.json / tracks is different.
+  let response;
+  if (source === "folder") {
+    response = await fetch("/projects/open-folder", { method: "POST" });
+  } else {
+    const projectUrl = source === "playlist"
+      ? "/projects/" + encodeURIComponent(id)
+      : "/saved-projects/" + encodeURIComponent(id);
+    response = await fetch(projectUrl);
+  }
+
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "LOAD Project failed");
+  if (data.cancelled) {
+    status.textContent = "Project loading cancelled";
+    return false;
+  }
 
   const project = data.project || {};
   const lyrics = data.lyrics || {};
@@ -18830,6 +18841,7 @@ async function loadProjectById(id, keepFullScreen = false, source = "projects") 
   recentSelectedAudioFile = originalFile;
   fileName.textContent = data.name || id;
   if (source === "playlist") currentPlaylistProject = data.id || id;
+  else if (source === "folder") currentPlaylistProject = null;
 
   if (originalFileURL) URL.revokeObjectURL(originalFileURL);
   originalFileURL = URL.createObjectURL(originalFile);
@@ -18914,7 +18926,8 @@ async function loadProjectById(id, keepFullScreen = false, source = "projects") 
     if (!lyricsEditorDialog.classList.contains("open")) openLyricsEditor();
     setLyricsFullScreenMode(true);
   }
-  if (source === "playlist" || lyricsFullScreenMode) await refreshFullScreenPlaylist();
+  if (source === "playlist" || (lyricsFullScreenMode && currentPlaylistProject)) await refreshFullScreenPlaylist();
+  return true;
 }
 
 async function openLoadProjectDialog() {
@@ -19131,8 +19144,8 @@ document.addEventListener("click", event => {
 ======================================== -->
 
 <div id="service-console">
-PlayList Full Screen: проекты из C:\MyNus\PlayList автоматически входят в очередь; текущий = 0, будущие = +1,+2…, бывшие = -1,-2…. Любой проект кроме 0 можно загрузить кликом. После конца песни: Play again / Open next project in playlist / Load another project / Save current project; Space = Play again. | 5.1.11
-PROJECT SAVE/LOAD: Projects отделён от Full Screen PlayList. По умолчанию C:\MyNus\Projects; путь SAVE можно изменить; повторное имя — Overwrite / Rename / Save Copy / Cancel. LOAD полностью заменяет отсутствующие дорожки. Project SAVE берёт текущее состояние Lyrics. На стартовом экране добавлен Open Project. | 5.1.11
+PlayList Full Screen: очередь текущей сессии — при старте current = 0, все остальные проекты PlayList идут ниже как +1,+2…; отрицательная история появляется только при закрытии/смене проектов в этой сессии. Клик по любому проекту кроме 0 выполняет полный обычный LOAD проекта. Load another project открывает системный выбор папки проекта. | 5.1.12
+PROJECT SAVE/LOAD: Projects отделён от Full Screen PlayList. По умолчанию C:\MyNus\Projects; путь SAVE можно изменить; повторное имя — Overwrite / Rename / Save Copy / Cancel. LOAD полностью заменяет отсутствующие дорожки. Project SAVE берёт текущее состояние Lyrics. На стартовом экране добавлен Open Project. | 5.1.12
 </div>
 
 <div class="row" id="build-down">
