@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.1.9</title>
+  <title>MyNus 5.1.10</title>
 
 
  <style>
@@ -2542,6 +2542,13 @@
       Select File
     </button>
 
+    <button
+      type="button"
+      id="openProjectStartBtn"
+    >
+      Open Project
+    </button>
+
     <div id="fileName">
       No file selected
     </div>
@@ -3973,7 +3980,7 @@
 </div>
 
 <!-- ========================================
-     SAVE PROJECT DIALOG | 5.1.9
+     SAVE PROJECT DIALOG | 5.1.10
 ======================================== -->
 <div id="saveProjectDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -3982,7 +3989,7 @@
     <input id="saveProjectNameInput" type="text" autocomplete="off" style="width:100%; box-sizing:border-box; margin:0 0 12px;">
     <label for="saveProjectPathInput" style="display:block; margin:0 0 6px;">Save to</label>
     <div style="display:grid; grid-template-columns:1fr auto; gap:6px; margin-bottom:12px;">
-      <input id="saveProjectPathInput" type="text" autocomplete="off" value="C:\MyNus\PlayList" style="width:100%; box-sizing:border-box;">
+      <input id="saveProjectPathInput" type="text" autocomplete="off" value="C:\MyNus\Projects" style="width:100%; box-sizing:border-box;">
       <button type="button" id="browseSaveProjectPathBtn">Browse…</button>
     </div>
     <div id="saveProjectMessage" style="min-height:18px; font-size:12px; margin-bottom:10px;"></div>
@@ -3994,15 +4001,31 @@
 </div>
 
 <!-- ========================================
-     LOAD PROJECT DIALOG | 5.1.9
+     LOAD PROJECT DIALOG | 5.1.10
 ======================================== -->
 <div id="loadProjectDialog" class="export-dialog">
   <div class="export-dialog-card">
     <div class="export-dialog-title">Load Project</div>
-    <div style="font-size:12px; opacity:.75; margin-bottom:10px;">C:\MyNus\PlayList</div>
+    <div style="font-size:12px; opacity:.75; margin-bottom:10px;">C:\MyNus\Projects</div>
     <div id="loadProjectList" style="display:grid; gap:6px; max-height:360px; overflow:auto; margin-bottom:12px;"></div>
     <div class="export-format-grid" style="grid-template-columns:1fr;">
       <button type="button" id="cancelLoadProjectBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================
+     PROJECT SAVE CONFLICT | 5.1.10
+======================================== -->
+<div id="projectConflictDialog" class="export-dialog">
+  <div class="export-dialog-card">
+    <div class="export-dialog-title">Project already exists</div>
+    <div id="projectConflictMessage" style="font-size:12px; margin-bottom:12px;"></div>
+    <div class="export-format-grid" style="grid-template-columns:1fr 1fr; gap:6px;">
+      <button type="button" id="overwriteProjectBtn">Overwrite</button>
+      <button type="button" id="renameProjectBtn">Rename</button>
+      <button type="button" id="saveProjectCopyBtn">Save Copy</button>
+      <button type="button" id="cancelProjectConflictBtn">Cancel</button>
     </div>
   </div>
 </div>
@@ -18395,7 +18418,7 @@ updateMasterHistoryButtons();
 
 
 // ========================================
-// PROJECT / FULL SCREEN PLAYLIST | 5.1.9
+// PROJECT / FULL SCREEN PLAYLIST | 5.1.10
 // Project = 12 audio slots + Lyrics.json + Project.json
 // ========================================
 const saveProjectBtn = document.getElementById("saveProjectBtn");
@@ -18423,16 +18446,31 @@ function cloneSerializable(value, fallback) {
   catch (_) { return fallback; }
 }
 
-// Exactly the same JSON model used by Lyrics JSON export.
+// Snapshot the CURRENT Lyrics state for Project SAVE.
+// Unsaved text currently typed in Lyrics Editor is committed first.
 function projectLyricsJson() {
-  const lines = (lyricsEditorDraft || []).map(line => ({
+  if (Array.isArray(lyricsEditorDraft) && lyricsEditorDraft.length) {
+    lyricsEditorDraft.forEach(line => applyEditedTextToLine(line));
+  }
+
+  const sourceLines = (Array.isArray(lyricsEditorDraft) && lyricsEditorDraft.length)
+    ? lyricsEditorDraft
+    : (Array.isArray(karaokeLines) ? karaokeLines : []);
+
+  const lines = sourceLines.map(line => ({
     start: Number(line.start),
     end: Number(line.end),
     words: (line.words || []).map(word => ({ ...word }))
   }));
+
+  // Keep the live Lyrics state synchronized with the snapshot being saved.
+  karaokeLines = cloneSerializable(lines, []);
+  lyricsData.words = karaokeLines.flatMap(line => line.words || []);
+  lyricsData.text = lyricsData.words.map(word => word.word).join(" ").trim();
+
   return {
     language: lyricsData?.language || null,
-    text: lines.map(line => line.words.map(word => word.word).join(" ")).join(" "),
+    text: lines.map(line => line.words.map(word => word.word).join(" ")).join(" ").trim(),
     lines,
     structure: (lyricsStructureDraft || []).map(segment => ({
       type: String(segment.type || ""),
@@ -18445,7 +18483,7 @@ function projectLyricsJson() {
 
 function projectStateJson() {
   return {
-    version: "5.1.9",
+    version: "5.1.10",
     sequencer: {
       mode,
       fragmentStart,
@@ -18471,6 +18509,14 @@ const cancelSaveProjectBtn = document.getElementById("cancelSaveProjectBtn");
 const loadProjectDialog = document.getElementById("loadProjectDialog");
 const loadProjectList = document.getElementById("loadProjectList");
 const cancelLoadProjectBtn = document.getElementById("cancelLoadProjectBtn");
+const openProjectStartBtn = document.getElementById("openProjectStartBtn");
+const projectConflictDialog = document.getElementById("projectConflictDialog");
+const projectConflictMessage = document.getElementById("projectConflictMessage");
+const overwriteProjectBtn = document.getElementById("overwriteProjectBtn");
+const renameProjectBtn = document.getElementById("renameProjectBtn");
+const saveProjectCopyBtn = document.getElementById("saveProjectCopyBtn");
+const cancelProjectConflictBtn = document.getElementById("cancelProjectConflictBtn");
+let pendingProjectConflict = null;
 
 function projectTrackFilename(trackId, source) {
   const raw = String(source?.filename || "");
@@ -18478,12 +18524,13 @@ function projectTrackFilename(trackId, source) {
   return trackId + (match ? match[0].toLowerCase() : ".bin");
 }
 
-async function saveCurrentProject(projectName, savePath) {
+async function saveCurrentProject(projectName, savePath, conflictAction = "") {
   const fd = new FormData();
   const name = String(projectName || "").trim() || projectSafeName();
   const targetPath = String(savePath || "").trim();
   fd.append("name", name);
   fd.append("save_path", targetPath);
+  fd.append("conflict_action", conflictAction);
   fd.append("lyrics_json", JSON.stringify(projectLyricsJson()));
   fd.append("project_json", JSON.stringify(projectStateJson()));
 
@@ -18499,21 +18546,32 @@ async function saveCurrentProject(projectName, savePath) {
   status.textContent = "Saving project...";
   const response = await fetch("/projects/save", { method: "POST", body: fd });
   const data = await response.json().catch(() => ({}));
+  if (response.status === 409 && data.conflict) {
+    const error = new Error(data.error || "Project already exists");
+    error.projectConflict = data;
+    throw error;
+  }
   if (!response.ok) throw new Error(data.error || "SAVE Project failed");
 
-  currentPlaylistProject = data.id || data.name;
-  const savedPath = data.path || targetPath || "C:\\MyNus\\PlayList";
+  const savedPath = data.path || targetPath || "C:\\MyNus\\Projects";
   status.textContent = "Project saved: " + (data.name || name);
   if (saveProjectMessage) saveProjectMessage.textContent = "Saved successfully: " + savedPath;
   window.alert("Project saved successfully:\n" + savedPath);
-  await refreshFullScreenPlaylist();
+  return data;
 }
 
-async function fetchProjects() {
+async function fetchPlaylistProjects() {
   const response = await fetch("/projects");
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "PlayList unavailable");
   if (data.current) currentPlaylistProject = data.current;
+  return Array.isArray(data.projects) ? data.projects : [];
+}
+
+async function fetchSavedProjects() {
+  const response = await fetch("/saved-projects");
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "Projects unavailable");
   return Array.isArray(data.projects) ? data.projects : [];
 }
 
@@ -18531,7 +18589,7 @@ async function markProjectInUse(id) {
 
 async function refreshFullScreenPlaylist() {
   if (!lyricsFullScreenPlaylistMenu) return;
-  const projects = await fetchProjects();
+  const projects = await fetchPlaylistProjects();
   lyricsFullScreenPlaylistMenu.replaceChildren();
   if (!projects.length) {
     const empty = document.createElement("div");
@@ -18550,11 +18608,27 @@ async function refreshFullScreenPlaylist() {
     row.title = isCurrent ? project.name + " — IN USE" : project.name + " — load project";
     if (!isCurrent) row.addEventListener("click", async event => {
       event.stopPropagation();
-      await loadProjectById(project.id, true);
+      await loadProjectById(project.id, true, "playlist");
       lyricsFullScreenPlaylistMenu.hidden = true;
     });
     lyricsFullScreenPlaylistMenu.appendChild(row);
   });
+}
+
+function resetProjectSequencerStateForLoad() {
+  stemIds.forEach(stemId => {
+    Object.assign(stemState[stemId], {
+      muted: stemId === "pitchCorrection" || stemId === "harmonizer",
+      solo: false,
+      volume: 1
+    });
+    Object.assign(stemCrop[stemId], { in: 0, out: null });
+    if (fxSettings[stemId]) Object.assign(fxSettings[stemId], cloneSerializable(defaultFxSettings, {}));
+  });
+  if (fxSettings.master) Object.assign(fxSettings.master, cloneSerializable(defaultFxSettings, {}));
+  fragmentStart = null;
+  fragmentEnd = null;
+  mode = "original";
 }
 
 function restoreProjectSequencerState(saved) {
@@ -18588,11 +18662,14 @@ function restoreProjectLyricsJson(lyrics) {
   };
 }
 
-async function loadProjectById(id, keepFullScreen = false) {
+async function loadProjectById(id, keepFullScreen = false, source = "projects") {
   pauseAll();
   status.textContent = "Loading project...";
 
-  const response = await fetch("/projects/" + encodeURIComponent(id));
+  const projectUrl = source === "playlist"
+    ? "/projects/" + encodeURIComponent(id)
+    : "/saved-projects/" + encodeURIComponent(id);
+  const response = await fetch(projectUrl);
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "LOAD Project failed");
 
@@ -18614,7 +18691,7 @@ async function loadProjectById(id, keepFullScreen = false) {
   currentOriginalFile = originalFile;
   recentSelectedAudioFile = originalFile;
   fileName.textContent = data.name || id;
-  currentPlaylistProject = data.id || id;
+  if (source === "playlist") currentPlaylistProject = data.id || id;
 
   if (originalFileURL) URL.revokeObjectURL(originalFileURL);
   originalFileURL = URL.createObjectURL(originalFile);
@@ -18638,11 +18715,20 @@ async function loadProjectById(id, keepFullScreen = false) {
       stemAudio[stemId].load();
       document.getElementById(stemId + "TrackRow")?.style.setProperty("display", "grid");
     } else {
-      stemAudio[stemId]?.removeAttribute("src");
+      const audio = stemAudio[stemId];
+      if (audio) {
+        try { audio.pause(); } catch (_) {}
+        audio.removeAttribute("src");
+        audio.load();
+        try { audio.currentTime = 0; } catch (_) {}
+      }
+      currentStemURLs[stemId] = null;
       waveformData[stemId] = null;
+      document.getElementById(stemId + "TrackRow")?.style.setProperty("display", "none");
     }
   });
 
+  resetProjectSequencerStateForLoad();
   restoreProjectLyricsJson(lyrics);
   restoreProjectSequencerState(project.sequencer || {});
 
@@ -18683,36 +18769,35 @@ async function loadProjectById(id, keepFullScreen = false) {
   updateMixButtons();
   studio.style.display = "block";
 
-  await markProjectInUse(data.id || id);
+  if (source === "playlist") await markProjectInUse(data.id || id);
   status.textContent = "Project loaded: " + (data.name || id);
 
   if (keepFullScreen) {
     if (!lyricsEditorDialog.classList.contains("open")) openLyricsEditor();
     setLyricsFullScreenMode(true);
   }
-  await refreshFullScreenPlaylist();
+  if (source === "playlist" || lyricsFullScreenMode) await refreshFullScreenPlaylist();
 }
 
 async function openLoadProjectDialog() {
-  const projects = await fetchProjects();
+  const projects = await fetchSavedProjects();
   loadProjectList.replaceChildren();
 
   if (!projects.length) {
     const empty = document.createElement("div");
     empty.className = "popup-state";
-    empty.textContent = "PlayList is empty";
+    empty.textContent = "Projects is empty";
     loadProjectList.appendChild(empty);
   } else {
-    const icons = { executed: "✓", current: "▶", waiting: "⤓" };
     projects.forEach(project => {
       const button = document.createElement("button");
       button.type = "button";
-      button.textContent = (icons[project.status] || "⤓") + " " + project.name;
+      button.textContent = project.name;
       button.style.textAlign = "left";
       button.title = "Load project";
       button.addEventListener("click", async () => {
         try {
-          await loadProjectById(project.id, false);
+          await loadProjectById(project.id, false, "projects");
           loadProjectDialog.classList.remove("open");
         } catch (error) {
           console.error(error);
@@ -18728,7 +18813,7 @@ async function openLoadProjectDialog() {
 
 saveProjectBtn?.addEventListener("click", () => {
   saveProjectNameInput.value = projectSafeName();
-  if (saveProjectPathInput && !saveProjectPathInput.value.trim()) saveProjectPathInput.value = "C:\\MyNus\\PlayList";
+  if (saveProjectPathInput && !saveProjectPathInput.value.trim()) saveProjectPathInput.value = "C:\\MyNus\\Projects";
   if (saveProjectMessage) saveProjectMessage.textContent = "";
   saveProjectDialog.classList.add("open");
   requestAnimationFrame(() => {
@@ -18779,7 +18864,14 @@ confirmSaveProjectBtn?.addEventListener("click", async () => {
     saveProjectDialog.classList.remove("open");
   } catch (error) {
     console.error(error);
-    status.textContent = error.message;
+    if (error.projectConflict) {
+      pendingProjectConflict = { name, savePath };
+      if (projectConflictMessage) projectConflictMessage.textContent = "Project “" + name + "” already exists.";
+      projectConflictDialog?.classList.add("open");
+    } else {
+      status.textContent = error.message;
+      if (saveProjectMessage) saveProjectMessage.textContent = error.message;
+    }
   } finally {
     confirmSaveProjectBtn.disabled = false;
   }
@@ -18799,6 +18891,66 @@ loadProjectBtn?.addEventListener("click", () => {
     console.error(error);
     status.textContent = error.message;
   });
+});
+
+openProjectStartBtn?.addEventListener("click", () => {
+  openLoadProjectDialog().catch(error => {
+    console.error(error);
+    status.textContent = error.message;
+  });
+});
+
+overwriteProjectBtn?.addEventListener("click", async () => {
+  if (!pendingProjectConflict) return;
+  const pending = pendingProjectConflict;
+  overwriteProjectBtn.disabled = true;
+  try {
+    await saveCurrentProject(pending.name, pending.savePath, "overwrite");
+    projectConflictDialog.classList.remove("open");
+    saveProjectDialog.classList.remove("open");
+    pendingProjectConflict = null;
+  } catch (error) {
+    status.textContent = error.message;
+  } finally {
+    overwriteProjectBtn.disabled = false;
+  }
+});
+
+saveProjectCopyBtn?.addEventListener("click", async () => {
+  if (!pendingProjectConflict) return;
+  const pending = pendingProjectConflict;
+  saveProjectCopyBtn.disabled = true;
+  try {
+    await saveCurrentProject(pending.name, pending.savePath, "copy");
+    projectConflictDialog.classList.remove("open");
+    saveProjectDialog.classList.remove("open");
+    pendingProjectConflict = null;
+  } catch (error) {
+    status.textContent = error.message;
+  } finally {
+    saveProjectCopyBtn.disabled = false;
+  }
+});
+
+renameProjectBtn?.addEventListener("click", () => {
+  projectConflictDialog.classList.remove("open");
+  pendingProjectConflict = null;
+  saveProjectDialog.classList.add("open");
+  if (saveProjectMessage) saveProjectMessage.textContent = "Enter a new project name.";
+  saveProjectNameInput.focus();
+  saveProjectNameInput.select();
+});
+
+cancelProjectConflictBtn?.addEventListener("click", () => {
+  projectConflictDialog.classList.remove("open");
+  pendingProjectConflict = null;
+});
+
+projectConflictDialog?.addEventListener("click", event => {
+  if (event.target === projectConflictDialog) {
+    projectConflictDialog.classList.remove("open");
+    pendingProjectConflict = null;
+  }
 });
 
 cancelLoadProjectBtn?.addEventListener("click", () => {
@@ -18842,7 +18994,7 @@ document.addEventListener("click", event => {
 
 <div id="service-console">
 PlayList: вертикальная очередь проектов — ✓ executed / ▶ current / ⤓ waiting. Текущий проект некликабельный; загрузка любого другого проекта делает его текущим; предыдущий текущий переходит в executed. Состояние очереди и текущий проект сохраняются сервером между F5 и перезапусками. | 5.1.5
-PROJECT SAVE: форма Save Project теперь содержит имя и путь; Browse открывает системный выбор папки через сервер; после SAVE показывается явное сообщение об успехе; сервер пишет подробный лог SAVE по JSON и каждой дорожке. | 5.1.9
+PROJECT SAVE/LOAD: Projects отделён от Full Screen PlayList. По умолчанию C:\MyNus\Projects; путь SAVE можно изменить; повторное имя — Overwrite / Rename / Save Copy / Cancel. LOAD полностью заменяет отсутствующие дорожки. Project SAVE берёт текущее состояние Lyrics. На стартовом экране добавлен Open Project. | 5.1.10
 </div>
 
 <div class="row" id="build-down">
