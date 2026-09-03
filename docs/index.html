@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.1.12</title>
+  <title>MyNus 5.1.13</title>
 
 
  <style>
@@ -1570,6 +1570,63 @@
     .lyrics-fullscreen-playlist-item.current:hover { background: rgba(127,216,255,.08); }
     .lyrics-fullscreen-playlist-item.executed { color: #aaa; }
     .lyrics-fullscreen-playlist-item.waiting { color: #fff; }
+
+    .karaoke-project-loader {
+      position: absolute;
+      inset: 0;
+      z-index: 200;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,.90);
+      color: #fff;
+      pointer-events: all;
+    }
+    .karaoke-project-loader.open { display: flex; }
+    .karaoke-project-loader-card {
+      width: min(560px, 78vw);
+      padding: 28px 32px;
+      box-sizing: border-box;
+      border: 1px solid rgba(255,255,255,.22);
+      border-radius: 12px;
+      background: rgba(18,18,18,.96);
+      box-shadow: 0 18px 60px rgba(0,0,0,.55);
+    }
+    .karaoke-project-loader-title {
+      font-size: 24px;
+      font-weight: 800;
+      text-align: center;
+      margin-bottom: 18px;
+    }
+    .karaoke-project-loader-phase {
+      min-height: 24px;
+      font-size: 16px;
+      text-align: center;
+      color: #ddd;
+      margin-bottom: 13px;
+    }
+    .karaoke-project-loader-track {
+      width: 100%;
+      height: 14px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255,255,255,.12);
+    }
+    .karaoke-project-loader-fill {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: currentColor;
+      transition: width .22s ease;
+    }
+    .karaoke-project-loader-percent {
+      margin-top: 10px;
+      font-family: Consolas, monospace;
+      font-size: 22px;
+      font-weight: 800;
+      text-align: center;
+    }
+    .karaoke-project-loader.failed .karaoke-project-loader-phase { color: #ff8a8a; }
 
     .lyrics-fullscreen-back {
       justify-self: start;
@@ -3980,7 +4037,7 @@
 </div>
 
 <!-- ========================================
-     SAVE PROJECT DIALOG | 5.1.12
+     SAVE PROJECT DIALOG | 5.1.13
 ======================================== -->
 <div id="saveProjectDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -4001,7 +4058,7 @@
 </div>
 
 <!-- ========================================
-     LOAD PROJECT DIALOG | 5.1.12
+     LOAD PROJECT DIALOG | 5.1.13
 ======================================== -->
 <div id="loadProjectDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -4015,7 +4072,7 @@
 </div>
 
 <!-- ========================================
-     PROJECT SAVE CONFLICT | 5.1.12
+     PROJECT SAVE CONFLICT | 5.1.13
 ======================================== -->
 <div id="projectConflictDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -4032,7 +4089,7 @@
 
 
 <!-- ========================================
-     KARAOKE SONG FINISHED | 5.1.12
+     KARAOKE SONG FINISHED | 5.1.13
 ======================================== -->
 <div id="karaokeFinishedDialog" class="export-dialog" style="z-index:5000;">
   <div class="export-dialog-card">
@@ -4078,6 +4135,14 @@
     </div>
 
     <div id="lyricsFullScreenView" class="lyrics-fullscreen-view" aria-hidden="true">
+      <div id="karaokeProjectLoader" class="karaoke-project-loader" aria-live="polite" aria-hidden="true">
+        <div class="karaoke-project-loader-card">
+          <div class="karaoke-project-loader-title">Loading project</div>
+          <div id="karaokeProjectLoaderPhase" class="karaoke-project-loader-phase">Opening project</div>
+          <div class="karaoke-project-loader-track"><div id="karaokeProjectLoaderFill" class="karaoke-project-loader-fill"></div></div>
+          <div id="karaokeProjectLoaderPercent" class="karaoke-project-loader-percent">0%</div>
+        </div>
+      </div>
       <div class="lyrics-fullscreen-topbar">
         <button type="button" id="lyricsFullScreenBackBtn" class="lyrics-fullscreen-back">Lyrics Editor</button>
         <div class="lyrics-fullscreen-title-stack">
@@ -18458,7 +18523,7 @@ updateMasterHistoryButtons();
 
 
 // ========================================
-// PROJECT / FULL SCREEN PLAYLIST | 5.1.12
+// PROJECT / FULL SCREEN PLAYLIST | 5.1.13
 // Project = 12 audio slots + Lyrics.json + Project.json
 // ========================================
 const saveProjectBtn = document.getElementById("saveProjectBtn");
@@ -18524,7 +18589,7 @@ function projectLyricsJson() {
 
 function projectStateJson() {
   return {
-    version: "5.1.12",
+    version: "5.1.13",
     sequencer: {
       mode,
       fragmentStart,
@@ -18799,135 +18864,228 @@ function restoreProjectLyricsJson(lyrics) {
   };
 }
 
+const karaokeProjectLoader = document.getElementById("karaokeProjectLoader");
+const karaokeProjectLoaderPhase = document.getElementById("karaokeProjectLoaderPhase");
+const karaokeProjectLoaderFill = document.getElementById("karaokeProjectLoaderFill");
+const karaokeProjectLoaderPercent = document.getElementById("karaokeProjectLoaderPercent");
+let karaokeProjectLoading = false;
+
+const karaokeProjectLoadPhases = [
+  { label: "Opening project", percent: 5 },
+  { label: "Loading Original", percent: 15 },
+  { label: "Separating stems", percent: 25 },
+  { label: "Loading tracks", percent: 38 },
+  { label: "Restoring Sequencer", percent: 50 },
+  { label: "Drawing waveforms", percent: 63 },
+  { label: "Loading Lyrics", percent: 74 },
+  { label: "Making structure", percent: 84 },
+  { label: "Preparing Karaoke", percent: 93 },
+  { label: "Using Effects", percent: 98 },
+  { label: "Ready", percent: 100 }
+];
+
+function setKaraokeProjectLoadPhase(index) {
+  if (!karaokeProjectLoader) return;
+  const phase = karaokeProjectLoadPhases[Math.max(0, Math.min(index, karaokeProjectLoadPhases.length - 1))];
+  karaokeProjectLoader.classList.remove("failed");
+  karaokeProjectLoaderPhase.textContent = phase.label;
+  karaokeProjectLoaderFill.style.width = phase.percent + "%";
+  karaokeProjectLoaderPercent.textContent = phase.percent + "%";
+}
+
+async function showKaraokeProjectLoader() {
+  karaokeProjectLoading = true;
+  karaokeProjectLoader?.classList.add("open");
+  karaokeProjectLoader?.setAttribute("aria-hidden", "false");
+  setKaraokeProjectLoadPhase(0);
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+async function advanceKaraokeProjectLoad(index, holdMs = 0) {
+  if (!karaokeProjectLoading) return;
+  setKaraokeProjectLoadPhase(index);
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  if (holdMs > 0) await new Promise(resolve => setTimeout(resolve, holdMs));
+}
+
+async function finishKaraokeProjectLoader() {
+  if (!karaokeProjectLoading) return;
+  await advanceKaraokeProjectLoad(10, 320);
+  karaokeProjectLoader?.classList.remove("open");
+  karaokeProjectLoader?.setAttribute("aria-hidden", "true");
+  karaokeProjectLoading = false;
+}
+
+async function failKaraokeProjectLoader(error) {
+  if (!karaokeProjectLoading || !karaokeProjectLoader) return;
+  karaokeProjectLoader.classList.add("failed");
+  karaokeProjectLoaderPhase.textContent = "Project load failed";
+  karaokeProjectLoaderPercent.textContent = "";
+  await new Promise(resolve => setTimeout(resolve, 900));
+  karaokeProjectLoader.classList.remove("open", "failed");
+  karaokeProjectLoader.setAttribute("aria-hidden", "true");
+  karaokeProjectLoading = false;
+}
+
 async function loadProjectById(id, keepFullScreen = false, source = "projects") {
+  const useKaraokeLoader = !!keepFullScreen;
   pauseAll();
   status.textContent = "Loading project...";
+  if (useKaraokeLoader) await showKaraokeProjectLoader();
 
-  // Every entry point uses the SAME full project loader below.
-  // Only the source of Project.json / Lyrics.json / tracks is different.
-  let response;
-  if (source === "folder") {
-    response = await fetch("/projects/open-folder", { method: "POST" });
-  } else {
-    const projectUrl = source === "playlist"
-      ? "/projects/" + encodeURIComponent(id)
-      : "/saved-projects/" + encodeURIComponent(id);
-    response = await fetch(projectUrl);
-  }
-
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "LOAD Project failed");
-  if (data.cancelled) {
-    status.textContent = "Project loading cancelled";
-    return false;
-  }
-
-  const project = data.project || {};
-  const lyrics = data.lyrics || {};
-  const tracks = data.tracks || {};
-  if (!tracks.original) throw new Error("Project Original track not found");
-
-  // Original is restored as the Original track.
-  const originalResponse = await fetch(tracks.original);
-  if (!originalResponse.ok) throw new Error("Project Original track not found");
-  const originalBlob = await originalResponse.blob();
-  const originalFile = new File(
-    [originalBlob],
-    project.tracks?.original || "original.audio",
-    { type: originalBlob.type || "audio/mpeg" }
-  );
-
-  currentOriginalFile = originalFile;
-  recentSelectedAudioFile = originalFile;
-  fileName.textContent = data.name || id;
-  if (source === "playlist") currentPlaylistProject = data.id || id;
-  else if (source === "folder") currentPlaylistProject = null;
-
-  if (originalFileURL) URL.revokeObjectURL(originalFileURL);
-  originalFileURL = URL.createObjectURL(originalFile);
-  originalAudio.src = originalFileURL;
-
-  // Restore every current stem directly into its existing MyNus track.
-  // Generated effect tracks are ordinary saved tracks on LOAD; they do not need regeneration.
-  for (const trackId of ["pitchCorrection", "harmonizer"]) {
-    if (generatedTrackURLs[trackId]?.startsWith("blob:")) {
-      try { URL.revokeObjectURL(generatedTrackURLs[trackId]); } catch (_) {}
-    }
-    generatedTrackURLs[trackId] = null;
-  }
-
-  currentStemURLs = {};
-  stemIds.forEach(stemId => {
-    const url = tracks[stemId] || null;
-    currentStemURLs[stemId] = url;
-    if (url) {
-      stemAudio[stemId].src = url;
-      stemAudio[stemId].load();
-      document.getElementById(stemId + "TrackRow")?.style.setProperty("display", "grid");
+  try {
+    // Every entry point uses the SAME full project loader below.
+    // Only the source of Project.json / Lyrics.json / tracks is different.
+    let response;
+    if (source === "folder") {
+      response = await fetch("/projects/open-folder", { method: "POST" });
     } else {
-      const audio = stemAudio[stemId];
-      if (audio) {
-        try { audio.pause(); } catch (_) {}
-        audio.removeAttribute("src");
-        audio.load();
-        try { audio.currentTime = 0; } catch (_) {}
-      }
-      currentStemURLs[stemId] = null;
-      waveformData[stemId] = null;
-      document.getElementById(stemId + "TrackRow")?.style.setProperty("display", "none");
+      const projectUrl = source === "playlist"
+        ? "/projects/" + encodeURIComponent(id)
+        : "/saved-projects/" + encodeURIComponent(id);
+      response = await fetch(projectUrl);
     }
-  });
 
-  resetProjectSequencerStateForLoad();
-  restoreProjectLyricsJson(lyrics);
-  restoreProjectSequencerState(project.sequencer || {});
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "LOAD Project failed");
+    if (data.cancelled) {
+      status.textContent = "Project loading cancelled";
+      if (useKaraokeLoader) {
+        karaokeProjectLoader?.classList.remove("open");
+        karaokeProjectLoader?.setAttribute("aria-hidden", "true");
+        karaokeProjectLoading = false;
+      }
+      return false;
+    }
 
-  vocalStartTimeRaw = Number.isFinite(Number(project.vocal_start)) ? Number(project.vocal_start) : null;
-  vocalEndTimeRaw = Number.isFinite(Number(project.vocal_end)) ? Number(project.vocal_end) : null;
-  vocalStartTime = vocalStartTimeRaw;
-  vocalEndTime = vocalEndTimeRaw;
+    const project = data.project || {};
+    const lyrics = data.lyrics || {};
+    const tracks = data.tracks || {};
+    if (!tracks.original) throw new Error("Project Original track not found");
 
-  const metadataLoads = [waitForMetadata(originalAudio)];
-  stemIds.forEach(stemId => {
-    if (currentStemURLs[stemId]) metadataLoads.push(waitForMetadata(stemAudio[stemId]));
-  });
-  await Promise.all(metadataLoads);
+    if (useKaraokeLoader) await advanceKaraokeProjectLoad(1);
 
-  duration = originalAudio.duration || 0;
-  await loadWaveforms(originalFile, currentStemURLs);
+    // Original is restored as the Original track.
+    const originalResponse = await fetch(tracks.original);
+    if (!originalResponse.ok) throw new Error("Project Original track not found");
+    const originalBlob = await originalResponse.blob();
+    const originalFile = new File(
+      [originalBlob],
+      project.tracks?.original || "original.audio",
+      { type: originalBlob.type || "audio/mpeg" }
+    );
 
-  const savedZoom = Number(project.sequencer?.pixelsPerSecond);
-  const fitWidth = Math.max(1, masterTimeline.clientWidth);
-  pixelsPerSecond = Number.isFinite(savedZoom) && savedZoom > 0
-    ? savedZoom
-    : (duration > 0 ? fitWidth / duration : 10);
+    currentOriginalFile = originalFile;
+    recentSelectedAudioFile = originalFile;
+    fileName.textContent = data.name || id;
+    if (source === "playlist") currentPlaylistProject = data.id || id;
+    else if (source === "folder") currentPlaylistProject = null;
 
-  zoomValue.textContent = pixelsPerSecond.toFixed(1) + " px/s";
-  if (zoomValueTop) zoomValueTop.textContent = zoomValue.textContent;
-  sharedScrollInner.style.width = getTimelineWidth() + "px";
+    if (originalFileURL) URL.revokeObjectURL(originalFileURL);
+    originalFileURL = URL.createObjectURL(originalFile);
+    originalAudio.src = originalFileURL;
 
-  updateEffectiveVocalRange();
-  resetTransport();
-  stemIds.forEach(stemId => applyFxSettings(stemId));
-  applyMix();
-  drawAllWaveforms();
-  drawMasterTimeline();
-  renderLyrics();
-  renderLyricsEditor();
-  renderLyricsStructureTimeline(duration);
-  updateCropButtons();
-  updateMixButtons();
-  studio.style.display = "block";
+    // Decorative phase is deliberately shown even when stems already exist in the saved project.
+    if (useKaraokeLoader) await advanceKaraokeProjectLoad(2, 180);
+    if (useKaraokeLoader) await advanceKaraokeProjectLoad(3);
 
-  if (source === "playlist") await markProjectInUse(data.id || id);
-  status.textContent = "Project loaded: " + (data.name || id);
+    // Restore every current stem directly into its existing MyNus track.
+    // Generated effect tracks are ordinary saved tracks on LOAD; they do not need regeneration.
+    for (const trackId of ["pitchCorrection", "harmonizer"]) {
+      if (generatedTrackURLs[trackId]?.startsWith("blob:")) {
+        try { URL.revokeObjectURL(generatedTrackURLs[trackId]); } catch (_) {}
+      }
+      generatedTrackURLs[trackId] = null;
+    }
 
-  if (keepFullScreen) {
-    if (!lyricsEditorDialog.classList.contains("open")) openLyricsEditor();
-    setLyricsFullScreenMode(true);
+    currentStemURLs = {};
+    stemIds.forEach(stemId => {
+      const url = tracks[stemId] || null;
+      currentStemURLs[stemId] = url;
+      if (url) {
+        stemAudio[stemId].src = url;
+        stemAudio[stemId].load();
+        document.getElementById(stemId + "TrackRow")?.style.setProperty("display", "grid");
+      } else {
+        const audio = stemAudio[stemId];
+        if (audio) {
+          try { audio.pause(); } catch (_) {}
+          audio.removeAttribute("src");
+          audio.load();
+          try { audio.currentTime = 0; } catch (_) {}
+        }
+        currentStemURLs[stemId] = null;
+        waveformData[stemId] = null;
+        document.getElementById(stemId + "TrackRow")?.style.setProperty("display", "none");
+      }
+    });
+
+    if (useKaraokeLoader) await advanceKaraokeProjectLoad(4);
+    resetProjectSequencerStateForLoad();
+    restoreProjectSequencerState(project.sequencer || {});
+
+    vocalStartTimeRaw = Number.isFinite(Number(project.vocal_start)) ? Number(project.vocal_start) : null;
+    vocalEndTimeRaw = Number.isFinite(Number(project.vocal_end)) ? Number(project.vocal_end) : null;
+    vocalStartTime = vocalStartTimeRaw;
+    vocalEndTime = vocalEndTimeRaw;
+
+    const metadataLoads = [waitForMetadata(originalAudio)];
+    stemIds.forEach(stemId => {
+      if (currentStemURLs[stemId]) metadataLoads.push(waitForMetadata(stemAudio[stemId]));
+    });
+    await Promise.all(metadataLoads);
+
+    duration = originalAudio.duration || 0;
+    if (useKaraokeLoader) await advanceKaraokeProjectLoad(5);
+    await loadWaveforms(originalFile, currentStemURLs);
+
+    const savedZoom = Number(project.sequencer?.pixelsPerSecond);
+    const fitWidth = Math.max(1, masterTimeline.clientWidth);
+    pixelsPerSecond = Number.isFinite(savedZoom) && savedZoom > 0
+      ? savedZoom
+      : (duration > 0 ? fitWidth / duration : 10);
+
+    zoomValue.textContent = pixelsPerSecond.toFixed(1) + " px/s";
+    if (zoomValueTop) zoomValueTop.textContent = zoomValue.textContent;
+    sharedScrollInner.style.width = getTimelineWidth() + "px";
+
+    updateEffectiveVocalRange();
+    resetTransport();
+    drawAllWaveforms();
+    drawMasterTimeline();
+
+    if (useKaraokeLoader) await advanceKaraokeProjectLoad(6);
+    restoreProjectLyricsJson(lyrics);
+    renderLyrics();
+    renderLyricsEditor();
+
+    if (useKaraokeLoader) await advanceKaraokeProjectLoad(7);
+    renderLyricsStructureTimeline(duration);
+
+    updateCropButtons();
+    updateMixButtons();
+    studio.style.display = "block";
+
+    if (useKaraokeLoader) await advanceKaraokeProjectLoad(8);
+    if (keepFullScreen) {
+      if (!lyricsEditorDialog.classList.contains("open")) openLyricsEditor();
+      setLyricsFullScreenMode(true);
+    }
+
+    if (useKaraokeLoader) await advanceKaraokeProjectLoad(9);
+    stemIds.forEach(stemId => applyFxSettings(stemId));
+    applyMix();
+
+    if (source === "playlist") await markProjectInUse(data.id || id);
+    status.textContent = "Project loaded: " + (data.name || id);
+
+    if (source === "playlist" || (lyricsFullScreenMode && currentPlaylistProject)) await refreshFullScreenPlaylist();
+    if (useKaraokeLoader) await finishKaraokeProjectLoader();
+    return true;
+  } catch (error) {
+    if (useKaraokeLoader) await failKaraokeProjectLoader(error);
+    throw error;
   }
-  if (source === "playlist" || (lyricsFullScreenMode && currentPlaylistProject)) await refreshFullScreenPlaylist();
-  return true;
 }
 
 async function openLoadProjectDialog() {
@@ -19144,8 +19302,9 @@ document.addEventListener("click", event => {
 ======================================== -->
 
 <div id="service-console">
-PlayList Full Screen: очередь текущей сессии — при старте current = 0, все остальные проекты PlayList идут ниже как +1,+2…; отрицательная история появляется только при закрытии/смене проектов в этой сессии. Клик по любому проекту кроме 0 выполняет полный обычный LOAD проекта. Load another project открывает системный выбор папки проекта. | 5.1.12
-PROJECT SAVE/LOAD: Projects отделён от Full Screen PlayList. По умолчанию C:\MyNus\Projects; путь SAVE можно изменить; повторное имя — Overwrite / Rename / Save Copy / Cancel. LOAD полностью заменяет отсутствующие дорожки. Project SAVE берёт текущее состояние Lyrics. На стартовом экране добавлен Open Project. | 5.1.12
+PlayList Full Screen: очередь текущей сессии — при старте current = 0, все остальные проекты PlayList идут ниже как +1,+2…; отрицательная история появляется только при закрытии/смене проектов в этой сессии. Клик по любому проекту кроме 0 выполняет полный обычный LOAD проекта. Load another project открывает системный выбор папки проекта. | 5.1.13
+PROJECT SAVE/LOAD: Projects отделён от Full Screen PlayList. По умолчанию C:\MyNus\Projects; путь SAVE можно изменить; повторное имя — Overwrite / Rename / Save Copy / Cancel. LOAD полностью заменяет отсутствующие дорожки. Project SAVE берёт текущее состояние Lyrics. На стартовом экране добавлен Open Project. | 5.1.13
+KARAOKE LOAD: progress 0–100% with phases Opening project / Loading Original / Separating stems / Loading tracks / Restoring Sequencer / Drawing waveforms / Loading Lyrics / Making structure / Preparing Karaoke / Using Effects / Ready. | 5.1.13
 </div>
 
 <div class="row" id="build-down">
