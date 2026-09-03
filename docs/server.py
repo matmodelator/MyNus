@@ -1,5 +1,5 @@
 # ========================================
-# PLAYLIST | 5.1.11
+# PLAYLIST / LOAD PROJECT | 5.1.12
 # ========================================
 
 # ========================================
@@ -55,6 +55,18 @@ os.makedirs(PROJECTS_DIR, exist_ok=True)
 # ========================================
 
 jobs = {}
+
+# Full Screen PlayList state exists only for the CURRENT server session.
+# It is intentionally NOT restored from _playlist_state.json.
+playlist_session = {
+    "history": [],
+    "current": None,
+    "future": []
+}
+
+# Arbitrary project folders selected via the Windows folder picker are exposed
+# through short-lived in-memory tokens so the browser can fetch their tracks.
+opened_project_folders = {}
 
 
 # ========================================
@@ -1307,7 +1319,7 @@ def transcribe_to_ru():
 
 
 # ========================================
-# MYNUS PlayList + standalone Projects | 5.1.11
+# MYNUS PlayList + standalone Projects | 5.1.12
 # ========================================
 def _project_id(value):
     value = secure_filename(str(value or "Project")) or "Project"
@@ -1323,116 +1335,114 @@ def _project_ids():
     return result
 
 
-def _read_playlist_state():
+def _sync_playlist_session():
+    """Synchronize the in-memory karaoke queue with folders currently in PlayList."""
     existing = _project_ids()
-    state = {}
+    existing_set = set(existing)
 
-    if os.path.isfile(PLAYLIST_STATE_PATH):
-        try:
-            with open(PLAYLIST_STATE_PATH, "r", encoding="utf-8") as fh:
-                state = json.load(fh)
-        except Exception:
-            state = {}
+    history = [item for item in playlist_session.get("history", []) if item in existing_set]
+    current = playlist_session.get("current")
+    future = [item for item in playlist_session.get("future", []) if item in existing_set]
 
-    raw_order = state.get("order") if isinstance(state, dict) else []
-    order = []
-    if isinstance(raw_order, list):
-        for project_id in raw_order:
-            project_id = str(project_id)
-            if project_id in existing and project_id not in order:
-                order.append(project_id)
+    # Remove duplicates while preserving session order.
+    seen = set()
+    history = [item for item in history if not (item in seen or seen.add(item))]
+    if current in seen:
+        current = None
+    if current:
+        seen.add(current)
+    future = [item for item in future if not (item in seen or seen.add(item))]
 
+    # First synchronization after server start: first project = 0, ALL others = positive.
+    if not current:
+        remaining = [item for item in existing if item not in history]
+        if remaining:
+            current = remaining[0]
+            future = [item for item in remaining[1:] if item not in history]
+        else:
+            current = None
+            future = []
+
+    # Any project folder that appears during the session is appended below current.
+    known = set(history + ([current] if current else []) + future)
     for project_id in existing:
-        if project_id not in order:
-            order.append(project_id)
+        if project_id not in known:
+            future.append(project_id)
+            known.add(project_id)
 
-    current = str(state.get("current") or "") if isinstance(state, dict) else ""
-    if current not in order:
-        current = order[0] if order else ""
-
-    normalized = {"order": order, "current": current or None}
-    if normalized != state:
-        _write_playlist_state(normalized)
-    return normalized
-
-
-def _write_playlist_state(state):
-    tmp_path = PLAYLIST_STATE_PATH + ".tmp"
-    with open(tmp_path, "w", encoding="utf-8") as fh:
-        json.dump(state, fh, ensure_ascii=False, indent=2)
-    os.replace(tmp_path, PLAYLIST_STATE_PATH)
+    playlist_session["history"] = history
+    playlist_session["current"] = current
+    playlist_session["future"] = future
+    return playlist_session
 
 
 def _set_current_project(project_id):
+    """Make a PlayList project current; only projects closed in THIS session become negative."""
     project_id = _project_id(project_id)
     existing = _project_ids()
     if project_id not in existing:
         raise FileNotFoundError("Project not found")
 
-    state = _read_playlist_state()
-    order = [item for item in state.get("order", []) if item in existing]
-    for item in existing:
-        if item not in order:
-            order.append(item)
-
+    state = _sync_playlist_session()
     old_current = state.get("current")
     if project_id == old_current:
         return state
 
-    if old_current in order:
-        current_index = order.index(old_current)
-        executed = order[:current_index]
-        waiting = order[current_index + 1:]
-    else:
-        executed = []
-        waiting = order[:]
+    history = [item for item in state.get("history", []) if item != project_id]
+    future = [item for item in state.get("future", []) if item != project_id]
 
-    executed = [item for item in executed if item != project_id]
-    waiting = [item for item in waiting if item != project_id]
+    # The project being closed now is the newest history item (-1).
+    if old_current and old_current != project_id:
+        history = [item for item in history if item != old_current]
+        history.append(old_current)
 
-    if old_current and old_current != project_id and old_current in existing:
-        executed = [item for item in executed if item != old_current]
-        executed.append(old_current)
-
-    new_state = {
-        "order": executed + [project_id] + waiting,
-        "current": project_id
-    }
-    _write_playlist_state(new_state)
-    return new_state
+    playlist_session["history"] = history
+    playlist_session["current"] = project_id
+    playlist_session["future"] = future
+    return playlist_session
 
 
 def _playlist_projects_payload():
-    state = _read_playlist_state()
-    order = state.get("order", [])
+    state = _sync_playlist_session()
+    history = list(state.get("history", []))
     current = state.get("current")
-    current_index = order.index(current) if current in order else -1
+    future = list(state.get("future", []))
     projects = []
 
-    for index, project_id in enumerate(order):
+    def project_name(project_id):
         folder = os.path.join(PLAYLIST_DIR, project_id)
         manifest_path = os.path.join(folder, "Project.json")
-        if not os.path.isfile(manifest_path):
-            continue
         try:
             with open(manifest_path, "r", encoding="utf-8") as fh:
                 manifest = json.load(fh)
-            project_name = manifest.get("name") or project_id
+            return manifest.get("name") or project_id
         except Exception:
-            project_name = project_id
+            return project_id
 
-        if project_id == current:
-            project_status = "current"
-        elif current_index >= 0 and index < current_index:
-            project_status = "executed"
-        else:
-            project_status = "waiting"
-
+    # Oldest history is most negative; most recently closed is always -1.
+    history_count = len(history)
+    for index, project_id in enumerate(history):
         projects.append({
             "id": project_id,
-            "name": project_name,
-            "status": project_status,
-            "position": (index - current_index) if current_index >= 0 else index
+            "name": project_name(project_id),
+            "status": "executed",
+            "position": index - history_count
+        })
+
+    if current:
+        projects.append({
+            "id": current,
+            "name": project_name(current),
+            "status": "current",
+            "position": 0
+        })
+
+    for index, project_id in enumerate(future, start=1):
+        projects.append({
+            "id": project_id,
+            "name": project_name(project_id),
+            "status": "waiting",
+            "position": index
         })
 
     return {"projects": projects, "current": current, "root": PLAYLIST_DIR}
@@ -1452,6 +1462,78 @@ def use_project():
     except FileNotFoundError:
         return jsonify({"error": "Project not found"}), 404
     return jsonify({"ok": True, **_playlist_projects_payload()})
+
+
+def _project_payload_from_folder(folder, track_url_builder):
+    project_path = os.path.join(folder, "Project.json")
+    lyrics_path = os.path.join(folder, "Lyrics.json")
+    if not os.path.isfile(project_path):
+        raise FileNotFoundError("Project.json not found in selected folder")
+    if not os.path.isfile(lyrics_path):
+        raise FileNotFoundError("Lyrics.json not found in selected folder")
+
+    with open(project_path, "r", encoding="utf-8") as fh:
+        project = json.load(fh)
+    with open(lyrics_path, "r", encoding="utf-8") as fh:
+        lyrics = json.load(fh)
+
+    tracks = {}
+    for track_id, filename in (project.get("tracks") or {}).items():
+        tracks[track_id] = track_url_builder(filename) if filename else None
+
+    return project, lyrics, tracks
+
+
+@app.route("/projects/open-folder", methods=["POST"])
+def open_project_folder():
+    """Windows folder picker used by Karaoke -> Load another project."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        selected = filedialog.askdirectory(
+            title="Select MyNus project folder",
+            initialdir=PROJECTS_DIR
+        )
+        root.destroy()
+
+        if not selected:
+            return jsonify({"ok": True, "cancelled": True})
+
+        selected = os.path.abspath(selected)
+        token = uuid.uuid4().hex
+        project, lyrics, tracks = _project_payload_from_folder(
+            selected,
+            lambda filename: "/opened-projects/{}/track/{}".format(token, filename)
+        )
+        opened_project_folders[token] = selected
+
+        return jsonify({
+            "ok": True,
+            "id": token,
+            "name": project.get("name") or os.path.basename(selected),
+            "project": project,
+            "lyrics": lyrics,
+            "tracks": tracks,
+            "source_path": selected
+        })
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        print(f"[PROJECT OPEN] ERROR: {exc}", flush=True)
+        return jsonify({"error": "Project folder selection failed: " + str(exc)}), 500
+
+
+@app.route("/opened-projects/<token>/track/<path:filename>", methods=["GET"])
+def opened_project_track_file(token, filename):
+    folder = opened_project_folders.get(str(token))
+    if not folder:
+        return jsonify({"error": "Opened project session expired"}), 404
+    tracks_dir = os.path.abspath(os.path.join(folder, "tracks"))
+    return send_from_directory(tracks_dir, filename)
 
 
 @app.route("/projects/select-folder", methods=["POST"])
@@ -1552,7 +1634,7 @@ def save_project():
         if not track_files.get("original"):
             raise ValueError("Original track not received")
 
-        project_json["version"] = "5.1.11"
+        project_json["version"] = "5.1.12"
         project_json["id"] = project_id
         project_json["name"] = project_name
         project_json["tracks"] = track_files
@@ -1688,8 +1770,8 @@ def print_restart_command():
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("MyNus Server 5.1.11")
-    print(r"5.1.11: Full Screen PlayList — автоочередь из PlayList, нумерация -/0/+, принудительная загрузка любого проекта кроме текущего, Song finished dialog, Space = Play again.")
+    print("MyNus Server 5.1.12")
+    print(r"5.1.12: Full Screen PlayList — история только текущей сессии; при старте current=0, остальные +; полный LOAD по клику; Load another project = системный выбор папки.")
     print("=" * 72 + "\n")
 
     try:
