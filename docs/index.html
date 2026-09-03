@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.1.10</title>
+  <title>MyNus 5.1.11</title>
 
 
  <style>
@@ -3980,7 +3980,7 @@
 </div>
 
 <!-- ========================================
-     SAVE PROJECT DIALOG | 5.1.10
+     SAVE PROJECT DIALOG | 5.1.11
 ======================================== -->
 <div id="saveProjectDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -4001,7 +4001,7 @@
 </div>
 
 <!-- ========================================
-     LOAD PROJECT DIALOG | 5.1.10
+     LOAD PROJECT DIALOG | 5.1.11
 ======================================== -->
 <div id="loadProjectDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -4015,7 +4015,7 @@
 </div>
 
 <!-- ========================================
-     PROJECT SAVE CONFLICT | 5.1.10
+     PROJECT SAVE CONFLICT | 5.1.11
 ======================================== -->
 <div id="projectConflictDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -4026,6 +4026,29 @@
       <button type="button" id="renameProjectBtn">Rename</button>
       <button type="button" id="saveProjectCopyBtn">Save Copy</button>
       <button type="button" id="cancelProjectConflictBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ========================================
+     KARAOKE SONG FINISHED | 5.1.11
+======================================== -->
+<div id="karaokeFinishedDialog" class="export-dialog" style="z-index:5000;">
+  <div class="export-dialog-card">
+    <div class="export-dialog-title">Song finished</div>
+    <div class="export-format-grid" style="grid-template-columns:1fr; gap:8px;">
+      <button type="button" id="karaokePlayAgainBtn">Play again</button>
+      <button type="button" id="karaokeNextProjectBtn">Open next project in playlist</button>
+      <button type="button" id="karaokeLoadAnotherBtn">Load another project</button>
+    </div>
+    <label style="display:flex; align-items:center; gap:8px; margin-top:14px; font-size:13px;">
+      <input type="checkbox" id="karaokeSaveCurrentProjectFlag">
+      <span>Save current project</span>
+    </label>
+    <div id="karaokeFinishedMessage" style="font-size:12px; min-height:16px; margin-top:8px;"></div>
+    <div class="export-format-grid" style="grid-template-columns:1fr; margin-top:8px;">
+      <button type="button" id="karaokeFinishedCancelBtn">Cancel</button>
     </div>
   </div>
 </div>
@@ -17184,6 +17207,15 @@ function startAnimation() {
         )
       ) {
 
+        if (lyricsFullScreenMode) {
+          pauseAll();
+          openKaraokeFinishedDialog().catch(error => {
+            console.error(error);
+            status.textContent = error.message;
+          });
+          return;
+        }
+
         if (
           lyricsEditorDialog
           &&
@@ -17997,6 +18029,14 @@ window.addEventListener(
       );
 
 
+    // Song finished: Space = Play again.
+    if (karaokeFinishedDialog?.classList.contains("open") && event.code === "Space") {
+      event.preventDefault();
+      event.stopPropagation();
+      runKaraokeFinishAction("again");
+      return;
+    }
+
     // Lyrics Editor / Full Screen: Esc always exits directly to Sequencer.
     if (event.code === "Escape" && lyricsEditorDialog?.classList.contains("open")) {
       event.preventDefault();
@@ -18418,7 +18458,7 @@ updateMasterHistoryButtons();
 
 
 // ========================================
-// PROJECT / FULL SCREEN PLAYLIST | 5.1.10
+// PROJECT / FULL SCREEN PLAYLIST | 5.1.11
 // Project = 12 audio slots + Lyrics.json + Project.json
 // ========================================
 const saveProjectBtn = document.getElementById("saveProjectBtn");
@@ -18426,6 +18466,7 @@ const loadProjectBtn = document.getElementById("loadProjectBtn");
 const lyricsFullScreenPlaylistBtn = document.getElementById("lyricsFullScreenPlaylistBtn");
 const lyricsFullScreenPlaylistMenu = document.getElementById("lyricsFullScreenPlaylistMenu");
 let currentPlaylistProject = null;
+let playlistRootPath = "C:\\MyNus\\PlayList";
 
 const projectTrackIds = [
   "original", "vocals", "pitchCorrection", "harmonizer",
@@ -18483,7 +18524,7 @@ function projectLyricsJson() {
 
 function projectStateJson() {
   return {
-    version: "5.1.10",
+    version: "5.1.11",
     sequencer: {
       mode,
       fragmentStart,
@@ -18524,13 +18565,14 @@ function projectTrackFilename(trackId, source) {
   return trackId + (match ? match[0].toLowerCase() : ".bin");
 }
 
-async function saveCurrentProject(projectName, savePath, conflictAction = "") {
+async function saveCurrentProject(projectName, savePath, conflictAction = "", options = {}) {
   const fd = new FormData();
   const name = String(projectName || "").trim() || projectSafeName();
   const targetPath = String(savePath || "").trim();
   fd.append("name", name);
   fd.append("save_path", targetPath);
   fd.append("conflict_action", conflictAction);
+  if (options.projectId) fd.append("project_id", String(options.projectId));
   fd.append("lyrics_json", JSON.stringify(projectLyricsJson()));
   fd.append("project_json", JSON.stringify(projectStateJson()));
 
@@ -18555,8 +18597,10 @@ async function saveCurrentProject(projectName, savePath, conflictAction = "") {
 
   const savedPath = data.path || targetPath || "C:\\MyNus\\Projects";
   status.textContent = "Project saved: " + (data.name || name);
-  if (saveProjectMessage) saveProjectMessage.textContent = "Saved successfully: " + savedPath;
-  window.alert("Project saved successfully:\n" + savedPath);
+  if (!options.silent) {
+    if (saveProjectMessage) saveProjectMessage.textContent = "Saved successfully: " + savedPath;
+    window.alert("Project saved successfully:\n" + savedPath);
+  }
   return data;
 }
 
@@ -18565,6 +18609,7 @@ async function fetchPlaylistProjects() {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "PlayList unavailable");
   if (data.current) currentPlaylistProject = data.current;
+  if (data.root) playlistRootPath = data.root;
   return Array.isArray(data.projects) ? data.projects : [];
 }
 
@@ -18603,8 +18648,11 @@ async function refreshFullScreenPlaylist() {
     const row = document.createElement(isCurrent ? "div" : "button");
     if (!isCurrent) row.type = "button";
     row.className = "lyrics-fullscreen-playlist-item " + (isCurrent ? "current" : (project.status || "waiting"));
-    const icon = isCurrent ? "▶ " : (project.status === "executed" ? "✓ " : "⤓ ");
-    row.textContent = icon + project.name;
+    const position = Number(project.position);
+    const numberLabel = Number.isFinite(position)
+      ? (position > 0 ? "+" + position : String(position))
+      : "";
+    row.textContent = (numberLabel ? numberLabel + "  " : "") + project.name;
     row.title = isCurrent ? project.name + " — IN USE" : project.name + " — load project";
     if (!isCurrent) row.addEventListener("click", async event => {
       event.stopPropagation();
@@ -18614,6 +18662,96 @@ async function refreshFullScreenPlaylist() {
     lyricsFullScreenPlaylistMenu.appendChild(row);
   });
 }
+
+const karaokeFinishedDialog = document.getElementById("karaokeFinishedDialog");
+const karaokePlayAgainBtn = document.getElementById("karaokePlayAgainBtn");
+const karaokeNextProjectBtn = document.getElementById("karaokeNextProjectBtn");
+const karaokeLoadAnotherBtn = document.getElementById("karaokeLoadAnotherBtn");
+const karaokeSaveCurrentProjectFlag = document.getElementById("karaokeSaveCurrentProjectFlag");
+const karaokeFinishedMessage = document.getElementById("karaokeFinishedMessage");
+const karaokeFinishedCancelBtn = document.getElementById("karaokeFinishedCancelBtn");
+let karaokeFinishActionRunning = false;
+
+async function saveCurrentPlaylistProjectIfRequested() {
+  if (!karaokeSaveCurrentProjectFlag?.checked) return;
+  if (!currentPlaylistProject) throw new Error("Current playlist project is not defined");
+  const projects = await fetchPlaylistProjects();
+  const current = projects.find(project => String(project.id) === String(currentPlaylistProject));
+  const projectName = current?.name || fileName?.textContent || currentPlaylistProject;
+  if (karaokeFinishedMessage) karaokeFinishedMessage.textContent = "Saving current project…";
+  await saveCurrentProject(projectName, playlistRootPath, "overwrite", {
+    silent: true,
+    projectId: currentPlaylistProject
+  });
+}
+
+async function openKaraokeFinishedDialog() {
+  if (!lyricsFullScreenMode || !karaokeFinishedDialog || karaokeFinishedDialog.classList.contains("open")) return;
+  karaokeFinishActionRunning = false;
+  if (karaokeFinishedMessage) karaokeFinishedMessage.textContent = "";
+  const projects = await fetchPlaylistProjects().catch(() => []);
+  const currentIndex = projects.findIndex(project => String(project.id) === String(currentPlaylistProject));
+  const hasNext = currentIndex >= 0 && currentIndex + 1 < projects.length;
+  if (karaokeNextProjectBtn) karaokeNextProjectBtn.disabled = !hasNext;
+  karaokeFinishedDialog.classList.add("open");
+}
+
+function closeKaraokeFinishedDialog() {
+  karaokeFinishedDialog?.classList.remove("open");
+  karaokeFinishActionRunning = false;
+}
+
+async function runKaraokeFinishAction(action) {
+  if (karaokeFinishActionRunning) return;
+  karaokeFinishActionRunning = true;
+  [karaokePlayAgainBtn, karaokeNextProjectBtn, karaokeLoadAnotherBtn, karaokeFinishedCancelBtn].forEach(btn => {
+    if (btn) btn.disabled = true;
+  });
+  try {
+    await saveCurrentPlaylistProjectIfRequested();
+
+    if (action === "again") {
+      closeKaraokeFinishedDialog();
+      syncAllTo(0);
+      updatePlayheads();
+      updateMasterCursor();
+      updateTimeDisplay();
+      playCurrentMode();
+    } else if (action === "next") {
+      const projects = await fetchPlaylistProjects();
+      const currentIndex = projects.findIndex(project => String(project.id) === String(currentPlaylistProject));
+      const nextProject = currentIndex >= 0 ? projects[currentIndex + 1] : null;
+      if (!nextProject) throw new Error("No next project in playlist");
+      closeKaraokeFinishedDialog();
+      await loadProjectById(nextProject.id, true, "playlist");
+    } else if (action === "other") {
+      closeKaraokeFinishedDialog();
+      await refreshFullScreenPlaylist();
+      lyricsFullScreenPlaylistMenu.hidden = false;
+    }
+  } catch (error) {
+    console.error(error);
+    if (karaokeFinishedMessage) karaokeFinishedMessage.textContent = error.message;
+    karaokeFinishActionRunning = false;
+  } finally {
+    if (!karaokeFinishedDialog?.classList.contains("open")) return;
+    [karaokePlayAgainBtn, karaokeLoadAnotherBtn, karaokeFinishedCancelBtn].forEach(btn => {
+      if (btn) btn.disabled = false;
+    });
+    try {
+      const projects = await fetchPlaylistProjects();
+      const currentIndex = projects.findIndex(project => String(project.id) === String(currentPlaylistProject));
+      if (karaokeNextProjectBtn) karaokeNextProjectBtn.disabled = !(currentIndex >= 0 && currentIndex + 1 < projects.length);
+    } catch (_) {
+      if (karaokeNextProjectBtn) karaokeNextProjectBtn.disabled = true;
+    }
+  }
+}
+
+karaokePlayAgainBtn?.addEventListener("click", () => runKaraokeFinishAction("again"));
+karaokeNextProjectBtn?.addEventListener("click", () => runKaraokeFinishAction("next"));
+karaokeLoadAnotherBtn?.addEventListener("click", () => runKaraokeFinishAction("other"));
+karaokeFinishedCancelBtn?.addEventListener("click", closeKaraokeFinishedDialog);
 
 function resetProjectSequencerStateForLoad() {
   stemIds.forEach(stemId => {
@@ -18993,8 +19131,8 @@ document.addEventListener("click", event => {
 ======================================== -->
 
 <div id="service-console">
-PlayList: вертикальная очередь проектов — ✓ executed / ▶ current / ⤓ waiting. Текущий проект некликабельный; загрузка любого другого проекта делает его текущим; предыдущий текущий переходит в executed. Состояние очереди и текущий проект сохраняются сервером между F5 и перезапусками. | 5.1.5
-PROJECT SAVE/LOAD: Projects отделён от Full Screen PlayList. По умолчанию C:\MyNus\Projects; путь SAVE можно изменить; повторное имя — Overwrite / Rename / Save Copy / Cancel. LOAD полностью заменяет отсутствующие дорожки. Project SAVE берёт текущее состояние Lyrics. На стартовом экране добавлен Open Project. | 5.1.10
+PlayList Full Screen: проекты из C:\MyNus\PlayList автоматически входят в очередь; текущий = 0, будущие = +1,+2…, бывшие = -1,-2…. Любой проект кроме 0 можно загрузить кликом. После конца песни: Play again / Open next project in playlist / Load another project / Save current project; Space = Play again. | 5.1.11
+PROJECT SAVE/LOAD: Projects отделён от Full Screen PlayList. По умолчанию C:\MyNus\Projects; путь SAVE можно изменить; повторное имя — Overwrite / Rename / Save Copy / Cancel. LOAD полностью заменяет отсутствующие дорожки. Project SAVE берёт текущее состояние Lyrics. На стартовом экране добавлен Open Project. | 5.1.11
 </div>
 
 <div class="row" id="build-down">
