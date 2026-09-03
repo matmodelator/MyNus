@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.1.13</title>
+  <title>MyNus 5.1.14</title>
 
 
  <style>
@@ -4037,7 +4037,7 @@
 </div>
 
 <!-- ========================================
-     SAVE PROJECT DIALOG | 5.1.13
+     SAVE PROJECT DIALOG | 5.1.14
 ======================================== -->
 <div id="saveProjectDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -4058,7 +4058,7 @@
 </div>
 
 <!-- ========================================
-     LOAD PROJECT DIALOG | 5.1.13
+     LOAD PROJECT DIALOG | 5.1.14
 ======================================== -->
 <div id="loadProjectDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -4072,7 +4072,7 @@
 </div>
 
 <!-- ========================================
-     PROJECT SAVE CONFLICT | 5.1.13
+     PROJECT SAVE CONFLICT | 5.1.14
 ======================================== -->
 <div id="projectConflictDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -4089,7 +4089,7 @@
 
 
 <!-- ========================================
-     KARAOKE SONG FINISHED | 5.1.13
+     KARAOKE SONG FINISHED | 5.1.14
 ======================================== -->
 <div id="karaokeFinishedDialog" class="export-dialog" style="z-index:5000;">
   <div class="export-dialog-card">
@@ -18523,7 +18523,7 @@ updateMasterHistoryButtons();
 
 
 // ========================================
-// PROJECT / FULL SCREEN PLAYLIST | 5.1.13
+// PROJECT / FULL SCREEN PLAYLIST | 5.1.14
 // Project = 12 audio slots + Lyrics.json + Project.json
 // ========================================
 const saveProjectBtn = document.getElementById("saveProjectBtn");
@@ -18532,6 +18532,7 @@ const lyricsFullScreenPlaylistBtn = document.getElementById("lyricsFullScreenPla
 const lyricsFullScreenPlaylistMenu = document.getElementById("lyricsFullScreenPlaylistMenu");
 let currentPlaylistProject = null;
 let playlistRootPath = "C:\\MyNus\\PlayList";
+let historyRootPath = "C:\\MyNus\\History";
 
 const projectTrackIds = [
   "original", "vocals", "pitchCorrection", "harmonizer",
@@ -18589,7 +18590,7 @@ function projectLyricsJson() {
 
 function projectStateJson() {
   return {
-    version: "5.1.13",
+    version: "5.1.14",
     sequencer: {
       mode,
       fragmentStart,
@@ -18673,8 +18674,9 @@ async function fetchPlaylistProjects() {
   const response = await fetch("/projects");
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "PlayList unavailable");
-  if (data.current) currentPlaylistProject = data.current;
+  currentPlaylistProject = data.current || null;
   if (data.root) playlistRootPath = data.root;
+  if (data.history_root) historyRootPath = data.history_root;
   return Array.isArray(data.projects) ? data.projects : [];
 }
 
@@ -18685,15 +18687,17 @@ async function fetchSavedProjects() {
   return Array.isArray(data.projects) ? data.projects : [];
 }
 
-async function markProjectInUse(id) {
+async function markProjectInUse(id, source = "playlist") {
   const response = await fetch("/projects/use", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id })
+    body: JSON.stringify({ id, source })
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "PlayList update failed");
-  currentPlaylistProject = data.current || id;
+  currentPlaylistProject = data.current || null;
+  if (data.root) playlistRootPath = data.root;
+  if (data.history_root) historyRootPath = data.history_root;
   return data;
 }
 
@@ -18701,31 +18705,48 @@ async function refreshFullScreenPlaylist() {
   if (!lyricsFullScreenPlaylistMenu) return;
   const projects = await fetchPlaylistProjects();
   lyricsFullScreenPlaylistMenu.replaceChildren();
-  if (!projects.length) {
-    const empty = document.createElement("div");
-    empty.className = "popup-state";
-    empty.textContent = "PlayList is empty";
-    lyricsFullScreenPlaylistMenu.appendChild(empty);
-    return;
-  }
-  projects.forEach(project => {
-    const isCurrent = project.status === "current" || String(project.id) === String(currentPlaylistProject);
-    const row = document.createElement(isCurrent ? "div" : "button");
-    if (!isCurrent) row.type = "button";
-    row.className = "lyrics-fullscreen-playlist-item " + (isCurrent ? "current" : (project.status || "waiting"));
+
+  const historyProjects = projects.filter(project => project.status === "executed");
+  const waitingProjects = projects.filter(project => project.status === "waiting");
+  const currentName = String(fileName?.textContent || "").trim();
+  const hasCurrent = currentName && currentName !== "No file selected";
+
+  const appendProjectRow = (project, source) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "lyrics-fullscreen-playlist-item " + (project.status || "waiting");
     const position = Number(project.position);
     const numberLabel = Number.isFinite(position)
       ? (position > 0 ? "+" + position : String(position))
       : "";
     row.textContent = (numberLabel ? numberLabel + "  " : "") + project.name;
-    row.title = isCurrent ? project.name + " — IN USE" : project.name + " — load project";
-    if (!isCurrent) row.addEventListener("click", async event => {
+    row.title = project.name + " — load project";
+    row.addEventListener("click", async event => {
       event.stopPropagation();
-      await loadProjectById(project.id, true, "playlist");
+      await loadProjectById(project.id, true, source);
       lyricsFullScreenPlaylistMenu.hidden = true;
     });
     lyricsFullScreenPlaylistMenu.appendChild(row);
-  });
+  };
+
+  historyProjects.forEach(project => appendProjectRow(project, "history"));
+
+  if (hasCurrent) {
+    const currentRow = document.createElement("div");
+    currentRow.className = "lyrics-fullscreen-playlist-item current";
+    currentRow.textContent = "0  " + currentName;
+    currentRow.title = currentName + " — IN USE";
+    lyricsFullScreenPlaylistMenu.appendChild(currentRow);
+  }
+
+  waitingProjects.forEach(project => appendProjectRow(project, "playlist"));
+
+  if (!historyProjects.length && !hasCurrent && !waitingProjects.length) {
+    const empty = document.createElement("div");
+    empty.className = "popup-state";
+    empty.textContent = "PlayList is empty";
+    lyricsFullScreenPlaylistMenu.appendChild(empty);
+  }
 }
 
 const karaokeFinishedDialog = document.getElementById("karaokeFinishedDialog");
@@ -18739,15 +18760,19 @@ let karaokeFinishActionRunning = false;
 
 async function saveCurrentPlaylistProjectIfRequested() {
   if (!karaokeSaveCurrentProjectFlag?.checked) return;
-  if (!currentPlaylistProject) throw new Error("Current playlist project is not defined");
-  const projects = await fetchPlaylistProjects();
-  const current = projects.find(project => String(project.id) === String(currentPlaylistProject));
-  const projectName = current?.name || fileName?.textContent || currentPlaylistProject;
+  const projectName = fileName?.textContent || currentPlaylistProject || "Project";
   if (karaokeFinishedMessage) karaokeFinishedMessage.textContent = "Saving current project…";
-  await saveCurrentProject(projectName, playlistRootPath, "overwrite", {
-    silent: true,
-    projectId: currentPlaylistProject
-  });
+
+  if (currentPlaylistProject) {
+    await saveCurrentProject(projectName, historyRootPath, "overwrite", {
+      silent: true,
+      projectId: currentPlaylistProject
+    });
+  } else {
+    await saveCurrentProject(projectName, "C:\\MyNus\\Projects", "overwrite", {
+      silent: true
+    });
+  }
 }
 
 async function openKaraokeFinishedDialog() {
@@ -18755,8 +18780,7 @@ async function openKaraokeFinishedDialog() {
   karaokeFinishActionRunning = false;
   if (karaokeFinishedMessage) karaokeFinishedMessage.textContent = "";
   const projects = await fetchPlaylistProjects().catch(() => []);
-  const currentIndex = projects.findIndex(project => String(project.id) === String(currentPlaylistProject));
-  const hasNext = currentIndex >= 0 && currentIndex + 1 < projects.length;
+  const hasNext = projects.some(project => project.status === "waiting");
   if (karaokeNextProjectBtn) karaokeNextProjectBtn.disabled = !hasNext;
   karaokeFinishedDialog.classList.add("open");
 }
@@ -18784,8 +18808,7 @@ async function runKaraokeFinishAction(action) {
       playCurrentMode();
     } else if (action === "next") {
       const projects = await fetchPlaylistProjects();
-      const currentIndex = projects.findIndex(project => String(project.id) === String(currentPlaylistProject));
-      const nextProject = currentIndex >= 0 ? projects[currentIndex + 1] : null;
+      const nextProject = projects.find(project => project.status === "waiting") || null;
       if (!nextProject) throw new Error("No next project in playlist");
       closeKaraokeFinishedDialog();
       await loadProjectById(nextProject.id, true, "playlist");
@@ -18804,8 +18827,7 @@ async function runKaraokeFinishAction(action) {
     });
     try {
       const projects = await fetchPlaylistProjects();
-      const currentIndex = projects.findIndex(project => String(project.id) === String(currentPlaylistProject));
-      if (karaokeNextProjectBtn) karaokeNextProjectBtn.disabled = !(currentIndex >= 0 && currentIndex + 1 < projects.length);
+      if (karaokeNextProjectBtn) karaokeNextProjectBtn.disabled = !projects.some(project => project.status === "waiting");
     } catch (_) {
       if (karaokeNextProjectBtn) karaokeNextProjectBtn.disabled = true;
     }
@@ -18942,7 +18964,9 @@ async function loadProjectById(id, keepFullScreen = false, source = "projects") 
     } else {
       const projectUrl = source === "playlist"
         ? "/projects/" + encodeURIComponent(id)
-        : "/saved-projects/" + encodeURIComponent(id);
+        : source === "history"
+          ? "/history-projects/" + encodeURIComponent(id)
+          : "/saved-projects/" + encodeURIComponent(id);
       response = await fetch(projectUrl);
     }
 
@@ -18978,8 +19002,7 @@ async function loadProjectById(id, keepFullScreen = false, source = "projects") 
     currentOriginalFile = originalFile;
     recentSelectedAudioFile = originalFile;
     fileName.textContent = data.name || id;
-    if (source === "playlist") currentPlaylistProject = data.id || id;
-    else if (source === "folder") currentPlaylistProject = null;
+    if (source === "folder" || source === "projects") currentPlaylistProject = null;
 
     if (originalFileURL) URL.revokeObjectURL(originalFileURL);
     originalFileURL = URL.createObjectURL(originalFile);
@@ -19076,10 +19099,14 @@ async function loadProjectById(id, keepFullScreen = false, source = "projects") 
     stemIds.forEach(stemId => applyFxSettings(stemId));
     applyMix();
 
-    if (source === "playlist") await markProjectInUse(data.id || id);
+    if (source === "playlist" || source === "history") {
+      await markProjectInUse(data.id || id, source);
+    } else {
+      await markProjectInUse(null, "external");
+    }
     status.textContent = "Project loaded: " + (data.name || id);
 
-    if (source === "playlist" || (lyricsFullScreenMode && currentPlaylistProject)) await refreshFullScreenPlaylist();
+    if (lyricsFullScreenMode || keepFullScreen) await refreshFullScreenPlaylist();
     if (useKaraokeLoader) await finishKaraokeProjectLoader();
     return true;
   } catch (error) {
@@ -19302,9 +19329,9 @@ document.addEventListener("click", event => {
 ======================================== -->
 
 <div id="service-console">
-PlayList Full Screen: очередь текущей сессии — при старте current = 0, все остальные проекты PlayList идут ниже как +1,+2…; отрицательная история появляется только при закрытии/смене проектов в этой сессии. Клик по любому проекту кроме 0 выполняет полный обычный LOAD проекта. Load another project открывает системный выбор папки проекта. | 5.1.13
-PROJECT SAVE/LOAD: Projects отделён от Full Screen PlayList. По умолчанию C:\MyNus\Projects; путь SAVE можно изменить; повторное имя — Overwrite / Rename / Save Copy / Cancel. LOAD полностью заменяет отсутствующие дорожки. Project SAVE берёт текущее состояние Lyrics. На стартовом экране добавлен Open Project. | 5.1.13
-KARAOKE LOAD: progress 0–100% with phases Opening project / Loading Original / Separating stems / Loading tracks / Restoring Sequencer / Drawing waveforms / Loading Lyrics / Making structure / Preparing Karaoke / Using Effects / Ready. | 5.1.13
+PlayList Full Screen: 0 = реально загруженный проект; +1,+2… = все папки проектов, физически находящиеся в PlayList; -1,-2… = проекты, открытые в текущей сессии и уже перенесённые в History. Открытый из PlayList проект автоматически перемещается PlayList → History. Текущий 0 не кликается; + и - загружаются обычным полным LOAD. | 5.1.14
+PROJECT SAVE/LOAD: Projects отделён от Full Screen PlayList. По умолчанию C:\MyNus\Projects; путь SAVE можно изменить; повторное имя — Overwrite / Rename / Save Copy / Cancel. LOAD полностью заменяет отсутствующие дорожки. Project SAVE берёт текущее состояние Lyrics. На стартовом экране добавлен Open Project. | 5.1.14
+KARAOKE LOAD: progress 0–100% with phases Opening project / Loading Original / Separating stems / Loading tracks / Restoring Sequencer / Drawing waveforms / Loading Lyrics / Making structure / Preparing Karaoke / Using Effects / Ready. | 5.1.14
 </div>
 
 <div class="row" id="build-down">
