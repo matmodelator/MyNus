@@ -1,5 +1,5 @@
 # ========================================
-# PLAYLIST / LOAD PROJECT | 5.1.12
+# PLAYLIST / SAVE / LOAD PROJECT | 5.1.13
 # ========================================
 
 # ========================================
@@ -1319,7 +1319,7 @@ def transcribe_to_ru():
 
 
 # ========================================
-# MYNUS PlayList + standalone Projects | 5.1.12
+# MYNUS PlayList + standalone Projects | 5.1.13
 # ========================================
 def _project_id(value):
     value = secure_filename(str(value or "Project")) or "Project"
@@ -1634,7 +1634,7 @@ def save_project():
         if not track_files.get("original"):
             raise ValueError("Original track not received")
 
-        project_json["version"] = "5.1.12"
+        project_json["version"] = "5.1.13"
         project_json["id"] = project_id
         project_json["name"] = project_name
         project_json["tracks"] = track_files
@@ -1770,8 +1770,8 @@ def print_restart_command():
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("MyNus Server 5.1.12")
-    print(r"5.1.12: Full Screen PlayList — история только текущей сессии; при старте current=0, остальные +; полный LOAD по клику; Load another project = системный выбор папки.")
+    print("MyNus Server 5.1.13")
+    print(r"5.1.13: Full Screen PlayList — история только текущей сессии; при старте current=0, остальные +; полный LOAD по клику; Load another project = системный выбор папки.")
     print("=" * 72 + "\n")
 
     try:
