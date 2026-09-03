@@ -1,5 +1,5 @@
 # ========================================
-# PLAYLIST / SAVE / LOAD PROJECT | 5.1.10
+# PLAYLIST | 5.1.11
 # ========================================
 
 # ========================================
@@ -1307,7 +1307,7 @@ def transcribe_to_ru():
 
 
 # ========================================
-# MYNUS PlayList + standalone Projects | 5.1.10
+# MYNUS PlayList + standalone Projects | 5.1.11
 # ========================================
 def _project_id(value):
     value = secure_filename(str(value or "Project")) or "Project"
@@ -1431,10 +1431,11 @@ def _playlist_projects_payload():
         projects.append({
             "id": project_id,
             "name": project_name,
-            "status": project_status
+            "status": project_status,
+            "position": (index - current_index) if current_index >= 0 else index
         })
 
-    return {"projects": projects, "current": current}
+    return {"projects": projects, "current": current, "root": PLAYLIST_DIR}
 
 
 @app.route("/projects", methods=["GET"])
@@ -1475,7 +1476,8 @@ def select_project_folder():
 @app.route("/projects/save", methods=["POST"])
 def save_project():
     project_name = str(request.form.get("name") or "Project").strip() or "Project"
-    project_id = _project_id(project_name)
+    requested_project_id = str(request.form.get("project_id") or "").strip()
+    project_id = _project_id(requested_project_id) if requested_project_id else _project_id(project_name)
     save_root_raw = str(request.form.get("save_path") or PROJECTS_DIR).strip() or PROJECTS_DIR
     save_root = os.path.abspath(os.path.expanduser(save_root_raw))
     conflict_action = str(request.form.get("conflict_action") or "").strip().lower()
@@ -1550,7 +1552,7 @@ def save_project():
         if not track_files.get("original"):
             raise ValueError("Original track not received")
 
-        project_json["version"] = "5.1.10"
+        project_json["version"] = "5.1.11"
         project_json["id"] = project_id
         project_json["name"] = project_name
         project_json["tracks"] = track_files
@@ -1686,8 +1688,8 @@ def print_restart_command():
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("MyNus Server 5.1.10")
-    print(r"5.1.10: Projects отделён от Full Screen PlayList; C:\MyNus\Projects создаётся автоматически; SAVE поддерживает Overwrite / Rename / Save Copy и произвольный путь.")
+    print("MyNus Server 5.1.11")
+    print(r"5.1.11: Full Screen PlayList — автоочередь из PlayList, нумерация -/0/+, принудительная загрузка любого проекта кроме текущего, Song finished dialog, Space = Play again.")
     print("=" * 72 + "\n")
 
     try:
