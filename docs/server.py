@@ -1,5 +1,5 @@
 # ========================================
-# logica JSON | 5.1.18
+# PLAYLIST / SAVE / LOAD PROJECT | 5.2.0
 # ========================================
 
 # ========================================
@@ -67,6 +67,13 @@ opened_project_folders = {}
 
 @app.route("/")
 def index():
+    # Play List history belongs to the current index session only.
+    # Reloading index clears -N history but preserves current and queue.
+    state = _read_playlist_state()
+    if state.get("history"):
+        state["history"] = []
+        _write_playlist_state(state)
+        print("[PLAYLIST] INDEX RELOAD | history cleared", flush=True)
 
     return send_from_directory(
         BASE_DIR,
@@ -1311,7 +1318,7 @@ def transcribe_to_ru():
 
 
 # ========================================
-# MYNUS PlayList JSON state + standalone Projects | 5.1.18
+# MYNUS PlayList JSON state + standalone Projects | 5.2.0
 # ========================================
 def _project_id(value):
     value = secure_filename(str(value or "Project")) or "Project"
@@ -1376,24 +1383,44 @@ def _require_saved_project(project_id):
     return project_id, folder
 
 
-def _set_current_project(project_id, source="projects"):
+def _set_current_project(project_id, source="projects", mode=None):
     project_id, _ = _require_saved_project(project_id)
     source = str(source or "projects").lower()
+    mode = str(mode or "").lower()
     state = _read_playlist_state()
 
     old_current = state.get("current")
-    if old_current:
-        state["history"].append(old_current)
 
-    if source == "playlist":
-        try:
-            state["queue"].remove(project_id)
-        except ValueError:
-            pass
+    if mode == "takeover":
+        # Emergency manual takeover from the visible Play List.
+        # The interrupted current Track is not completed: it becomes +1.
+        if source == "playlist":
+            try:
+                state["queue"].remove(project_id)
+            except ValueError:
+                pass
+
+        if old_current and old_current != project_id:
+            # Keep one immediate continuation copy at +1.
+            state["queue"] = [item for item in state["queue"] if item != old_current]
+            state["queue"].insert(0, old_current)
+    else:
+        # Normal LOAD / Karaoke Next: previous current becomes history.
+        if old_current and old_current != project_id:
+            state["history"].append(old_current)
+
+        if source == "playlist":
+            try:
+                state["queue"].remove(project_id)
+            except ValueError:
+                pass
 
     state["current"] = project_id
     _write_playlist_state(state)
-    print(f"[PLAYLIST] LOAD | current={project_id!r} | source={source}", flush=True)
+    print(
+        f"[PLAYLIST] LOAD | current={project_id!r} | source={source} | mode={mode or 'normal'}",
+        flush=True
+    )
     return project_id
 
 
@@ -1445,13 +1472,14 @@ def list_projects():
 def use_project():
     data = request.get_json(silent=True) or {}
     source = str(data.get("source") or "projects").lower()
+    mode = str(data.get("mode") or "").lower()
     project_id = data.get("id")
     if source == "history":
         # History is a chronological log of completed/previous currents.
         # Loading an old item does not erase the historical occurrence.
         source = "history"
     try:
-        current_id = _set_current_project(project_id, source)
+        current_id = _set_current_project(project_id, source, mode)
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc)}), 404
     return jsonify({"ok": True, "current": current_id, **_playlist_projects_payload()})
@@ -1699,7 +1727,7 @@ def save_project():
         if not track_files.get("original"):
             raise ValueError("Original track not received")
 
-        project_json["version"] = "5.1.18"
+        project_json["version"] = "5.2.0"
         project_json["id"] = project_id
         project_json["name"] = project_name
         project_json["tracks"] = track_files
@@ -1872,8 +1900,8 @@ def print_restart_command():
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("MyNus Server 5.1.18")
-    print(r"5.1.18: PlayList JSON logic unchanged; Full Screen Song Finished menu stabilized in index. Tab переключает Lyrics / Karaoke.")
+    print("MyNus Server 5.2.0")
+    print(r"5.2.0: Play List session history reset on index reload; manual Track takeover sends interrupted current to +1; Add Track / Remove Track / Reorder Tracks UI.")
     print("=" * 72 + "\n")
 
     try:
