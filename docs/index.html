@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.2.0</title>
+  <title>MyNus 5.2.2</title>
 
 
  <style>
@@ -4112,7 +4112,7 @@
 </div>
 
 <!-- ========================================
-     NEW PROJECT PROMPT | 5.2.1
+     NEW PROJECT PROMPT | 5.2.2
 ======================================== -->
 <div id="newProjectPromptDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -5606,6 +5606,7 @@ async function selectRecentAudioEntry(entry) {
     if (permission !== "granted") permission = await entry.handle.requestPermission({ mode: "read" });
     if (permission !== "granted") return;
     const file = await entry.handle.getFile();
+    clearProjectState();
     recentSelectedAudioFile = file;
     fileName.textContent = file.name;
     closeRecentAudioMenu();
@@ -5667,6 +5668,7 @@ selectFileBtn.addEventListener(
         });
         if (!handle) return;
         const file = await handle.getFile();
+        clearProjectState();
         recentSelectedAudioFile = file;
         fileName.textContent = file.name;
         await saveRecentAudioHandle(handle, file);
@@ -5685,6 +5687,7 @@ audioFile.addEventListener(
   "change",
   () => {
     const file = audioFile.files[0];
+    if (file) clearProjectState();
     recentSelectedAudioFile = null;
     fileName.textContent = file ? file.name : "No file selected";
   }
@@ -5732,9 +5735,8 @@ splitBtn.addEventListener(
     splitBtn.disabled =
       true;
 
-    // A newly separated standalone file is not a Project yet.
-    setProjectActive(null);
-    currentPlaylistProject = null;
+    // The selected file was already cleared through clearProjectState().
+    // Play List state is intentionally preserved.
 
 
     studio.style.display =
@@ -18652,7 +18654,7 @@ updateMasterHistoryButtons();
 
 
 // ========================================
-// PROJECT / FULL SCREEN PLAYLIST | 5.2.0
+// PROJECT / FULL SCREEN PLAYLIST | 5.2.2
 // Project = 12 audio slots + Lyrics.json + Project.json
 // ========================================
 const saveProjectBtn = document.getElementById("saveProjectBtn");
@@ -18727,7 +18729,7 @@ function projectLyricsJson() {
 
 function projectStateJson() {
   return {
-    version: "5.2.0",
+    version: "5.2.2",
     sequencer: {
       mode,
       fragmentStart,
@@ -18899,9 +18901,9 @@ function playlistPositionPicker(maxPosition, onSelect) {
   return picker;
 }
 
-async function refreshFullScreenPlaylist() {
+function renderFullScreenPlaylist(projects = karaokePlaylistSnapshot) {
   if (!lyricsFullScreenPlaylistMenu) return;
-  const projects = await fetchPlaylistProjects();
+  projects = Array.isArray(projects) ? projects : [];
   lyricsFullScreenPlaylistMenu.replaceChildren();
 
   const historyProjects = projects.filter(track => track.status === "executed");
@@ -19021,10 +19023,7 @@ async function refreshFullScreenPlaylist() {
   removeButton.addEventListener("click", event => {
     event.stopPropagation();
     playlistEditMode = playlistEditMode === "remove" ? null : "remove";
-    refreshFullScreenPlaylist().catch(error => {
-      console.error(error);
-      status.textContent = error.message;
-    });
+    renderFullScreenPlaylist(karaokePlaylistSnapshot);
   });
 
   const reorderButton = document.createElement("button");
@@ -19034,14 +19033,17 @@ async function refreshFullScreenPlaylist() {
   reorderButton.addEventListener("click", event => {
     event.stopPropagation();
     playlistEditMode = playlistEditMode === "reorder" ? null : "reorder";
-    refreshFullScreenPlaylist().catch(error => {
-      console.error(error);
-      status.textContent = error.message;
-    });
+    renderFullScreenPlaylist(karaokePlaylistSnapshot);
   });
 
   actionRow.append(addButton, removeButton, reorderButton);
   lyricsFullScreenPlaylistMenu.appendChild(actionRow);
+}
+
+async function refreshFullScreenPlaylist() {
+  const projects = await fetchPlaylistProjects();
+  renderFullScreenPlaylist(projects);
+  return projects;
 }
 
 const karaokeFinishedDialog = document.getElementById("karaokeFinishedDialog");
@@ -19261,18 +19263,108 @@ async function failKaraokeProjectLoader(error) {
   karaokeProjectLoading = false;
 }
 
+
+function clearProjectState() {
+  // Clear ALL current working Project/file state.
+  // Play List is deliberately excluded: playlist.json/current/queue/history
+  // and the in-memory Play List snapshot are owned by Play List logic only.
+  pauseAll();
+  karaokeFinishTriggered = false;
+  closeKaraokeFinishedDialog();
+  setProjectActive(null);
+  projectCreationPending = false;
+
+  if (originalFileURL) {
+    try { URL.revokeObjectURL(originalFileURL); } catch (_) {}
+    originalFileURL = null;
+  }
+  currentOriginalFile = null;
+  try { originalAudio.pause(); } catch (_) {}
+  originalAudio.removeAttribute("src");
+  originalAudio.load();
+
+  for (const trackId of ["pitchCorrection", "harmonizer"]) {
+    const url = generatedTrackURLs?.[trackId];
+    if (url && String(url).startsWith("blob:")) {
+      try { URL.revokeObjectURL(url); } catch (_) {}
+    }
+    generatedTrackURLs[trackId] = null;
+  }
+
+  currentStemURLs = {};
+  stemIds.forEach(stemId => {
+    const audio = stemAudio[stemId];
+    if (audio) {
+      try { audio.pause(); } catch (_) {}
+      audio.removeAttribute("src");
+      audio.load();
+      try { audio.currentTime = 0; } catch (_) {}
+    }
+    waveformData[stemId] = null;
+    document.getElementById(stemId + "TrackRow")?.style.setProperty("display", "none");
+  });
+  waveformData.original = null;
+
+  resetMaster();
+  resetProjectSequencerStateForLoad();
+
+  singerSegments = [];
+  renderSingerSegments();
+
+  lyricsData = { language: null, text: "", words: [] };
+  karaokeLines = [];
+  activeKaraokeLine = -1;
+  lyricsEditorDraft = [];
+  lyricsEditorSelectedLine = -1;
+  lyricsEditorEditLineIndex = -1;
+  lyricsEditorCaretOffset = 0;
+  lyricsStructureDraft = [];
+  lyricsStructureSelectedIndex = -1;
+  lyricsStructureSelectedIndices = new Set();
+  lyricsStructureTransportMode = "play";
+  lyricsStructureLoopStart = null;
+  lyricsStructureLoopEnd = null;
+  lyricsUndoStack = [];
+  lyricsRedoStack = [];
+  lyricsTranscriptionMode = false;
+  lyricsOriginalDraftForTranscription = null;
+  originalWhisperLyrics = { language: null, text: "", words: [] };
+  originalWhisperKaraokeLines = [];
+
+  vocalStartTimeRaw = null;
+  vocalEndTimeRaw = null;
+  vocalStartTime = null;
+  vocalEndTime = null;
+
+  selectionStart = null;
+  selectionEnd = null;
+  fragmentStart = null;
+  fragmentEnd = null;
+  loopEnabled = false;
+  lyricsTransportMode = "master";
+  lyricsLoopPaused = false;
+  masterCursorTime = 0;
+  duration = 0;
+  mode = "original";
+
+  updateLyricsUndoRedoButtons();
+  renderLyrics();
+  renderLyricsEditor();
+  renderLyricsStructureTimeline(0);
+  updateLyricsMasterCounter();
+  updateTimeDisplay();
+  updatePlayheads();
+  updateMasterCursor();
+  updateCropButtons();
+  updateMixButtons();
+  syncScrollTo(0);
+}
+
 async function loadProjectById(id, keepFullScreen = false, source = "projects", playlistUseMode = null) {
   const useKaraokeLoader = !!keepFullScreen;
   pauseAll();
   status.textContent = "Loading project...";
   if (useKaraokeLoader) await showKaraokeProjectLoader();
-
-  // For a Full Screen switch, reset the OLD Lyrics Editor state before
-  // any part of the new Project is loaded. The new Lyrics/Structure will
-  // then be restored into a clean editor state.
-  if (keepFullScreen) {
-    openLyricsEditor();
-  }
 
   try {
     // Every entry point uses the SAME full project loader below.
@@ -19309,6 +19401,8 @@ async function loadProjectById(id, keepFullScreen = false, source = "projects", 
     const tracks = data.tracks || {};
     if (!tracks.original) throw new Error("Project Original track not found");
 
+    clearProjectState();
+
     if (useKaraokeLoader) await advanceKaraokeProjectLoad(1);
 
     // Original is restored as the Original track.
@@ -19324,7 +19418,6 @@ async function loadProjectById(id, keepFullScreen = false, source = "projects", 
     currentOriginalFile = originalFile;
     recentSelectedAudioFile = originalFile;
     fileName.textContent = data.name || id;
-    if (source === "folder") currentPlaylistProject = null;
 
     if (originalFileURL) URL.revokeObjectURL(originalFileURL);
     originalFileURL = URL.createObjectURL(originalFile);
@@ -19395,7 +19488,13 @@ async function loadProjectById(id, keepFullScreen = false, source = "projects", 
     sharedScrollInner.style.width = getTimelineWidth() + "px";
 
     updateEffectiveVocalRange();
-    resetTransport();
+    pauseAll();
+    syncAllTo(0);
+    masterCursorTime = 0;
+    updatePlayheads();
+    updateMasterCursor();
+    updateTimeDisplay();
+    syncScrollTo(0);
     drawAllWaveforms();
     drawMasterTimeline();
 
@@ -19413,6 +19512,7 @@ async function loadProjectById(id, keepFullScreen = false, source = "projects", 
 
     if (useKaraokeLoader) await advanceKaraokeProjectLoad(8);
     if (keepFullScreen) {
+      lyricsEditorDialog.classList.add("open");
       setLyricsFullScreenMode(true);
     }
 
@@ -19434,7 +19534,12 @@ async function loadProjectById(id, keepFullScreen = false, source = "projects", 
     setProjectActive(data.id || id);
     status.textContent = "Project loaded: " + (data.name || id);
 
-    if (lyricsFullScreenMode || keepFullScreen) await refreshFullScreenPlaylist();
+    if (lyricsFullScreenMode || keepFullScreen) {
+      refreshFullScreenPlaylist().catch(error => {
+        console.error(error);
+        status.textContent = error.message;
+      });
+    }
     return true;
   } catch (error) {
     if (useKaraokeLoader) await failKaraokeProjectLoader(error);
@@ -19651,15 +19756,18 @@ loadProjectDialog?.addEventListener("click", event => {
   if (event.target === loadProjectDialog) loadProjectDialog.classList.remove("open");
 });
 
-lyricsFullScreenPlaylistBtn?.addEventListener("click", async event => {
+lyricsFullScreenPlaylistBtn?.addEventListener("click", event => {
   event.stopPropagation();
-  try {
-    await refreshFullScreenPlaylist();
-    lyricsFullScreenPlaylistMenu.hidden = !lyricsFullScreenPlaylistMenu.hidden;
-  } catch (error) {
+  const opening = lyricsFullScreenPlaylistMenu.hidden;
+  lyricsFullScreenPlaylistMenu.hidden = !opening;
+  if (!opening) return;
+
+  // Open immediately from the last known state; refresh from server in background.
+  renderFullScreenPlaylist(karaokePlaylistSnapshot);
+  refreshFullScreenPlaylist().catch(error => {
     console.error(error);
     status.textContent = error.message;
-  }
+  });
 });
 
 document.addEventListener("click", event => {
@@ -19683,15 +19791,8 @@ document.addEventListener("click", event => {
 ======================================== -->
 
 <div id="service-console">
-PlayList Full Screen: состояние хранится только в C:\MyNus\playlist.json: current / queue / history. Проекты физически хранятся только в C:\MyNus\Projects. Tab = Lyrics ⇄ Karaoke. | 5.1.17
-Karaoke Song Finished: окно открывается мгновенно без ожидания /projects; конец песни срабатывает один раз; Cancel не вызывает повторное открытие; кнопки всегда восстанавливаются при следующем показе; Next проверяет очередь только при нажатии. | 5.2.0
-Full Screen Stop: завершает воспроизведение, переводит транспорт в конец песни и сразу открывает Song finished; возврат в начало остаётся отдельной кнопкой Back. | 5.2.0
-Play List 5.2.0: Play List title blue; Add Track / Remove Track / Reorder Tracks; Add Track = click Track then choose +N; manual Track takeover keeps interrupted current as +1; session history clears on index reload. | 5.2.0
-MyNus 5.2.1: Full Screen loader closes immediately after Project load; PlayList/AutoStop preserve saved Lyrics Structure; Add Track drops below fixed action buttons; Load Project renamed New Project; separation offers Project creation; Karaoke (Lyrics Editor / Full Screen) is enabled only for a created/opened Project. | 5.2.1
-PROJECT SAVE/LOAD: Projects отделён от Full Screen PlayList. По умолчанию C:\MyNus\Projects; путь SAVE можно изменить; повторное имя — Overwrite / Rename / Save Copy / Cancel. LOAD полностью заменяет отсутствующие дорожки. Project SAVE берёт текущее состояние Lyrics. На стартовом экране добавлен Open Project. | 5.1.17
-KARAOKE LOAD: progress 0–100% with phases Opening project / Loading Original / Separating stems / Loading tracks / Restoring Sequencer / Drawing waveforms / Loading Lyrics / Making structure / Preparing Karaoke / Using Effects / Ready. | 5.1.17
+clearProjectState() вызывается при выборе любого нового обычного файла и при любой загрузке Project. | 5.2.2
 </div>
-
 <div class="row" id="build-down">
 deploy: --
 </div>
