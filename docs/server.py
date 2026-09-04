@@ -1,5 +1,5 @@
 # ========================================
-# PROJECT HISTORY | 5.1.14
+# JSON | 5.1.17
 # ========================================
 
 # ========================================
@@ -39,16 +39,12 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 RESULT_DIR = os.path.join(BASE_DIR, "results")
 EXPORT_DIR = os.path.join(BASE_DIR, "exports")
-PLAYLIST_DIR = os.path.join(BASE_DIR, "PlayList")
-HISTORY_DIR = os.path.join(BASE_DIR, "History")
-PLAYLIST_STATE_PATH = os.path.join(PLAYLIST_DIR, "_playlist_state.json")
 PROJECTS_DIR = os.path.join(BASE_DIR, "Projects")
+PLAYLIST_STATE_PATH = os.path.join(BASE_DIR, "playlist.json")
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(RESULT_DIR, exist_ok=True)
 os.makedirs(EXPORT_DIR, exist_ok=True)
-os.makedirs(PLAYLIST_DIR, exist_ok=True)
-os.makedirs(HISTORY_DIR, exist_ok=True)
 os.makedirs(PROJECTS_DIR, exist_ok=True)
 
 
@@ -58,16 +54,7 @@ os.makedirs(PROJECTS_DIR, exist_ok=True)
 
 jobs = {}
 
-# Full Screen PlayList state exists only for the CURRENT server session.
-# It is intentionally NOT restored from _playlist_state.json.
-playlist_session = {
-    "history": [],
-    "current": None
-}
 
-# Maps an original PlayList id to the actual History id when a duplicate
-# folder name required a numbered archive name during this server session.
-playlist_archived_aliases = {}
 
 # Arbitrary project folders selected via the Windows folder picker are exposed
 # through short-lived in-memory tokens so the browser can fetch their tracks.
@@ -1324,20 +1311,11 @@ def transcribe_to_ru():
 
 
 # ========================================
-# MYNUS PlayList + standalone Projects | 5.1.14
+# MYNUS PlayList JSON state + standalone Projects | 5.1.17
 # ========================================
 def _project_id(value):
     value = secure_filename(str(value or "Project")) or "Project"
     return value[:120]
-
-
-def _project_ids_in(root_dir):
-    result = []
-    for name in sorted(os.listdir(root_dir), key=str.lower):
-        folder = os.path.join(root_dir, name)
-        if os.path.isdir(folder) and os.path.isfile(os.path.join(folder, "Project.json")):
-            result.append(name)
-    return result
 
 
 def _project_name_from_folder(folder, fallback):
@@ -1350,69 +1328,83 @@ def _project_name_from_folder(folder, fallback):
         return fallback
 
 
-def _unique_history_id(project_id):
+def _empty_playlist_state():
+    return {"current": None, "queue": [], "history": []}
+
+
+def _normalize_playlist_state(raw):
+    state = _empty_playlist_state()
+    if isinstance(raw, dict):
+        current = raw.get("current")
+        state["current"] = _project_id(current) if current else None
+        for key in ("queue", "history"):
+            values = raw.get(key)
+            if isinstance(values, list):
+                state[key] = [_project_id(value) for value in values if value]
+    return state
+
+
+def _write_playlist_state(state):
+    state = _normalize_playlist_state(state)
+    temp_path = PLAYLIST_STATE_PATH + ".saving"
+    with open(temp_path, "w", encoding="utf-8") as fh:
+        json.dump(state, fh, ensure_ascii=False, indent=2)
+    os.replace(temp_path, PLAYLIST_STATE_PATH)
+    return state
+
+
+def _read_playlist_state():
+    if not os.path.isfile(PLAYLIST_STATE_PATH):
+        return _write_playlist_state(_empty_playlist_state())
+    try:
+        with open(PLAYLIST_STATE_PATH, "r", encoding="utf-8") as fh:
+            return _normalize_playlist_state(json.load(fh))
+    except Exception as exc:
+        print(f"[PLAYLIST] invalid playlist.json, reset: {exc}", flush=True)
+        return _write_playlist_state(_empty_playlist_state())
+
+
+def _saved_project_folder(project_id):
+    return os.path.join(PROJECTS_DIR, _project_id(project_id))
+
+
+def _require_saved_project(project_id):
     project_id = _project_id(project_id)
-    candidate = project_id
-    index = 2
-    while os.path.exists(os.path.join(HISTORY_DIR, candidate)):
-        candidate = f"{project_id} ({index})"
-        index += 1
-    return candidate
+    folder = _saved_project_folder(project_id)
+    if not os.path.isdir(folder) or not os.path.isfile(os.path.join(folder, "Project.json")):
+        raise FileNotFoundError("Project not found in Projects")
+    return project_id, folder
 
 
-def _archive_playlist_project(project_id):
-    project_id = _project_id(project_id)
-    source = os.path.join(PLAYLIST_DIR, project_id)
-    if not os.path.isdir(source):
-        raise FileNotFoundError("Project not found in PlayList")
+def _set_current_project(project_id, source="projects"):
+    project_id, _ = _require_saved_project(project_id)
+    source = str(source or "projects").lower()
+    state = _read_playlist_state()
 
-    archived_id = _unique_history_id(project_id)
-    destination = os.path.join(HISTORY_DIR, archived_id)
-    shutil.move(source, destination)
-    playlist_archived_aliases[project_id] = archived_id
-    return archived_id
-
-
-def _set_current_project(project_id=None, source="playlist"):
-    source = str(source or "playlist").lower()
-
-    if source == "external":
-        playlist_session["current"] = None
-        return None
-
-    project_id = _project_id(project_id)
+    old_current = state.get("current")
+    if old_current:
+        state["history"].append(old_current)
 
     if source == "playlist":
-        current_id = _archive_playlist_project(project_id)
-        if current_id not in playlist_session["history"]:
-            playlist_session["history"].append(current_id)
-        playlist_session["current"] = current_id
-        return current_id
+        try:
+            state["queue"].remove(project_id)
+        except ValueError:
+            pass
 
-    if source == "history":
-        folder = os.path.join(HISTORY_DIR, project_id)
-        if not os.path.isdir(folder) or not os.path.isfile(os.path.join(folder, "Project.json")):
-            raise FileNotFoundError("Project not found in History")
-        if project_id not in playlist_session["history"]:
-            playlist_session["history"].append(project_id)
-        playlist_session["current"] = project_id
-        return project_id
-
-    raise ValueError("Unknown PlayList source")
+    state["current"] = project_id
+    _write_playlist_state(state)
+    print(f"[PLAYLIST] LOAD | current={project_id!r} | source={source}", flush=True)
+    return project_id
 
 
 def _playlist_projects_payload():
-    current = playlist_session.get("current")
-    history = [
-        item for item in playlist_session.get("history", [])
-        if item != current and os.path.isfile(os.path.join(HISTORY_DIR, item, "Project.json"))
-    ]
-    queue = _project_ids_in(PLAYLIST_DIR)
+    state = _read_playlist_state()
     projects = []
 
+    history = state.get("history", [])
     history_count = len(history)
     for index, project_id in enumerate(history):
-        folder = os.path.join(HISTORY_DIR, project_id)
+        folder = _saved_project_folder(project_id)
         projects.append({
             "id": project_id,
             "name": _project_name_from_folder(folder, project_id),
@@ -1421,8 +1413,8 @@ def _playlist_projects_payload():
             "position": index - history_count
         })
 
-    for index, project_id in enumerate(queue, start=1):
-        folder = os.path.join(PLAYLIST_DIR, project_id)
+    for index, project_id in enumerate(state.get("queue", []), start=1):
+        folder = _saved_project_folder(project_id)
         projects.append({
             "id": project_id,
             "name": _project_name_from_folder(folder, project_id),
@@ -1431,11 +1423,16 @@ def _playlist_projects_payload():
             "position": index
         })
 
+    current = state.get("current")
+    current_name = None
+    if current:
+        current_name = _project_name_from_folder(_saved_project_folder(current), current)
+
     return {
         "projects": projects,
         "current": current,
-        "root": PLAYLIST_DIR,
-        "history_root": HISTORY_DIR
+        "current_name": current_name,
+        "state_file": PLAYLIST_STATE_PATH
     }
 
 
@@ -1447,15 +1444,89 @@ def list_projects():
 @app.route("/projects/use", methods=["POST"])
 def use_project():
     data = request.get_json(silent=True) or {}
-    source = str(data.get("source") or "playlist").lower()
+    source = str(data.get("source") or "projects").lower()
     project_id = data.get("id")
+    if source == "history":
+        # History is a chronological log of completed/previous currents.
+        # Loading an old item does not erase the historical occurrence.
+        source = "history"
     try:
         current_id = _set_current_project(project_id, source)
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc)}), 404
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
     return jsonify({"ok": True, "current": current_id, **_playlist_projects_payload()})
+
+
+@app.route("/playlist/add", methods=["POST"])
+def playlist_add():
+    data = request.get_json(silent=True) or {}
+    try:
+        project_id, _ = _require_saved_project(data.get("id"))
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 404
+
+    state = _read_playlist_state()
+    queue = state["queue"]
+    raw_position = data.get("position")
+    try:
+        position = int(raw_position) if raw_position is not None else len(queue) + 1
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid queue position"}), 400
+    position = max(1, min(position, len(queue) + 1))
+    queue.insert(position - 1, project_id)
+    _write_playlist_state(state)
+    print(f"[PLAYLIST] ADD | {project_id!r} -> +{position}", flush=True)
+    return jsonify({"ok": True, **_playlist_projects_payload()})
+
+
+@app.route("/playlist/move", methods=["POST"])
+def playlist_move():
+    data = request.get_json(silent=True) or {}
+    state = _read_playlist_state()
+    queue = state["queue"]
+    try:
+        from_position = int(data.get("from_position"))
+        to_position = int(data.get("to_position"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid queue position"}), 400
+    if not (1 <= from_position <= len(queue) and 1 <= to_position <= len(queue)):
+        return jsonify({"error": "Queue position out of range"}), 400
+    item = queue.pop(from_position - 1)
+    queue.insert(to_position - 1, item)
+    _write_playlist_state(state)
+    print(f"[PLAYLIST] MOVE | +{from_position} -> +{to_position}", flush=True)
+    return jsonify({"ok": True, **_playlist_projects_payload()})
+
+
+@app.route("/playlist/delete", methods=["POST"])
+def playlist_delete():
+    data = request.get_json(silent=True) or {}
+    section = str(data.get("section") or "queue").lower()
+    state = _read_playlist_state()
+
+    if section == "queue":
+        try:
+            position = int(data.get("position"))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid queue position"}), 400
+        if not 1 <= position <= len(state["queue"]):
+            return jsonify({"error": "Queue position out of range"}), 400
+        removed = state["queue"].pop(position - 1)
+    elif section == "history":
+        try:
+            position = int(data.get("position"))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid history position"}), 400
+        index = len(state["history"]) + position
+        if position >= 0 or not 0 <= index < len(state["history"]):
+            return jsonify({"error": "History position out of range"}), 400
+        removed = state["history"].pop(index)
+    else:
+        return jsonify({"error": "Unknown playlist section"}), 400
+
+    _write_playlist_state(state)
+    print(f"[PLAYLIST] DELETE | section={section} | project={removed!r}", flush=True)
+    return jsonify({"ok": True, **_playlist_projects_payload()})
 
 
 def _project_payload_from_folder(folder, track_url_builder):
@@ -1628,7 +1699,7 @@ def save_project():
         if not track_files.get("original"):
             raise ValueError("Original track not received")
 
-        project_json["version"] = "5.1.14"
+        project_json["version"] = "5.1.17"
         project_json["id"] = project_id
         project_json["name"] = project_name
         project_json["tracks"] = track_files
@@ -1659,6 +1730,39 @@ def save_project():
         shutil.rmtree(temp_folder, ignore_errors=True)
         print(f"[PROJECT SAVE] ERROR | {type(exc).__name__}: {exc}", flush=True)
         print("=" * 72 + "\n", flush=True)
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/lyrics/save-current", methods=["POST"])
+def save_current_lyrics():
+    data = request.get_json(silent=True) or {}
+    lyrics = data.get("lyrics")
+    if not isinstance(lyrics, dict) or not isinstance(lyrics.get("lines"), list):
+        return jsonify({"error": "Invalid Lyrics.json"}), 400
+
+    current_id = _read_playlist_state().get("current")
+    if not current_id:
+        return jsonify({"error": "No current project"}), 400
+
+    folder = _saved_project_folder(current_id)
+    if not os.path.isdir(folder) or not os.path.isfile(os.path.join(folder, "Project.json")):
+        return jsonify({"error": "Current project folder not found in Projects"}), 404
+
+    lyrics_path = os.path.join(folder, "Lyrics.json")
+    temp_path = lyrics_path + ".saving"
+    try:
+        with open(temp_path, "w", encoding="utf-8") as fh:
+            json.dump(lyrics, fh, ensure_ascii=False, indent=2)
+        os.replace(temp_path, lyrics_path)
+        print(f"[LYRICS SAVE] SUCCESS | {lyrics_path}", flush=True)
+        return jsonify({"ok": True, "id": current_id, "path": lyrics_path})
+    except Exception as exc:
+        try:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        except Exception:
+            pass
+        print(f"[LYRICS SAVE] ERROR | {type(exc).__name__}: {exc}", flush=True)
         return jsonify({"error": str(exc)}), 500
 
 
@@ -1723,11 +1827,11 @@ def saved_project_track_file(project_id, filename):
 @app.route("/projects/<project_id>", methods=["GET"])
 def get_project(project_id):
     project_id = _project_id(project_id)
-    folder = os.path.join(PLAYLIST_DIR, project_id)
+    folder = _saved_project_folder(project_id)
     try:
         project, lyrics, tracks = _project_payload_from_folder(
             folder,
-            lambda filename: "/projects/{}/track/{}".format(project_id, filename)
+            lambda filename: "/saved-projects/{}/track/{}".format(project_id, filename)
         )
     except FileNotFoundError:
         return jsonify({"error": "Project not found"}), 404
@@ -1742,44 +1846,21 @@ def get_project(project_id):
 
 @app.route("/history-projects/<project_id>", methods=["GET"])
 def get_history_project(project_id):
-    project_id = _project_id(project_id)
-    folder = os.path.join(HISTORY_DIR, project_id)
-    try:
-        project, lyrics, tracks = _project_payload_from_folder(
-            folder,
-            lambda filename: "/history-projects/{}/track/{}".format(project_id, filename)
-        )
-    except FileNotFoundError:
-        return jsonify({"error": "History project not found"}), 404
-    return jsonify({
-        "id": project_id,
-        "name": project.get("name") or project_id,
-        "project": project,
-        "lyrics": lyrics,
-        "tracks": tracks
-    })
-
-
-def _playlist_track_folder(project_id):
-    project_id = _project_id(project_id)
-    playlist_folder = os.path.join(PLAYLIST_DIR, project_id, "tracks")
-    if os.path.isdir(playlist_folder):
-        return playlist_folder
-    history_id = playlist_archived_aliases.get(project_id, project_id)
-    return os.path.join(HISTORY_DIR, history_id, "tracks")
+    # History stores only project references; project bytes live in Projects.
+    return get_project(project_id)
 
 
 @app.route("/projects/<project_id>/track/<path:filename>", methods=["GET"])
 def project_track_file(project_id, filename):
-    return send_from_directory(_playlist_track_folder(project_id), filename)
+    return send_from_directory(
+        os.path.join(_saved_project_folder(project_id), "tracks"),
+        filename
+    )
 
 
 @app.route("/history-projects/<project_id>/track/<path:filename>", methods=["GET"])
 def history_project_track_file(project_id, filename):
-    return send_from_directory(
-        os.path.join(HISTORY_DIR, _project_id(project_id), "tracks"),
-        filename
-    )
+    return project_track_file(project_id, filename)
 
 
 def print_restart_command():
@@ -1791,8 +1872,8 @@ def print_restart_command():
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("MyNus Server 5.1.14")
-    print(r"5.1.14: Full Screen PlayList — 0 = реально загруженный проект; + = физическое содержимое PlayList; - = открытые в текущей сессии. Открытый из PlayList проект автоматически переносится в History.")
+    print("MyNus Server 5.1.17")
+    print(r"5.1.17: PlayList state = C:\MyNus\playlist.json; project data lives only in C:\MyNus\Projects. current / queue / history are JSON state. Tab переключает Lyrics / Karaoke.")
     print("=" * 72 + "\n")
 
     try:
