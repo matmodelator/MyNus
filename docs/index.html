@@ -14,7 +14,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.1.17</title>
+  <title>MyNus 5.1.18</title>
 
 
  <style>
@@ -6900,6 +6900,16 @@ function playCurrentMode() {
   const time =
     getCurrentTime();
 
+  const playbackEnd =
+    mode === "master" && masterDuration > 0
+      ? masterDuration
+      : duration;
+
+  if (lyricsFullScreenMode && playbackEnd > 0 && time < playbackEnd - 0.25) {
+    karaokeFinishTriggered = false;
+    closeKaraokeFinishedDialog();
+  }
+
 
   syncAllTo(
     time
@@ -13744,7 +13754,26 @@ lyricsFullScreenBackTransportBtn?.addEventListener("click", event => {
 });
 lyricsFullScreenStopBtn?.addEventListener("click", event => {
   event.stopPropagation();
-  stopBtn?.click();
+
+  // Full Screen STOP means: finish the song now.
+  // Sequencer Stop is intentionally not used here because it returns to 0.
+  pauseAll();
+
+  const endTime = Math.max(
+    0,
+    mode === "master" && masterDuration > 0
+      ? masterDuration
+      : duration
+  );
+
+  syncAllTo(endTime);
+  updatePlayheads();
+  updateMasterCursor();
+  updateTimeDisplay();
+  syncScrollTo(getTimelineWidth());
+
+  karaokeFinishTriggered = true;
+  openKaraokeFinishedDialog();
 });
 lyricsFullScreenPauseBtn?.addEventListener("click", event => {
   event.stopPropagation();
@@ -17256,10 +17285,10 @@ function startAnimation() {
 
         if (lyricsFullScreenMode) {
           pauseAll();
-          openKaraokeFinishedDialog().catch(error => {
-            console.error(error);
-            status.textContent = error.message;
-          });
+          if (!karaokeFinishTriggered) {
+            karaokeFinishTriggered = true;
+            openKaraokeFinishedDialog();
+          }
           return;
         }
 
@@ -18524,7 +18553,7 @@ updateMasterHistoryButtons();
 
 
 // ========================================
-// PROJECT / FULL SCREEN PLAYLIST | 5.1.17
+// PROJECT / FULL SCREEN PLAYLIST | 5.1.18
 // Project = 12 audio slots + Lyrics.json + Project.json
 // ========================================
 const saveProjectBtn = document.getElementById("saveProjectBtn");
@@ -18590,7 +18619,7 @@ function projectLyricsJson() {
 
 function projectStateJson() {
   return {
-    version: "5.1.17",
+    version: "5.1.18",
     sequencer: {
       mode,
       fragmentStart,
@@ -18670,13 +18699,16 @@ async function saveCurrentProject(projectName, savePath, conflictAction = "", op
   return data;
 }
 
+let karaokePlaylistSnapshot = [];
+
 async function fetchPlaylistProjects() {
   const response = await fetch("/projects");
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "PlayList unavailable");
   currentPlaylistProject = data.current || null;
   if (data.state_file) playlistStatePath = data.state_file;
-  return Array.isArray(data.projects) ? data.projects : [];
+  karaokePlaylistSnapshot = Array.isArray(data.projects) ? data.projects : [];
+  return karaokePlaylistSnapshot;
 }
 
 async function fetchSavedProjects() {
@@ -18858,6 +18890,18 @@ const karaokeSaveCurrentProjectFlag = document.getElementById("karaokeSaveCurren
 const karaokeFinishedMessage = document.getElementById("karaokeFinishedMessage");
 const karaokeFinishedCancelBtn = document.getElementById("karaokeFinishedCancelBtn");
 let karaokeFinishActionRunning = false;
+let karaokeFinishTriggered = false;
+
+function karaokeHasNextProject() {
+  return karaokePlaylistSnapshot.some(project => project.status === "waiting");
+}
+
+function resetKaraokeFinishedButtons() {
+  if (karaokePlayAgainBtn) karaokePlayAgainBtn.disabled = false;
+  if (karaokeLoadAnotherBtn) karaokeLoadAnotherBtn.disabled = false;
+  if (karaokeFinishedCancelBtn) karaokeFinishedCancelBtn.disabled = false;
+  if (karaokeNextProjectBtn) karaokeNextProjectBtn.disabled = !karaokeHasNextProject();
+}
 
 async function saveCurrentPlaylistProjectIfRequested() {
   if (!karaokeSaveCurrentProjectFlag?.checked) return;
@@ -18876,13 +18920,11 @@ async function saveCurrentPlaylistProjectIfRequested() {
   }
 }
 
-async function openKaraokeFinishedDialog() {
+function openKaraokeFinishedDialog() {
   if (!lyricsFullScreenMode || !karaokeFinishedDialog || karaokeFinishedDialog.classList.contains("open")) return;
   karaokeFinishActionRunning = false;
   if (karaokeFinishedMessage) karaokeFinishedMessage.textContent = "";
-  const projects = await fetchPlaylistProjects().catch(() => []);
-  const hasNext = projects.some(project => project.status === "waiting");
-  if (karaokeNextProjectBtn) karaokeNextProjectBtn.disabled = !hasNext;
+  resetKaraokeFinishedButtons();
   karaokeFinishedDialog.classList.add("open");
 }
 
@@ -18902,6 +18944,7 @@ async function runKaraokeFinishAction(action) {
 
     if (action === "again") {
       closeKaraokeFinishedDialog();
+      karaokeFinishTriggered = false;
       syncAllTo(0);
       updatePlayheads();
       updateMasterCursor();
@@ -18912,25 +18955,31 @@ async function runKaraokeFinishAction(action) {
       const nextProject = projects.find(project => project.status === "waiting") || null;
       if (!nextProject) throw new Error("No next project in playlist");
       closeKaraokeFinishedDialog();
-      await loadProjectById(nextProject.id, true, "playlist");
+      const loaded = await loadProjectById(nextProject.id, true, "playlist");
+      if (loaded) {
+        karaokeFinishTriggered = false;
+      } else if (lyricsFullScreenMode && karaokeFinishedDialog) {
+        karaokeFinishedDialog.classList.add("open");
+      }
     } else if (action === "other") {
       closeKaraokeFinishedDialog();
-      await loadProjectById("", true, "folder");
+      const loaded = await loadProjectById("", true, "folder");
+      if (loaded) {
+        karaokeFinishTriggered = false;
+      } else if (lyricsFullScreenMode && karaokeFinishedDialog) {
+        karaokeFinishedDialog.classList.add("open");
+      }
     }
   } catch (error) {
     console.error(error);
+    if (lyricsFullScreenMode && karaokeFinishTriggered && karaokeFinishedDialog) {
+      karaokeFinishedDialog.classList.add("open");
+    }
     if (karaokeFinishedMessage) karaokeFinishedMessage.textContent = error.message;
     karaokeFinishActionRunning = false;
   } finally {
-    if (!karaokeFinishedDialog?.classList.contains("open")) return;
-    [karaokePlayAgainBtn, karaokeLoadAnotherBtn, karaokeFinishedCancelBtn].forEach(btn => {
-      if (btn) btn.disabled = false;
-    });
-    try {
-      const projects = await fetchPlaylistProjects();
-      if (karaokeNextProjectBtn) karaokeNextProjectBtn.disabled = !projects.some(project => project.status === "waiting");
-    } catch (_) {
-      if (karaokeNextProjectBtn) karaokeNextProjectBtn.disabled = true;
+    if (karaokeFinishedDialog?.classList.contains("open")) {
+      resetKaraokeFinishedButtons();
     }
   }
 }
@@ -19082,6 +19131,9 @@ async function loadProjectById(id, keepFullScreen = false, source = "projects") 
       }
       return false;
     }
+
+    karaokeFinishTriggered = false;
+    closeKaraokeFinishedDialog();
 
     const project = data.project || {};
     const lyrics = data.lyrics || {};
@@ -19434,6 +19486,8 @@ document.addEventListener("click", event => {
 
 <div id="service-console">
 PlayList Full Screen: состояние хранится только в C:\MyNus\playlist.json: current / queue / history. Проекты физически хранятся только в C:\MyNus\Projects. + Add Project позволяет вставить проект в любую позицию +N; очередь можно переставлять drag & drop; ПКМ удаляет запись только из PlayList. Tab = Lyrics ⇄ Karaoke. | 5.1.17
+Karaoke Song Finished: окно открывается мгновенно без ожидания /projects; конец песни срабатывает один раз; Cancel не вызывает повторное открытие; кнопки всегда восстанавливаются при следующем показе; Next проверяет очередь только при нажатии. | 5.1.18
+Full Screen Stop: завершает воспроизведение, переводит транспорт в конец песни и сразу открывает Song finished; возврат в начало остаётся отдельной кнопкой Back. | 5.1.18
 PROJECT SAVE/LOAD: Projects отделён от Full Screen PlayList. По умолчанию C:\MyNus\Projects; путь SAVE можно изменить; повторное имя — Overwrite / Rename / Save Copy / Cancel. LOAD полностью заменяет отсутствующие дорожки. Project SAVE берёт текущее состояние Lyrics. На стартовом экране добавлен Open Project. | 5.1.17
 KARAOKE LOAD: progress 0–100% with phases Opening project / Loading Original / Separating stems / Loading tracks / Restoring Sequencer / Drawing waveforms / Loading Lyrics / Making structure / Preparing Karaoke / Using Effects / Ready. | 5.1.17
 </div>
