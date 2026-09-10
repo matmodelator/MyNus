@@ -1,3 +1,4 @@
+<!-- MyNus 5.2.5 | Рабочая загрузка структуры через фулскрин!!!!Detailed Project LOAD trace: source, command, function, parameters, result and timing; synchronized HTML Service Console + CMD -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -14,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.2.4</title>
+  <title>MyNus 5.2.5</title>
 
 
  <style>
@@ -878,6 +879,7 @@
     }
 
     /* SAVE Project из Lyrics Editor должен открываться поверх Lyrics Editor. */
+    #loadProjectDialog,
     #saveProjectDialog,
     #projectConflictDialog {
       z-index: 3200;
@@ -4118,7 +4120,7 @@
 </div>
 
 <!-- ========================================
-     NEW PROJECT PROMPT | 5.2.4
+     NEW PROJECT PROMPT | 5.2.5
 ======================================== -->
 <div id="newProjectPromptDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -18845,7 +18847,7 @@ updateMasterHistoryButtons();
 
 
 // ========================================
-// PROJECT / PLAYLIST | 5.2.4
+// PROJECT / PLAYLIST | 5.2.5
 // Project = 12 audio slots + Lyrics.json + Project.json
 // ========================================
 const saveProjectBtn = document.getElementById("saveProjectBtn");
@@ -18924,7 +18926,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "5.2.4",
+    version: "5.2.5",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -19042,8 +19044,8 @@ async function fetchSavedProjects() {
 async function markProjectInUse(id, source = "projects", mode = null) {
   const response = await fetch("/projects/use", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id, source, mode })
+    headers: loadTraceHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ id, source, mode, trace_id: projectLoadTraceId || null })
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "PlayList update failed");
@@ -19154,7 +19156,7 @@ function renderFullScreenPlaylist(projects = karaokePlaylistSnapshot) {
       // Emergency manual takeover through Play List:
       // loaded Track becomes 0; previous 0 becomes +1.
       beginProjectLoadTrace("Play List direct Track selection", track.id, source);
-      await reportProjectLoadTrace("PLAYLIST TRACK CLICK", { track_id: track.id, status: track.status || null });
+      await reportProjectLoadTrace("PLAYLIST TRACK CLICK", { command: "Full Screen Play List -> Track click", function: "loadProjectById", parameters: { track_id: track.id, source, status: track.status || null }, result: "selected" });
       await loadProjectById(track.id, source);
       await markProjectInUse(track.id, source, "takeover");
       await refreshFullScreenPlaylist();
@@ -19338,7 +19340,7 @@ async function runKaraokeFinishAction(action) {
       if (!nextProject) throw new Error("No next project in playlist");
       closeKaraokeFinishedDialog();
       beginProjectLoadTrace("Song Finished Next", nextProject.id, "playlist");
-      await reportProjectLoadTrace("NEXT TRACK LOAD START", { track_id: nextProject.id });
+      await reportProjectLoadTrace("NEXT TRACK LOAD START", { command: "Song Finished -> Open next", function: "runKaraokeFinishAction -> loadProjectById", parameters: { track_id: nextProject.id, source: "playlist" }, result: "selected" });
       const loaded = await loadProjectById(nextProject.id, "playlist");
       if (loaded) {
         await markProjectInUse(nextProject.id, "playlist");
@@ -19349,14 +19351,15 @@ async function runKaraokeFinishAction(action) {
       }
     } else if (action === "other") {
       closeKaraokeFinishedDialog();
-      beginProjectLoadTrace("Load another Project folder", null, "folder");
-      await reportProjectLoadTrace("FOLDER PROJECT LOAD START");
-      const loaded = await loadProjectById("", "folder");
-      if (loaded) {
-        karaokeFinishTriggered = false;
-      } else if (isKaraokeUiMode() && karaokeFinishedDialog) {
-        karaokeFinishedDialog.classList.add("open");
-      }
+      beginProjectLoadTrace("Open Project button", null, "projects");
+      await reportProjectLoadTrace("OPEN PROJECT BUTTON CLICK", {
+        command: "Song Finished -> Load another -> Open Project",
+        function: "openLoadProjectDialog",
+        parameters: {},
+        result: "calling"
+      });
+      await openLoadProjectDialog();
+      karaokeFinishActionRunning = false;
     }
   } catch (error) {
     console.error(error);
@@ -19433,34 +19436,78 @@ const projectLoaderFill = document.getElementById("projectLoaderFill");
 const projectLoaderPercent = document.getElementById("projectLoaderPercent");
 let projectLoading = false;
 
-// Диагностика полной цепочки LOAD Project -> Full Screen.
-// Клиент отправляет этапы на сервер, а сервер печатает их одной нумерованной трассой.
+// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.2.5.
+// Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
+const MYNUS_CLIENT_VERSION = "5.2.5";
+const MYNUS_CLIENT_CHANGE = "Detailed Project LOAD trace: source, command, function, parameters, result and timing; synchronized HTML Service Console + CMD";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
 let projectLoadTraceSource = null;
+let projectLoadTraceStartedAt = 0;
+let projectLoadTraceEvent = 0;
 
 function beginProjectLoadTrace(trigger, projectId = null, source = null) {
   projectLoadTraceId = "load-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
   projectLoadTraceProject = projectId || null;
   projectLoadTraceSource = source || null;
-  void reportProjectLoadTrace("TRACE START", { trigger });
+  projectLoadTraceStartedAt = performance.now();
+  projectLoadTraceEvent = 0;
+  void reportProjectLoadTrace("TRACE START", {
+    command: trigger,
+    function: "beginProjectLoadTrace",
+    parameters: { trigger, projectId, source },
+    result: "trace created"
+  });
+}
+
+function loadTraceHeaders(extra = {}) {
+  const headers = { ...extra };
+  if (projectLoadTraceId) headers["X-MyNus-Load-Trace"] = projectLoadTraceId;
+  return headers;
+}
+
+function withLoadTraceUrl(url, trackId = null) {
+  if (!url || !projectLoadTraceId) return url;
+  const separator = String(url).includes("?") ? "&" : "?";
+  return String(url) + separator
+    + "trace_id=" + encodeURIComponent(projectLoadTraceId)
+    + (trackId ? "&track_id=" + encodeURIComponent(trackId) : "");
 }
 
 async function reportProjectLoadTrace(stage, details = {}) {
+  projectLoadTraceEvent += 1;
+  const elapsedMs = projectLoadTraceStartedAt ? Math.round(performance.now() - projectLoadTraceStartedAt) : 0;
+  const payload = {
+    version: MYNUS_CLIENT_VERSION,
+    change: MYNUS_CLIENT_CHANGE,
+    trace_id: projectLoadTraceId || "no-trace",
+    event: projectLoadTraceEvent,
+    stage: String(stage || "UNKNOWN"),
+    project_id: projectLoadTraceProject,
+    source: projectLoadTraceSource,
+    ui_mode: uiMode,
+    project_loading: Boolean(projectLoading),
+    elapsed_ms: elapsedMs,
+    client_time: new Date().toISOString(),
+    command: details.command || null,
+    function: details.function || null,
+    parameters: details.parameters || null,
+    result: details.result ?? null,
+    details
+  };
+
+  // HTML Service Console перехватывает console.log и показывает тот же trace пользователю.
+  console.log(`[LOAD TRACE][${payload.trace_id}][${String(payload.event).padStart(3, "0")}] ${payload.stage}`, payload);
+
   try {
-    await fetch("/debug/load-trace", {
+    const response = await fetch("/debug/load-trace", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        trace_id: projectLoadTraceId || "no-trace",
-        stage: String(stage || "UNKNOWN"),
-        project_id: projectLoadTraceProject,
-        source: projectLoadTraceSource,
-        ui_mode: uiMode,
-        project_loading: Boolean(projectLoading),
-        details
-      })
+      headers: loadTraceHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(payload)
     });
+    if (!response.ok) {
+      console.warn(`[LOAD TRACE][${payload.trace_id}] server logger HTTP ${response.status}`);
+    }
   } catch (error) {
     // Диагностика не должна ломать сам LOAD даже при недоступном серверном логгере.
     console.warn("[LOAD TRACE] server logger unavailable", error);
@@ -19507,7 +19554,6 @@ async function advanceProjectLoad(index, holdMs = 0) {
   setProjectLoadPhase(index);
   const phase = projectLoadPhases[Math.max(0, Math.min(index, projectLoadPhases.length - 1))];
   await reportProjectLoadTrace("LOADER PHASE", { index, label: phase.label, percent: phase.percent });
-  await new Promise(resolve => requestAnimationFrame(resolve));
   if (holdMs > 0) await new Promise(resolve => setTimeout(resolve, holdMs));
 }
 
@@ -19643,21 +19689,31 @@ async function loadProjectById(id, source = "projects") {
     projectLoadTraceProject = id || projectLoadTraceProject;
     projectLoadTraceSource = source;
   }
-  await reportProjectLoadTrace("LOAD FUNCTION ENTER", { id, source });
+  await reportProjectLoadTrace("LOAD FUNCTION ENTER", {
+    command: "LOAD Project",
+    function: "loadProjectById",
+    parameters: { id, source },
+    result: "entered"
+  });
+  await reportProjectLoadTrace("COMMAND", { command: "pause current playback", function: "pauseAll", parameters: {}, result: "calling" });
   pauseAll();
+  await reportProjectLoadTrace("COMMAND RESULT", { command: "pause current playback", function: "pauseAll", parameters: {}, result: "done" });
   status.textContent = "Loading project...";
+  await reportProjectLoadTrace("COMMAND", { command: "show Project loader", function: "showProjectLoader", parameters: {}, result: "calling" });
   await showProjectLoader();
 
   try {
-    let response;
-    if (source === "folder") {
-      response = await fetch("/projects/open-folder", { method: "POST" });
-    } else {
-      response = await fetch("/saved-projects/" + encodeURIComponent(id));
-    }
+    const projectUrl = "/saved-projects/" + encodeURIComponent(id);
+    await reportProjectLoadTrace("HTTP REQUEST", { command: "GET " + projectUrl, function: "fetch", parameters: { method: "GET", id, source }, result: "sending" });
+    const response = await fetch(projectUrl, { headers: loadTraceHeaders() });
 
     const data = await response.json().catch(() => ({}));
-    await reportProjectLoadTrace("PROJECT PAYLOAD RESPONSE", { http_status: response.status, ok: response.ok, cancelled: Boolean(data.cancelled) });
+    await reportProjectLoadTrace("PROJECT PAYLOAD RESPONSE", {
+      command: "parse Project payload",
+      function: "Response.json",
+      parameters: { http_status: response.status, ok: response.ok, cancelled: Boolean(data.cancelled) },
+      result: response.ok ? "payload received" : "HTTP error"
+    });
     if (!response.ok) throw new Error(data.error || "LOAD Project failed");
     if (data.cancelled) {
       status.textContent = "Project loading cancelled";
@@ -19668,6 +19724,7 @@ async function loadProjectById(id, source = "projects") {
     }
 
     karaokeFinishTriggered = false;
+    await reportProjectLoadTrace("COMMAND", { command: "close Song Finished dialog", function: "closeKaraokeFinishedDialog", parameters: {}, result: "calling" });
     closeKaraokeFinishedDialog();
 
     const project = data.project || {};
@@ -19676,13 +19733,15 @@ async function loadProjectById(id, source = "projects") {
     if (!tracks.original) throw new Error("Project Original track not found");
 
     // uiMode is deliberately NOT changed by LOAD.
-    await reportProjectLoadTrace("CLEAR PROJECT STATE START");
+    await reportProjectLoadTrace("CLEAR PROJECT STATE START", { command: "clear previous working material", function: "clearProjectState", parameters: { preserve_playlist: true, ui_mode_before: uiMode }, result: "calling" });
     clearProjectState();
-    await reportProjectLoadTrace("CLEAR PROJECT STATE DONE");
+    await reportProjectLoadTrace("CLEAR PROJECT STATE DONE", { command: "clear previous working material", function: "clearProjectState", parameters: { preserve_playlist: true }, result: "done" });
 
     await advanceProjectLoad(1);
 
-    const originalResponse = await fetch(tracks.original);
+    const originalUrl = withLoadTraceUrl(tracks.original, "original");
+    await reportProjectLoadTrace("HTTP REQUEST", { command: "GET Original track", function: "fetch", parameters: { track: "original", url: originalUrl }, result: "sending" });
+    const originalResponse = await fetch(originalUrl, { headers: loadTraceHeaders() });
     if (!originalResponse.ok) throw new Error("Project Original track not found");
     const originalBlob = await originalResponse.blob();
     const originalFile = new File(
@@ -19701,7 +19760,12 @@ async function loadProjectById(id, source = "projects") {
     if (originalFileURL) URL.revokeObjectURL(originalFileURL);
     originalFileURL = URL.createObjectURL(originalFile);
     originalAudio.src = originalFileURL;
-    await reportProjectLoadTrace("ORIGINAL ATTACHED", { filename: originalFile.name, bytes: originalBlob.size });
+    await reportProjectLoadTrace("ORIGINAL ATTACHED", {
+      command: "attach Original to audio element",
+      function: "URL.createObjectURL + originalAudio.src",
+      parameters: { filename: originalFile.name, bytes: originalBlob.size, mime: originalBlob.type || "audio/mpeg" },
+      result: "attached"
+    });
 
     await advanceProjectLoad(2, 180);
     await advanceProjectLoad(3);
@@ -19715,8 +19779,10 @@ async function loadProjectById(id, source = "projects") {
 
     currentStemURLs = {};
     stemIds.forEach(stemId => {
-      const url = tracks[stemId] || null;
+      const rawUrl = tracks[stemId] || null;
+      const url = rawUrl ? withLoadTraceUrl(rawUrl, stemId) : null;
       currentStemURLs[stemId] = url;
+      void reportProjectLoadTrace("TRACK SOURCE", { command: "assign Project track", function: "stemAudio[stemId].src", parameters: { stemId, url, present: Boolean(url) }, result: url ? "assigned" : "cleared" });
       if (url) {
         stemAudio[stemId].src = url;
         stemAudio[stemId].load();
@@ -19736,7 +19802,9 @@ async function loadProjectById(id, source = "projects") {
     });
 
     await advanceProjectLoad(4);
+    await reportProjectLoadTrace("SEQUENCER RESTORE START", { command: "reset Sequencer state", function: "resetProjectSequencerStateForLoad", parameters: {}, result: "calling" });
     resetProjectSequencerStateForLoad();
+    await reportProjectLoadTrace("SEQUENCER RESTORE", { command: "restore Sequencer state", function: "restoreProjectSequencerState", parameters: { keys: Object.keys(project.sequencer || {}) }, result: "calling" });
     restoreProjectSequencerState(project.sequencer || {});
 
     vocalStartTimeRaw = Number.isFinite(Number(project.vocal_start)) ? Number(project.vocal_start) : null;
@@ -19748,13 +19816,16 @@ async function loadProjectById(id, source = "projects") {
     stemIds.forEach(stemId => {
       if (currentStemURLs[stemId]) metadataLoads.push(waitForMetadata(stemAudio[stemId]));
     });
+    await reportProjectLoadTrace("TRACK METADATA WAIT", { command: "wait for audio metadata", function: "waitForMetadata + Promise.all", parameters: { audio_elements: metadataLoads.length }, result: "waiting" });
     await Promise.all(metadataLoads);
 
     duration = originalAudio.duration || 0;
     await reportProjectLoadTrace("TRACK METADATA READY", { duration, stems_loaded: stemIds.filter(stemId => Boolean(currentStemURLs[stemId])) });
 
     await advanceProjectLoad(5);
+    await reportProjectLoadTrace("WAVEFORMS START", { command: "load waveform data", function: "loadWaveforms", parameters: { original: originalFile.name, stems: stemIds.filter(stemId => Boolean(currentStemURLs[stemId])) }, result: "calling" });
     await loadWaveforms(originalFile, currentStemURLs);
+    await reportProjectLoadTrace("WAVEFORMS READY", { command: "load waveform data", function: "loadWaveforms", parameters: {}, result: "done" });
 
     const savedZoom = Number(project.sequencer?.pixelsPerSecond);
     const fitWidth = Math.max(1, masterTimeline.clientWidth);
@@ -19779,16 +19850,19 @@ async function loadProjectById(id, source = "projects") {
 
     await advanceProjectLoad(6);
 
+    await reportProjectLoadTrace("LYRICS RESTORE START", { command: "restore Lyrics.json", function: "restoreProjectLyricsJson", parameters: { lines: Array.isArray(lyrics?.lines) ? lyrics.lines.length : 0, structure: Array.isArray(lyrics?.structure) ? lyrics.structure.length : 0, language: lyrics?.language || null }, result: "calling" });
     restoreProjectLyricsJson(lyrics);
-    await reportProjectLoadTrace("LYRICS RESTORED", { lines: Array.isArray(lyrics?.lines) ? lyrics.lines.length : 0, structure: Array.isArray(lyrics?.structure) ? lyrics.structure.length : 0 });
+    await reportProjectLoadTrace("LYRICS RESTORED", { command: "restore Lyrics.json", function: "restoreProjectLyricsJson", parameters: { lines: Array.isArray(lyrics?.lines) ? lyrics.lines.length : 0, structure: Array.isArray(lyrics?.structure) ? lyrics.structure.length : 0 }, result: "done" });
+    await reportProjectLoadTrace("LYRICS RENDER", { command: "render Lyrics and editor", function: "renderLyrics + renderLyricsEditor", parameters: {}, result: "calling" });
     renderLyrics();
     renderLyricsEditor();
 
     await advanceProjectLoad(7);
 
     // Restore Structure and its timeline as one visual unit.
+    await reportProjectLoadTrace("STRUCTURE RENDER START", { command: "restore Structure timeline", function: "renderLyricsStructure", parameters: { segments: Array.isArray(lyricsStructureDraft) ? lyricsStructureDraft.length : 0 }, result: "calling" });
     renderLyricsStructure();
-    await reportProjectLoadTrace("STRUCTURE RENDERED", { segments: Array.isArray(lyricsStructureDraft) ? lyricsStructureDraft.length : 0 });
+    await reportProjectLoadTrace("STRUCTURE RENDERED", { command: "restore Structure timeline", function: "renderLyricsStructure", parameters: { segments: Array.isArray(lyricsStructureDraft) ? lyricsStructureDraft.length : 0 }, result: "done" });
 
     updateCropButtons();
     updateMixButtons();
@@ -19796,22 +19870,27 @@ async function loadProjectById(id, source = "projects") {
 
     await advanceProjectLoad(8);
 
+    await reportProjectLoadTrace("FX RESTORE START", { command: "apply track FX", function: "applyFxSettings", parameters: { stemIds: [...stemIds] }, result: "calling" });
     stemIds.forEach(stemId => applyFxSettings(stemId));
+    await reportProjectLoadTrace("MIX RESTORE", { command: "apply mix", function: "applyMix", parameters: {}, result: "calling" });
     applyMix();
 
     await advanceProjectLoad(9);
 
+    await reportProjectLoadTrace("PROJECT ACTIVATE", { command: "set active Project", function: "setProjectActive", parameters: { id: data.id || id }, result: "calling" });
     setProjectActive(data.id || id);
     status.textContent = "Project loaded: " + (data.name || id);
-    await reportProjectLoadTrace("PROJECT ACTIVE", { active_id: data.id || id, name: data.name || id });
+    await reportProjectLoadTrace("PROJECT ACTIVE", { command: "set active Project", function: "setProjectActive", parameters: { active_id: data.id || id, name: data.name || id }, result: "done" });
 
+    await reportProjectLoadTrace("COMMAND", { command: "finish Project loader", function: "finishProjectLoader", parameters: {}, result: "calling" });
     await finishProjectLoader();
-    await reportProjectLoadTrace("LOAD FUNCTION SUCCESS", { ui_mode_after_load: uiMode });
+    await reportProjectLoadTrace("LOAD FUNCTION SUCCESS", { command: "LOAD Project complete", function: "loadProjectById", parameters: { id, source, ui_mode_after_load: uiMode }, result: "success" });
 
     // uiMode remains exactly what it was before LOAD.
     // Play List bookkeeping is intentionally outside Project LOAD.
     return true;
   } catch (error) {
+    await reportProjectLoadTrace("LOAD EXCEPTION", { command: "LOAD Project", function: "loadProjectById", parameters: { id, source }, result: "error", error: String(error?.stack || error?.message || error) });
     await failProjectLoader(error);
     throw error;
   }
@@ -19839,7 +19918,7 @@ async function openLoadProjectDialog() {
       button.addEventListener("click", async () => {
         try {
           beginProjectLoadTrace("Open Project list item", project.id, "projects");
-          await reportProjectLoadTrace("PROJECT SELECTED", { name: project.name });
+          await reportProjectLoadTrace("PROJECT SELECTED", { command: "Open Project dialog -> select Project", function: "loadProjectById", parameters: { id: project.id, name: project.name, source: "projects" }, result: "selected" });
           await loadProjectById(project.id, "projects");
           await reportProjectLoadTrace("PLAYLIST CURRENT UPDATE START", { mode: "open" });
           await markProjectInUse(project.id, "projects", "open");
@@ -20109,6 +20188,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
+console.log("MyNus 5.2.5 | Detailed Project LOAD trace: source, command, function, parameters, result and timing; synchronized HTML Service Console + CMD");
+console.log("[SERVICE CONSOLE] LOAD diagnostics enabled | endpoint=/debug/load-trace | version=5.2.5");
 </script>
 
 <div class="row" id="build-down">
