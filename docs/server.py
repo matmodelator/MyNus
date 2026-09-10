@@ -1,5 +1,5 @@
 # ========================================
-# PLAYLIST / SAVE / LOAD PROJECT | 5.2.2
+# TRACE | 5.2.4
 # ========================================
 
 # ========================================
@@ -66,6 +66,7 @@ opened_project_folders = {}
 # ========================================
 
 @app.route("/")
+# HTTP-обработчик этого маршрута.
 def index():
     # Play List history belongs to the current index session only.
     # Reloading index clears -N history but preserves current and queue.
@@ -86,6 +87,7 @@ def index():
 # ========================================
 
 @app.route("/separate", methods=["POST"])
+# Локальная серверная операция этого блока.
 def separate():
 
     if "audio" not in request.files:
@@ -183,6 +185,7 @@ def separate():
 # VOCAL START\END DETECTION
 # ========================================
 
+# Локальная серверная операция этого блока.
 def detect_vocal_range(
     vocals_path
 ):
@@ -260,6 +263,7 @@ def detect_vocal_range(
 # WHISPERX LYRICS
 # ========================================
 
+# Локальная серверная операция этого блока.
 def detect_lyrics(vocal_path):
 
     import whisperx
@@ -391,6 +395,7 @@ def detect_lyrics(vocal_path):
 # DEMUCS PROCESS
 # ========================================
 
+# Локальная серверная операция этого блока.
 def run_demucs(
     job_id,
     input_path,
@@ -646,6 +651,7 @@ def run_demucs(
 # ========================================
 
 @app.route("/progress/<job_id>")
+# Локальная серверная операция этого блока.
 def progress(job_id):
 
     if job_id not in jobs:
@@ -667,6 +673,7 @@ def progress(job_id):
 @app.route(
     "/results/<job_id>/<filename>"
 )
+# Локальная серверная операция этого блока.
 def result_file(
     job_id,
     filename
@@ -688,6 +695,7 @@ def result_file(
 # AUDIO EXPORT
 # ========================================
 
+# Локальная серверная операция этого блока.
 def find_ffmpeg():
 
     ffmpeg = shutil.which(
@@ -754,6 +762,7 @@ def find_ffmpeg():
     "/export-audio",
     methods=["POST"]
 )
+# Локальная серверная операция этого блока.
 def export_audio():
 
     if "audio" not in request.files:
@@ -1076,6 +1085,7 @@ def export_audio():
 
 _language_tools = {}
 
+# Локальная серверная операция этого блока.
 def normalize_language(language):
     value = str(language or "ru-RU").lower()
     if value.startswith("en"):
@@ -1084,6 +1094,7 @@ def normalize_language(language):
 
 
 
+# Локальная серверная операция этого блока.
 def get_language_tool(language="ru-RU"):
 
     if language not in _language_tools:
@@ -1102,6 +1113,7 @@ def get_language_tool(language="ru-RU"):
     "/spellcheck",
     methods=["POST"]
 )
+# Локальная серверная операция этого блока.
 def spellcheck():
 
     data = request.get_json(
@@ -1176,6 +1188,7 @@ def spellcheck():
 
 SUPPORTED_LYRICS_LANGUAGES = {"ru","en","es","it","fr","uk"}
 
+# Локальная серверная операция этого блока.
 def _fallback_language(text):
     value = str(text or "").strip()
     if re.search(r"[ІіЇїЄєҐґ]", value):
@@ -1196,6 +1209,7 @@ def _fallback_language(text):
     }
     return max(scores,key=scores.get) if max(scores.values()) else "en"
 
+# Локальная серверная операция этого блока.
 def detect_lyrics_line_language(text):
     value = str(text or "").strip()
     if not value:
@@ -1214,6 +1228,7 @@ def detect_lyrics_line_language(text):
     return _fallback_language(value)
 
 @app.route("/detect-lyrics-languages", methods=["POST"])
+# Локальная серверная операция этого блока.
 def detect_lyrics_languages():
     data = request.get_json(silent=True) or {}
     lines = data.get("lines", [])
@@ -1263,6 +1278,7 @@ _CHARS = {
 "û":"у","ü":"у","v":"в","w":"у","x":"кс","y":"й","z":"з"
 }
 
+# Локальная серверная операция этого блока.
 def _latin_word(word,language):
     original=word
     value=word.lower()
@@ -1278,6 +1294,7 @@ def _latin_word(word,language):
     if original[:1].isupper(): return result[:1].upper()+result[1:]
     return result
 
+# Локальная серверная операция этого блока.
 def _uk_to_ru(text):
     result=str(text or "")
     for a,b in [("ї","йи"),("Ї","Йи"),("є","йэ"),("Є","Йэ"),
@@ -1286,6 +1303,7 @@ def _uk_to_ru(text):
         result=result.replace(a,b)
     return result
 
+# Локальная серверная операция этого блока.
 def transcribe_line_to_ru(text,language):
     value=str(text or "")
     language=str(language or "").lower()
@@ -1295,6 +1313,7 @@ def transcribe_line_to_ru(text,language):
     return pattern.sub(lambda m:_latin_word(m.group(0),language),value)
 
 @app.route("/transcribe-to-ru", methods=["POST"])
+# Локальная серверная операция этого блока.
 def transcribe_to_ru():
     data=request.get_json(silent=True) or {}
     lines=data.get("lines",[])
@@ -1318,13 +1337,14 @@ def transcribe_to_ru():
 
 
 # ========================================
-# MYNUS PlayList JSON state + standalone Projects | 5.2.2
+# MYNUS PlayList JSON state + standalone Projects | 5.2.4
 # ========================================
 def _project_id(value):
     value = secure_filename(str(value or "Project")) or "Project"
     return value[:120]
 
 
+# Работа с сохранённым Project.
 def _project_name_from_folder(folder, fallback):
     manifest_path = os.path.join(folder, "Project.json")
     try:
@@ -1335,10 +1355,12 @@ def _project_name_from_folder(folder, fallback):
         return fallback
 
 
+# Работа с состоянием Play List.
 def _empty_playlist_state():
     return {"current": None, "queue": [], "history": []}
 
 
+# Работа с состоянием Play List.
 def _normalize_playlist_state(raw):
     state = _empty_playlist_state()
     if isinstance(raw, dict):
@@ -1351,6 +1373,7 @@ def _normalize_playlist_state(raw):
     return state
 
 
+# Работа с состоянием Play List.
 def _write_playlist_state(state):
     state = _normalize_playlist_state(state)
     temp_path = PLAYLIST_STATE_PATH + ".saving"
@@ -1360,6 +1383,7 @@ def _write_playlist_state(state):
     return state
 
 
+# Работа с состоянием Play List.
 def _read_playlist_state():
     if not os.path.isfile(PLAYLIST_STATE_PATH):
         return _write_playlist_state(_empty_playlist_state())
@@ -1371,10 +1395,12 @@ def _read_playlist_state():
         return _write_playlist_state(_empty_playlist_state())
 
 
+# Работа с сохранённым Project.
 def _saved_project_folder(project_id):
     return os.path.join(PROJECTS_DIR, _project_id(project_id))
 
 
+# Работа с сохранённым Project.
 def _require_saved_project(project_id):
     project_id = _project_id(project_id)
     folder = _saved_project_folder(project_id)
@@ -1383,6 +1409,7 @@ def _require_saved_project(project_id):
     return project_id, folder
 
 
+# Работа с сохранённым Project.
 def _set_current_project(project_id, source="projects", mode=None):
     project_id, _ = _require_saved_project(project_id)
     source = str(source or "projects").lower()
@@ -1390,6 +1417,18 @@ def _set_current_project(project_id, source="projects", mode=None):
     state = _read_playlist_state()
 
     old_current = state.get("current")
+
+    if mode == "open":
+        # Open Project starts a fresh Play List context:
+        # only the opened Project is current (0); queue/history are empty.
+        state = _empty_playlist_state()
+        state["current"] = project_id
+        _write_playlist_state(state)
+        print(
+            f"[PLAYLIST] OPEN PROJECT | current={project_id!r} | queue/history reset",
+            flush=True
+        )
+        return project_id
 
     if mode == "takeover":
         # Emergency manual takeover from the visible Play List.
@@ -1424,6 +1463,7 @@ def _set_current_project(project_id, source="projects", mode=None):
     return project_id
 
 
+# Работа с состоянием Play List.
 def _playlist_projects_payload():
     state = _read_playlist_state()
     projects = []
@@ -1464,11 +1504,13 @@ def _playlist_projects_payload():
 
 
 @app.route("/projects", methods=["GET"])
+# Работа с сохранённым Project.
 def list_projects():
     return jsonify(_playlist_projects_payload())
 
 
 @app.route("/projects/use", methods=["POST"])
+# Работа с сохранённым Project.
 def use_project():
     data = request.get_json(silent=True) or {}
     source = str(data.get("source") or "projects").lower()
@@ -1486,6 +1528,7 @@ def use_project():
 
 
 @app.route("/playlist/add", methods=["POST"])
+# Работа с состоянием Play List.
 def playlist_add():
     data = request.get_json(silent=True) or {}
     try:
@@ -1508,6 +1551,7 @@ def playlist_add():
 
 
 @app.route("/playlist/move", methods=["POST"])
+# Работа с состоянием Play List.
 def playlist_move():
     data = request.get_json(silent=True) or {}
     state = _read_playlist_state()
@@ -1527,6 +1571,7 @@ def playlist_move():
 
 
 @app.route("/playlist/delete", methods=["POST"])
+# Работа с состоянием Play List.
 def playlist_delete():
     data = request.get_json(silent=True) or {}
     section = str(data.get("section") or "queue").lower()
@@ -1557,6 +1602,7 @@ def playlist_delete():
     return jsonify({"ok": True, **_playlist_projects_payload()})
 
 
+# Работа с сохранённым Project.
 def _project_payload_from_folder(folder, track_url_builder):
     project_path = os.path.join(folder, "Project.json")
     lyrics_path = os.path.join(folder, "Lyrics.json")
@@ -1578,6 +1624,7 @@ def _project_payload_from_folder(folder, track_url_builder):
 
 
 @app.route("/projects/open-folder", methods=["POST"])
+# Работа с сохранённым Project.
 def open_project_folder():
     """Windows folder picker used by Karaoke -> Load another project."""
     try:
@@ -1621,6 +1668,7 @@ def open_project_folder():
 
 
 @app.route("/opened-projects/<token>/track/<path:filename>", methods=["GET"])
+# Работа с сохранённым Project.
 def opened_project_track_file(token, filename):
     folder = opened_project_folders.get(str(token))
     if not folder:
@@ -1630,6 +1678,7 @@ def opened_project_track_file(token, filename):
 
 
 @app.route("/projects/select-folder", methods=["POST"])
+# Работа с сохранённым Project.
 def select_project_folder():
     try:
         import tkinter as tk
@@ -1649,6 +1698,7 @@ def select_project_folder():
 
 
 @app.route("/projects/save", methods=["POST"])
+# Работа с сохранённым Project.
 def save_project():
     project_name = str(request.form.get("name") or "Project").strip() or "Project"
     requested_project_id = str(request.form.get("project_id") or "").strip()
@@ -1727,7 +1777,7 @@ def save_project():
         if not track_files.get("original"):
             raise ValueError("Original track not received")
 
-        project_json["version"] = "5.2.2"
+        project_json["version"] = "5.2.4"
         project_json["id"] = project_id
         project_json["name"] = project_name
         project_json["tracks"] = track_files
@@ -1762,6 +1812,7 @@ def save_project():
 
 
 @app.route("/lyrics/save-current", methods=["POST"])
+# Локальная серверная операция этого блока.
 def save_current_lyrics():
     data = request.get_json(silent=True) or {}
     lyrics = data.get("lyrics")
@@ -1794,6 +1845,7 @@ def save_current_lyrics():
         return jsonify({"error": str(exc)}), 500
 
 
+# Работа с сохранённым Project.
 def _saved_projects_payload():
     projects = []
     for project_id in sorted(os.listdir(PROJECTS_DIR), key=str.lower):
@@ -1813,11 +1865,13 @@ def _saved_projects_payload():
 
 
 @app.route("/saved-projects", methods=["GET"])
+# Работа с сохранённым Project.
 def list_saved_projects():
     return jsonify(_saved_projects_payload())
 
 
 @app.route("/saved-projects/<project_id>", methods=["GET"])
+# Работа с сохранённым Project.
 def get_saved_project(project_id):
     project_id = _project_id(project_id)
     folder = os.path.join(PROJECTS_DIR, project_id)
@@ -1845,6 +1899,7 @@ def get_saved_project(project_id):
 
 
 @app.route("/saved-projects/<project_id>/track/<path:filename>", methods=["GET"])
+# Работа с сохранённым Project.
 def saved_project_track_file(project_id, filename):
     return send_from_directory(
         os.path.join(PROJECTS_DIR, _project_id(project_id), "tracks"),
@@ -1852,45 +1907,8 @@ def saved_project_track_file(project_id, filename):
     )
 
 
-@app.route("/projects/<project_id>", methods=["GET"])
-def get_project(project_id):
-    project_id = _project_id(project_id)
-    folder = _saved_project_folder(project_id)
-    try:
-        project, lyrics, tracks = _project_payload_from_folder(
-            folder,
-            lambda filename: "/saved-projects/{}/track/{}".format(project_id, filename)
-        )
-    except FileNotFoundError:
-        return jsonify({"error": "Project not found"}), 404
-    return jsonify({
-        "id": project_id,
-        "name": project.get("name") or project_id,
-        "project": project,
-        "lyrics": lyrics,
-        "tracks": tracks
-    })
 
-
-@app.route("/history-projects/<project_id>", methods=["GET"])
-def get_history_project(project_id):
-    # History stores only project references; project bytes live in Projects.
-    return get_project(project_id)
-
-
-@app.route("/projects/<project_id>/track/<path:filename>", methods=["GET"])
-def project_track_file(project_id, filename):
-    return send_from_directory(
-        os.path.join(_saved_project_folder(project_id), "tracks"),
-        filename
-    )
-
-
-@app.route("/history-projects/<project_id>/track/<path:filename>", methods=["GET"])
-def history_project_track_file(project_id, filename):
-    return project_track_file(project_id, filename)
-
-
+# Локальная серверная операция этого блока.
 def print_restart_command():
     print("\n" + "=" * 72)
     print("RESTART SERVER:")
@@ -1900,8 +1918,8 @@ def print_restart_command():
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("MyNus Server 5.2.2")
-    print(r"5.2.2: unified clearProjectState for every file/Project load; Play List state excluded; Full Screen Track load preserved; Play List opens from snapshot before background refresh.")
+    print("MyNus Server 5.2.4")
+    print(r"5.2.4: single uiMode (sequencer/lyrics/karaoke); one Project LOAD for Open Project and Play List; one Project progressor; Karaoke mode is preserved without reinitialization.")
     print("=" * 72 + "\n")
 
     try:
