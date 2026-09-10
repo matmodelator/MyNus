@@ -1,5 +1,5 @@
 # ========================================
-# TRACE | 5.2.4
+# TRACE рабочий север с логами | 5.2.5
 # ========================================
 
 # ========================================
@@ -60,6 +60,49 @@ jobs = {}
 # through short-lived in-memory tokens so the browser can fetch their tracks.
 opened_project_folders = {}
 
+
+# ========================================
+# PROJECT LOAD TRACE (5.2.5)
+# Diagnostic-only endpoint. It does not write, delete, move or replace files.
+# ========================================
+
+@app.route("/debug/load-trace", methods=["POST"])
+def debug_load_trace():
+    data = request.get_json(silent=True) or {}
+
+    trace_id = str(data.get("trace_id") or "no-trace")
+    stage = str(data.get("stage") or data.get("event") or "UNKNOWN")
+    project_id = data.get("project_id")
+    source = data.get("source")
+    ui_mode = data.get("ui_mode")
+    project_loading = data.get("project_loading")
+    elapsed_ms = data.get("elapsed_ms")
+    command = data.get("command")
+    function = data.get("function")
+    parameters = data.get("parameters")
+    result = data.get("result")
+    details = data.get("details")
+
+    print("\n" + "-" * 72, flush=True)
+    print(f"[LOAD TRACE][{trace_id}] {stage}", flush=True)
+    print(f"  project_id      = {project_id}", flush=True)
+    print(f"  source          = {source}", flush=True)
+    print(f"  ui_mode         = {ui_mode}", flush=True)
+    print(f"  project_loading = {project_loading}", flush=True)
+    print(f"  elapsed_ms      = {elapsed_ms}", flush=True)
+    if command is not None:
+        print(f"  command         = {command}", flush=True)
+    if function is not None:
+        print(f"  function        = {function}", flush=True)
+    if parameters is not None:
+        print(f"  parameters      = {parameters}", flush=True)
+    if result is not None:
+        print(f"  result          = {result}", flush=True)
+    if details is not None:
+        print(f"  details         = {details}", flush=True)
+    print("-" * 72, flush=True)
+
+    return jsonify({"ok": True, "version": "5.2.5", "trace_id": trace_id})
 
 # ========================================
 # INDEX
@@ -1337,7 +1380,7 @@ def transcribe_to_ru():
 
 
 # ========================================
-# MYNUS PlayList JSON state + standalone Projects | 5.2.4
+# MYNUS PlayList JSON state + standalone Projects | 5.2.5
 # ========================================
 def _project_id(value):
     value = secure_filename(str(value or "Project")) or "Project"
@@ -1777,7 +1820,7 @@ def save_project():
         if not track_files.get("original"):
             raise ValueError("Original track not received")
 
-        project_json["version"] = "5.2.4"
+        project_json["version"] = "5.2.5"
         project_json["id"] = project_id
         project_json["name"] = project_name
         project_json["tracks"] = track_files
@@ -1918,8 +1961,8 @@ def print_restart_command():
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("MyNus Server 5.2.4")
-    print(r"5.2.4: single uiMode (sequencer/lyrics/karaoke); one Project LOAD for Open Project and Play List; one Project progressor; Karaoke mode is preserved without reinitialization.")
+    print("MyNus Server 5.2.5")
+    print(r"5.2.5: Project LOAD diagnostics endpoint /debug/load-trace; existing Project/SAVE/PlayList/file operations unchanged from 5.2.4.")
     print("=" * 72 + "\n")
 
     try:
