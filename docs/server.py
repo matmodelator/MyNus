@@ -20243,7 +20243,7 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.3.0 | Detailed Project LOAD trace: source, command, function, parameters, result and timing; synchronized HTML Service Console + CMD");
+console.log("MyNus 5.3.0 | Detailed Project LOAD trace: source, command, function, parameters, result and timing; synchronized HTML Service Console + CMD + ЗАГРУЗКА СТРУКТУРЫ ОДИНАКОВА ДЛЯ ВЕХ СПОСОБОВ! ");
 console.log("[SERVICE CONSOLE] LOAD diagnostics enabled | endpoint=/debug/load-trace | version=5.3.0");
 </script>
 
