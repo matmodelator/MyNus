@@ -1,4 +1,4 @@
-<!-- MyNus 5.2.5 | Рабочая загрузка структуры через фулскрин!!!!Detailed Project LOAD trace: source, command, function, parameters, result and timing; synchronized HTML Service Console + CMD -->
+<!-- MyNus 5.3.0 | Три независимых сценария выбора Project -> один прямой вызов единой функции LOAD; русские комментарии синхронизированы с серверным TRACE  ...ЗАГРУЗКА СТРУКТУРЫ ОДИНАКОВА ДЛЯ ВЕХ СПОСОБОВ! --> 
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.2.5</title>
+  <title>MyNus 5.3.0</title>
 
 
  <style>
@@ -4120,7 +4120,7 @@
 </div>
 
 <!-- ========================================
-     NEW PROJECT PROMPT | 5.2.5
+     NEW PROJECT PROMPT | 5.3.0
 ======================================== -->
 <div id="newProjectPromptDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -18847,7 +18847,7 @@ updateMasterHistoryButtons();
 
 
 // ========================================
-// PROJECT / PLAYLIST | 5.2.5
+// PROJECT / PLAYLIST | 5.3.0
 // Project = 12 audio slots + Lyrics.json + Project.json
 // ========================================
 const saveProjectBtn = document.getElementById("saveProjectBtn");
@@ -18926,7 +18926,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "5.2.5",
+    version: "5.3.0",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -19153,11 +19153,24 @@ function renderFullScreenPlaylist(projects = karaokePlaylistSnapshot) {
         return;
       }
 
-      // Emergency manual takeover through Play List:
-      // loaded Track becomes 0; previous 0 becomes +1.
-      beginProjectLoadTrace("Play List direct Track selection", track.id, source);
-      await reportProjectLoadTrace("PLAYLIST TRACK CLICK", { command: "Full Screen Play List -> Track click", function: "loadProjectById", parameters: { track_id: track.id, source, status: track.status || null }, result: "selected" });
-      await loadProjectById(track.id, source);
+      // =====================================================================
+      // [5.3.0][СЦЕНАРИЙ 2 — PLAYLIST]
+      // Пользователь вручную выбрал Track в PlayList.
+      // Здесь PlayList выполняет ТОЛЬКО свою задачу: определяет ID выбранного Project.
+      // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
+      // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
+      // =====================================================================
+      beginProjectLoadTrace("[5.3.0][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
+      await reportProjectLoadTrace("[5.3.0][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+        command: "await loadProjectById(track.id)",
+        function: "loadProjectById",
+        parameters: { id: track.id },
+        result: "переход в единую LOAD-функцию"
+      });
+      await loadProjectById(track.id);
+
+      // После успешной единой загрузки PlayList отдельно перестраивает только current/queue/history.
+      // Это НЕ часть LOAD и не передаёт никаких параметров в loadProjectById().
       await markProjectInUse(track.id, source, "takeover");
       await refreshFullScreenPlaylist();
       lyricsFullScreenPlaylistMenu.hidden = true;
@@ -19339,10 +19352,25 @@ async function runKaraokeFinishAction(action) {
       const nextProject = projects.find(project => project.status === "waiting") || null;
       if (!nextProject) throw new Error("No next project in playlist");
       closeKaraokeFinishedDialog();
-      beginProjectLoadTrace("Song Finished Next", nextProject.id, "playlist");
-      await reportProjectLoadTrace("NEXT TRACK LOAD START", { command: "Song Finished -> Open next", function: "runKaraokeFinishAction -> loadProjectById", parameters: { track_id: nextProject.id, source: "playlist" }, result: "selected" });
-      const loaded = await loadProjectById(nextProject.id, "playlist");
+
+      // =====================================================================
+      // [5.3.0][СЦЕНАРИЙ 3 — OPEN NEXT]
+      // Команда Open next берёт первый ожидающий Track из очереди и получает его Project ID.
+      // На этом сценарий выбора заканчивается.
+      // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
+      // Дальше выполняется прямой переход в ТУ ЖЕ ЕДИНУЮ функцию loadProjectById(ID).
+      // =====================================================================
+      beginProjectLoadTrace("[5.3.0][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
+      await reportProjectLoadTrace("[5.3.0][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
+        command: "await loadProjectById(nextProject.id)",
+        function: "loadProjectById",
+        parameters: { id: nextProject.id },
+        result: "переход в единую LOAD-функцию"
+      });
+      const loaded = await loadProjectById(nextProject.id);
       if (loaded) {
+        // После успешной единой загрузки PlayList отдельно двигает current/queue/history.
+        // Это НЕ часть LOAD и не меняет работу loadProjectById().
         await markProjectInUse(nextProject.id, "playlist");
         await refreshFullScreenPlaylist();
         karaokeFinishTriggered = false;
@@ -19422,7 +19450,12 @@ function restoreProjectLyricsJson(lyrics) {
   const savedLines = Array.isArray(lyrics?.lines) ? cloneSerializable(lyrics.lines, []) : [];
   lyricsEditorDraft = savedLines;
   karaokeLines = cloneSerializable(savedLines, []);
-  lyricsStructureDraft = Array.isArray(lyrics?.structure) ? cloneSerializable(lyrics.structure, []) : [];
+  
+  lyricsStructureDraft =
+  Array.isArray(lyrics?.structure) && lyrics.structure.length > 0
+    ? cloneSerializable(lyrics.structure, [])
+    : null;
+    
   lyricsData = {
     language: lyrics?.language || null,
     text: String(lyrics?.text || ""),
@@ -19436,10 +19469,10 @@ const projectLoaderFill = document.getElementById("projectLoaderFill");
 const projectLoaderPercent = document.getElementById("projectLoaderPercent");
 let projectLoading = false;
 
-// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.2.5.
+// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.3.0.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "5.2.5";
-const MYNUS_CLIENT_CHANGE = "Detailed Project LOAD trace: source, command, function, parameters, result and timing; synchronized HTML Service Console + CMD";
+const MYNUS_CLIENT_VERSION = "5.3.0";
+const MYNUS_CLIENT_CHANGE = "Три сценария выбора Project -> одна функция LOAD; русские комментарии синхронизированы с серверным TRACE";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
 let projectLoadTraceSource = null;
@@ -19681,19 +19714,26 @@ function clearProjectState() {
   syncScrollTo(0);
 }
 
-// Сохранение текущего Project и связанных данных.
-async function loadProjectById(id, source = "projects") {
-  if (!projectLoadTraceId || projectLoadTraceProject !== (id || null) || projectLoadTraceSource !== source) {
-    beginProjectLoadTrace("loadProjectById", id || null, source);
+// =====================================================================
+// [5.3.0][ЕДИНАЯ LOAD-ФУНКЦИЯ]
+// Это ЕДИНСТВЕННАЯ функция загрузки сохранённого Project.
+// Она получает РОВНО ОДИН входной параметр: id.
+// Функция НЕ знает, кто выбрал этот ID: Open Project, PlayList или Open next.
+// В ней НЕТ проверки source, mode, playlist/history и НЕТ развилки по сценарию запуска.
+// Все три сценария выше заканчиваются одинаковой командой: await loadProjectById(ID).
+// =====================================================================
+async function loadProjectById(id) {
+  if (!projectLoadTraceId || projectLoadTraceProject !== (id || null)) {
+    beginProjectLoadTrace("[5.3.0][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
   } else {
     projectLoadTraceProject = id || projectLoadTraceProject;
-    projectLoadTraceSource = source;
   }
-  await reportProjectLoadTrace("LOAD FUNCTION ENTER", {
+
+  await reportProjectLoadTrace("[5.3.0][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
     command: "LOAD Project",
     function: "loadProjectById",
-    parameters: { id, source },
-    result: "entered"
+    parameters: { id },
+    result: "единая LOAD-функция запущена"
   });
   await reportProjectLoadTrace("COMMAND", { command: "pause current playback", function: "pauseAll", parameters: {}, result: "calling" });
   pauseAll();
@@ -19704,7 +19744,7 @@ async function loadProjectById(id, source = "projects") {
 
   try {
     const projectUrl = "/saved-projects/" + encodeURIComponent(id);
-    await reportProjectLoadTrace("HTTP REQUEST", { command: "GET " + projectUrl, function: "fetch", parameters: { method: "GET", id, source }, result: "sending" });
+    await reportProjectLoadTrace("HTTP REQUEST", { command: "GET " + projectUrl, function: "fetch", parameters: { method: "GET", id }, result: "sending" });
     const response = await fetch(projectUrl, { headers: loadTraceHeaders() });
 
     const data = await response.json().catch(() => ({}));
@@ -19884,13 +19924,13 @@ async function loadProjectById(id, source = "projects") {
 
     await reportProjectLoadTrace("COMMAND", { command: "finish Project loader", function: "finishProjectLoader", parameters: {}, result: "calling" });
     await finishProjectLoader();
-    await reportProjectLoadTrace("LOAD FUNCTION SUCCESS", { command: "LOAD Project complete", function: "loadProjectById", parameters: { id, source, ui_mode_after_load: uiMode }, result: "success" });
+    await reportProjectLoadTrace("LOAD FUNCTION SUCCESS", { command: "LOAD Project complete", function: "loadProjectById", parameters: { id, ui_mode_after_load: uiMode }, result: "success" });
 
     // uiMode remains exactly what it was before LOAD.
     // Play List bookkeeping is intentionally outside Project LOAD.
     return true;
   } catch (error) {
-    await reportProjectLoadTrace("LOAD EXCEPTION", { command: "LOAD Project", function: "loadProjectById", parameters: { id, source }, result: "error", error: String(error?.stack || error?.message || error) });
+    await reportProjectLoadTrace("LOAD EXCEPTION", { command: "LOAD Project", function: "loadProjectById", parameters: { id }, result: "error", error: String(error?.stack || error?.message || error) });
     await failProjectLoader(error);
     throw error;
   }
@@ -19917,9 +19957,24 @@ async function openLoadProjectDialog() {
       button.title = "Load project";
       button.addEventListener("click", async () => {
         try {
-          beginProjectLoadTrace("Open Project list item", project.id, "projects");
-          await reportProjectLoadTrace("PROJECT SELECTED", { command: "Open Project dialog -> select Project", function: "loadProjectById", parameters: { id: project.id, name: project.name, source: "projects" }, result: "selected" });
-          await loadProjectById(project.id, "projects");
+          // =====================================================================
+          // [5.3.0][СЦЕНАРИЙ 1 — OPEN PROJECT]
+          // Пользователь выбрал Project в обычном окне Open Project.
+          // Этот сценарий выполняет только выбор Project и получает его ID.
+          // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
+          // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
+          // =====================================================================
+          beginProjectLoadTrace("[5.3.0][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
+          await reportProjectLoadTrace("[5.3.0][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+            command: "await loadProjectById(project.id)",
+            function: "loadProjectById",
+            parameters: { id: project.id, name: project.name },
+            result: "переход в единую LOAD-функцию"
+          });
+          await loadProjectById(project.id);
+
+          // После успешной единой загрузки обычный Open Project отдельно начинает новый PlayList-контекст.
+          // Это НЕ часть LOAD и не передаёт никаких параметров в loadProjectById().
           await reportProjectLoadTrace("PLAYLIST CURRENT UPDATE START", { mode: "open" });
           await markProjectInUse(project.id, "projects", "open");
           await reportProjectLoadTrace("PLAYLIST CURRENT UPDATE DONE", { mode: "open" });
@@ -20188,8 +20243,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.2.5 | Detailed Project LOAD trace: source, command, function, parameters, result and timing; synchronized HTML Service Console + CMD");
-console.log("[SERVICE CONSOLE] LOAD diagnostics enabled | endpoint=/debug/load-trace | version=5.2.5");
+console.log("MyNus 5.3.0 | Detailed Project LOAD trace: source, command, function, parameters, result and timing; synchronized HTML Service Console + CMD + ЗАГРУЗКА СТРУКТУРЫ ОДИНАКОВА ДЛЯ ВЕХ СПОСОБОВ! ");
+console.log("[SERVICE CONSOLE] LOAD diagnostics enabled | endpoint=/debug/load-trace | version=5.3.0");
 </script>
 
 <div class="row" id="build-down">
