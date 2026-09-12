@@ -1,4 +1,4 @@
-<!-- MyNus 5.4.5 | PDF native print uses current project name; Full Screen center counter removed; Lyrics Set Start/End moved to upper-left toolbar; footer info is 3 rows; Repeat matches Play/Loop size. Server unchanged. -->
+<!-- MyNus 5.4.6 | PDF print window uses current project name at 50% screen size; Full Screen reverse counter mirrors Lyrics 3-phase countdown with gray final phase; Lyrics Set Start/End moved to upper-left toolbar; footer info is 3 rows; Repeat matches Play/Loop size. Server unchanged. -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.4.5</title>
+  <title>MyNus 5.4.6</title>
 
 
  <style>
@@ -1803,6 +1803,11 @@
       color: #30d158;
     }
 
+    /* 5.4.6 | Third reverse-countdown phase keeps Full Screen geometry and uses gray. */
+    .lyrics-fullscreen-counter.phase-final {
+      color: #777 !important;
+    }
+
 
     .lyrics-fullscreen-popup {
       position: fixed;
@@ -2468,7 +2473,7 @@
       gap: 6px;
     }
 
-    /* 5.4.5 | Lyrics footer always fits inside the editor. */
+    /* 5.4.6 | Lyrics footer always fits inside the editor. */
     .lyrics-editor-footer {
       display: flex;
       flex-wrap: wrap;
@@ -2593,12 +2598,12 @@
     #lyricsSetStartBtn,
     #lyricsSetEndBtn {
       min-width: 0;
-      padding: 6px 10px;
+      padding: 6px 8px;
       font-size: 11px;
       white-space: nowrap;
     }
 
-    /* 5.4.5 | Footer transport stays on one row; Play / Loop / Repeat are identical in size. */
+    /* 5.4.6 | Footer transport stays on one row; Play / Loop / Repeat are identical in size. */
     .lyrics-editor-transport {
       flex: 1 1 230px;
       flex-wrap: nowrap;
@@ -2615,7 +2620,7 @@
       white-space: nowrap;
     }
 
-    /* 5.4.5 | Center footer info panel: counter / Lines / language + transcription. */
+    /* 5.4.6 | Center footer info panel: counter / Lines / language + transcription. */
     .lyrics-footer-counter-group {
       display: flex;
       flex-direction: column;
@@ -4255,7 +4260,7 @@
 </div>
 
 <!-- ========================================
-     NEW PROJECT PROMPT | 5.4.5
+     NEW PROJECT PROMPT | 5.4.6
 ======================================== -->
 <div id="newProjectPromptDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -4393,6 +4398,8 @@
           <div class="lyrics-fullscreen-brand">MyNus</div>
         </div>
       </div>
+      <div id="lyricsFullScreenCounter" class="lyrics-fullscreen-counter">-00:00.00</div>
+
       <div class="lyrics-fullscreen-bottom-controls">
         <div class="lyrics-fullscreen-keys-wrap">
           <button type="button" id="lyricsFullScreenKeysBtn" class="lyrics-fullscreen-mini-btn">Keys?</button>
@@ -13599,7 +13606,7 @@ function leaveLyricsEdit({ restorePointer = false } = {}) {
     line._editedText = editedText;
     applyEditedTextToLine(line);
 
-    // 5.4.5: POINTER после commit строится заново только из сохранённого
+    // 5.4.6: POINTER после commit строится заново только из сохранённого
     // lyricsEditorDraft. Старый DOM-текст физически не может вернуться.
     const savedScrollTop = Number(lyricsEditorRows?.scrollTop) || 0;
     const committedLineIndex = lyricsEditorEditLineIndex;
@@ -13740,8 +13747,9 @@ function updateLyricsFullScreenView(currentTime) {
   }
 
   if (lyricsFullScreenCounter) {
-    lyricsFullScreenCounter.textContent = "-" + formatTime(vocalRemaining);
-    updateLyricsFullScreenCounterStyle(vocalRemaining, vocalPhase);
+    const fullScreenPhase = getLyricsEditorPhaseCountdown(currentTime);
+    lyricsFullScreenCounter.textContent = "-" + formatTime(fullScreenPhase.remaining);
+    updateLyricsFullScreenCounterStyle(fullScreenPhase.remaining, fullScreenPhase.phase);
   }
 
   const lines = Array.isArray(lyricsEditorDraft) ? lyricsEditorDraft : [];
@@ -16040,37 +16048,33 @@ function updateLyricsFullScreenCounterStyle(remaining, phase) {
     "countdown-gray",
     "countdown-3",
     "countdown-2",
-    "countdown-1"
+    "countdown-1",
+    "phase-final"
   );
-
-  /*
-  Full Screen does NOT calculate V.
-  It only displays the same vocalRemaining already calculated by Sequencer.
-  The phase is used only to preserve the existing Full Screen styling.
-  */
-  if (phase !== "pre") {
-    lyricsFullScreenCounter.classList.add("post-vocal");
-    return;
-  }
-
-  lyricsFullScreenCounter.classList.add("pre-vocal");
 
   const value = Math.max(0, Number(remaining) || 0);
 
-  if (value <= 0) {
-    lyricsFullScreenCounter.classList.remove("pre-vocal");
-    lyricsFullScreenCounter.classList.add("post-vocal");
+  // Phase 1 keeps the existing large Full Screen pre-vocal styling and its 3/2/1 colors.
+  if (phase === 1) {
+    lyricsFullScreenCounter.classList.add("pre-vocal");
+    if (value > 3) {
+      lyricsFullScreenCounter.classList.add("countdown-gray");
+    } else if (value > 2) {
+      lyricsFullScreenCounter.classList.add("countdown-3");
+    } else if (value > 1) {
+      lyricsFullScreenCounter.classList.add("countdown-2");
+    } else if (value > 0) {
+      lyricsFullScreenCounter.classList.add("countdown-1");
+    }
     return;
   }
 
-  if (value > 3) {
-    lyricsFullScreenCounter.classList.add("countdown-gray");
-  } else if (value > 2) {
-    lyricsFullScreenCounter.classList.add("countdown-3");
-  } else if (value > 1) {
-    lyricsFullScreenCounter.classList.add("countdown-2");
-  } else {
-    lyricsFullScreenCounter.classList.add("countdown-1");
+  // Phase 2 keeps the current Full Screen active/post-vocal look.
+  lyricsFullScreenCounter.classList.add("post-vocal");
+
+  // Phase 3 uses the same Full Screen size/position/font but is gray.
+  if (phase === 3) {
+    lyricsFullScreenCounter.classList.add("phase-final");
   }
 }
 
@@ -16107,10 +16111,11 @@ function updateLyricsMasterCounter() {
     lyricsMasterCounter.dataset.phase = String(phase.phase);
   }
 
-  // Full Screen keeps its existing vocal counter behavior.
+  // Full Screen mirrors the same three reverse-countdown phases as the lower Lyrics counter.
   if (lyricsFullScreenCounter) {
-    lyricsFullScreenCounter.textContent = "-" + formatTime(vocalRemaining);
-    updateLyricsFullScreenCounterStyle(vocalRemaining, vocalPhase);
+    const fullScreenPhase = getLyricsEditorPhaseCountdown(current);
+    lyricsFullScreenCounter.textContent = "-" + formatTime(fullScreenPhase.remaining);
+    updateLyricsFullScreenCounterStyle(fullScreenPhase.remaining, fullScreenPhase.phase);
   }
 
   updateLyricsStructurePlayhead();
@@ -17239,9 +17244,20 @@ function escapeLyricsHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
-// 5.4.5 | PDF: print from an isolated document so the native PDF dialog receives the project name.
+// 5.4.6 | PDF: isolated print document gives the native PDF dialog the current project name.
+// The technical print window opens centered at 50% of the available screen.
 function printLyricsPdfDirect(fileName, html) {
-  const printWindow = window.open("", "_blank", "popup=yes,width=2,height=2,left=-10000,top=-10000");
+  const popupWidth = Math.max(480, Math.round((screen.availWidth || window.innerWidth || 960) * 0.5));
+  const popupHeight = Math.max(360, Math.round((screen.availHeight || window.innerHeight || 720) * 0.5));
+  const popupLeft = Math.max(0, Math.round(((screen.availWidth || popupWidth) - popupWidth) / 2));
+  const popupTop = Math.max(0, Math.round(((screen.availHeight || popupHeight) - popupHeight) / 2));
+
+  const printWindow = window.open(
+    "",
+    "_blank",
+    `popup=yes,width=${popupWidth},height=${popupHeight},left=${popupLeft},top=${popupTop}`
+  );
+
   if (!printWindow) {
     console.error("PDF print failed: print window was blocked");
     return;
@@ -19275,7 +19291,7 @@ updateMasterHistoryButtons();
 
 
 // ========================================
-// PROJECT / PLAYLIST: СОСТОЯНИЕ И НУМЕРАЦИЯ | 5.4.5
+// PROJECT / PLAYLIST: СОСТОЯНИЕ И НУМЕРАЦИЯ | 5.4.6
 // Project = 12 аудиослотов + Lyrics.json + Project.json
 // ========================================
 const saveProjectBtn = document.getElementById("saveProjectBtn");
@@ -19354,7 +19370,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "5.4.5",
+    version: "5.4.6",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -19594,14 +19610,14 @@ function renderFullScreenPlaylist(projects = karaokePlaylistSnapshot) {
       }
 
       // =====================================================================
-      // [5.4.5][СЦЕНАРИЙ 2 — PLAYLIST]
+      // [5.4.6][СЦЕНАРИЙ 2 — PLAYLIST]
       // Пользователь вручную выбрал Track в PlayList.
       // Здесь PlayList выполняет ТОЛЬКО свою задачу: определяет ID выбранного Project.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.4.5][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
-      await reportProjectLoadTrace("[5.4.5][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.6][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
+      await reportProjectLoadTrace("[5.4.6][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(track.id)",
         function: "loadProjectById",
         parameters: { id: track.id },
@@ -19799,14 +19815,14 @@ async function runKaraokeFinishAction(action) {
       closeKaraokeFinishedDialog();
 
       // =====================================================================
-      // [5.4.5][СЦЕНАРИЙ 3 — OPEN NEXT]
+      // [5.4.6][СЦЕНАРИЙ 3 — OPEN NEXT]
       // Команда Open next берёт первый ожидающий Track из очереди и получает его Project ID.
       // На этом сценарий выбора заканчивается.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // Дальше выполняется прямой переход в ТУ ЖЕ ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.4.5][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
-      await reportProjectLoadTrace("[5.4.5][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.6][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
+      await reportProjectLoadTrace("[5.4.6][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(nextProject.id)",
         function: "loadProjectById",
         parameters: { id: nextProject.id },
@@ -19920,9 +19936,9 @@ const projectLoaderFill = document.getElementById("projectLoaderFill");
 const projectLoaderPercent = document.getElementById("projectLoaderPercent");
 let projectLoading = false;
 
-// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.5.
+// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.6.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "5.4.5";
+const MYNUS_CLIENT_VERSION = "5.4.6";
 const MYNUS_CLIENT_CHANGE = "Lyrics CARET commit rebuilds POINTER from draft; PDF movable/resizable preview with X and one final Print/Save; Full Screen starts maximized but remains resizable/movable";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -20166,7 +20182,7 @@ function clearProjectState() {
 }
 
 // =====================================================================
-// [5.4.5][ЕДИНАЯ LOAD-ФУНКЦИЯ]
+// [5.4.6][ЕДИНАЯ LOAD-ФУНКЦИЯ]
 // Это ЕДИНСТВЕННАЯ функция загрузки сохранённого Project.
 // Она получает РОВНО ОДИН входной параметр: id.
 // Функция НЕ знает, кто выбрал этот ID: Open Project, PlayList или Open next.
@@ -20175,12 +20191,12 @@ function clearProjectState() {
 // =====================================================================
 async function loadProjectById(id) {
   if (!projectLoadTraceId || projectLoadTraceProject !== (id || null)) {
-    beginProjectLoadTrace("[5.4.5][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
+    beginProjectLoadTrace("[5.4.6][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
   } else {
     projectLoadTraceProject = id || projectLoadTraceProject;
   }
 
-  await reportProjectLoadTrace("[5.4.5][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
+  await reportProjectLoadTrace("[5.4.6][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
     command: "LOAD Project",
     function: "loadProjectById",
     parameters: { id },
@@ -20409,14 +20425,14 @@ async function openLoadProjectDialog() {
       button.addEventListener("click", async () => {
         try {
           // =====================================================================
-          // [5.4.5][СЦЕНАРИЙ 1 — OPEN PROJECT]
+          // [5.4.6][СЦЕНАРИЙ 1 — OPEN PROJECT]
           // Пользователь выбрал Project в обычном окне Open Project.
           // Этот сценарий выполняет только выбор Project и получает его ID.
           // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
           // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
           // =====================================================================
-          beginProjectLoadTrace("[5.4.5][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
-          await reportProjectLoadTrace("[5.4.5][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+          beginProjectLoadTrace("[5.4.6][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
+          await reportProjectLoadTrace("[5.4.6][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
             command: "await loadProjectById(project.id)",
             function: "loadProjectById",
             parameters: { id: project.id, name: project.name },
@@ -20714,8 +20730,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.4.5 | PDF native print uses current project name; Full Screen center counter removed; Lyrics Set Start/End moved to upper-left toolbar; footer info is 3 rows; Repeat matches Play/Loop size.");
-console.log("[SERVICE CONSOLE] MyNus 5.4.5 | pdf=native-print+project-name | fullscreen=center-counter-removed | lyrics-toolbar=set-start+set-end | footer=3-row-info+equal-transport-buttons");
+console.log("MyNus 5.4.6 | PDF project-name print window at 50% screen; Full Screen uses Lyrics 3-phase reverse countdown with existing Full Screen styling and gray final phase; Lyrics footer layout updated.");
+console.log("[SERVICE CONSOLE] MyNus 5.4.6 | pdf=project-name+50%-print-window | fullscreen-counter=lyrics-3-phase+fullscreen-style+gray-final | lyrics-layout=set-start-end-top+3-row-info");
 </script>
 
 <div class="row" id="build-down">
