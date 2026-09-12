@@ -1,4 +1,4 @@
-<!-- MyNus 5.4.2 | Lyrics Editor: CARET = единая сессия правки с одним History commit; Enter завершает текст/тайм-код; CARET отключает только автоскролл, транспорт продолжает PLAY; POINTER восстанавливает транспорт и автоскролл; экспорт Structure перед Lyrics с ASCII --; Save Project / Save Lyrics. Structure lifecycle сохранён без изменений. --> 
+<!-- MyNus 5.4.3 | Fixes: CARET commit перестраивает POINTER из сохранённого Lyrics Draft; PDF открывается в movable/resizable preview с X и одним финальным Print/Save; Full Screen всегда стартует на весь экран, но остаётся resizable/movable. Сервер не меняется. --> 
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.4.2</title>
+  <title>MyNus 5.4.3</title>
 
 
  <style>
@@ -1479,24 +1479,33 @@
 
     .lyrics-editor-card.karaoke-fullscreen-mode {
       position: fixed;
-      inset: 0 !important;
-      left: 0 !important;
-      top: 0 !important;
-      right: 0 !important;
-      bottom: 0 !important;
+      left: 0;
+      top: 0;
+      right: auto;
+      bottom: auto;
       width: 100vw;
       height: 100vh;
-      max-width: none;
-      max-height: none;
-      min-width: 0;
-      min-height: 0;
+      max-width: 100vw;
+      max-height: 100vh;
+      min-width: 620px;
+      min-height: 420px;
       padding: 0;
       border-radius: 0;
-      resize: none;
+      resize: both;
       overflow: hidden;
       background: #000;
       color: #fff;
-      box-shadow: none;
+      box-shadow: 0 18px 50px rgba(0,0,0,.38);
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-fullscreen-topbar {
+      cursor: move;
+      user-select: none;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-fullscreen-topbar button,
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-fullscreen-topbar input {
+      cursor: pointer;
     }
 
     .lyrics-editor-card.karaoke-fullscreen-mode > .lyrics-editor-header,
@@ -2128,6 +2137,72 @@
     .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-playhead {
       width: 3px;
       transform: translateX(-1.5px);
+    }
+
+    /* 5.4.3 | PDF preview: movable/resizable window inside MyNus. */
+    .lyrics-pdf-preview {
+      position: fixed;
+      z-index: 6200;
+      left: 10vw;
+      top: 8vh;
+      width: 80vw;
+      height: 84vh;
+      min-width: 520px;
+      min-height: 360px;
+      max-width: 100vw;
+      max-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      resize: both;
+      border: 1px solid #777;
+      border-radius: 9px;
+      background: #fff;
+      box-shadow: 0 20px 70px rgba(0,0,0,.42);
+    }
+
+    .lyrics-pdf-preview-head {
+      height: 42px;
+      flex: 0 0 42px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px 6px 12px;
+      border-bottom: 1px solid #ccc;
+      background: #f4f4f4;
+      cursor: move;
+      user-select: none;
+    }
+
+    .lyrics-pdf-preview-title {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .lyrics-pdf-preview-head button {
+      height: 28px;
+      min-width: 32px;
+      padding: 4px 9px;
+      cursor: pointer;
+    }
+
+    .lyrics-pdf-preview-close {
+      font-size: 18px;
+      line-height: 1;
+      font-weight: 700;
+    }
+
+    .lyrics-pdf-preview iframe {
+      flex: 1;
+      width: 100%;
+      min-height: 0;
+      border: 0;
+      background: #fff;
     }
 
     .lyrics-saveas-actions {
@@ -4134,7 +4209,7 @@
 </div>
 
 <!-- ========================================
-     NEW PROJECT PROMPT | 5.4.2
+     NEW PROJECT PROMPT | 5.4.3
 ======================================== -->
 <div id="newProjectPromptDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -13475,15 +13550,30 @@ function leaveLyricsEdit({ restorePointer = false } = {}) {
   if (line) {
     line._editedText = editedText;
     applyEditedTextToLine(line);
+
+    // 5.4.3: POINTER после commit строится заново только из сохранённого
+    // lyricsEditorDraft. Старый DOM-текст физически не может вернуться.
+    const savedScrollTop = Number(lyricsEditorRows?.scrollTop) || 0;
+    const committedLineIndex = lyricsEditorEditLineIndex;
+
+    lyricsEditorEditLineIndex = -1;
+    lyricsEditorCaretOffset = 0;
+    lyricsEditorEditStartState = null;
+
+    renderLyricsEditor();
+    if (lyricsEditorRows) lyricsEditorRows.scrollTop = savedScrollTop;
+
+    lyricsEditorSelectedLine = committedLineIndex;
+    lyricsEditorRows?.querySelectorAll(".lyrics-editor-row").forEach((item, itemIndex) => {
+      item.classList.toggle("selected", itemIndex === committedLineIndex);
+    });
   }
   if (changed) pushLyricsHistoryState(beforeState);
 
   if (textWrap) textWrap.classList.remove("lyrics-edit-active");
   if (marker) marker.style.display = "none";
 
-  lyricsEditorEditLineIndex = -1;
-  lyricsEditorCaretOffset = 0;
-  lyricsEditorEditStartState = null;
+  // CARET-state уже завершён перед renderLyricsEditor().
 
   // Возврат CARET -> POINTER восстанавливает транспорт на последней POINTER-позиции.
   // Сам CARET никогда не останавливает и не ставит PLAY на паузу.
@@ -14078,6 +14168,73 @@ window.addEventListener("resize", () => {
   if (lyricsFullScreenKeysMenu) lyricsFullScreenKeysMenu.hidden = true;
 });
 
+let lyricsEditorWindowGeometryBeforeKaraoke = null;
+
+function captureLyricsEditorWindowGeometry() {
+  if (!lyricsEditorCard) return null;
+  return {
+    left: lyricsEditorCard.style.left,
+    top: lyricsEditorCard.style.top,
+    right: lyricsEditorCard.style.right,
+    bottom: lyricsEditorCard.style.bottom,
+    width: lyricsEditorCard.style.width,
+    height: lyricsEditorCard.style.height
+  };
+}
+
+function applyLyricsEditorWindowGeometry(geometry) {
+  if (!lyricsEditorCard || !geometry) return;
+  Object.entries(geometry).forEach(([key, value]) => {
+    lyricsEditorCard.style[key] = value || "";
+  });
+}
+
+function maximizeLyricsKaraokeWindow() {
+  if (!lyricsEditorCard) return;
+  lyricsEditorCard.style.left = "0px";
+  lyricsEditorCard.style.top = "0px";
+  lyricsEditorCard.style.right = "auto";
+  lyricsEditorCard.style.bottom = "auto";
+  lyricsEditorCard.style.width = "100vw";
+  lyricsEditorCard.style.height = "100vh";
+}
+
+function initLyricsFullScreenWindowMovement() {
+  const topbar = lyricsFullScreenView?.querySelector(".lyrics-fullscreen-topbar");
+  if (!topbar || !lyricsEditorCard || topbar.dataset.windowDragReady === "1") return;
+  topbar.dataset.windowDragReady = "1";
+
+  let drag = null;
+  topbar.addEventListener("pointerdown", event => {
+    if (!isKaraokeUiMode() || event.button !== 0) return;
+    if (event.target.closest("button, input, select, a, .lyrics-fullscreen-playlist-wrap")) return;
+    const rect = lyricsEditorCard.getBoundingClientRect();
+    drag = {
+      pointerId: event.pointerId,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top
+    };
+    topbar.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  });
+
+  topbar.addEventListener("pointermove", event => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const maxLeft = Math.max(0, window.innerWidth - lyricsEditorCard.offsetWidth);
+    const maxTop = Math.max(0, window.innerHeight - lyricsEditorCard.offsetHeight);
+    lyricsEditorCard.style.left = Math.max(0, Math.min(maxLeft, event.clientX - drag.offsetX)) + "px";
+    lyricsEditorCard.style.top = Math.max(0, Math.min(maxTop, event.clientY - drag.offsetY)) + "px";
+  });
+
+  const stop = event => {
+    if (drag && event.pointerId === drag.pointerId) drag = null;
+  };
+  topbar.addEventListener("pointerup", stop);
+  topbar.addEventListener("pointercancel", stop);
+}
+
+initLyricsFullScreenWindowMovement();
+
 // Локальная функциональная операция этого блока.
 function setUiMode(nextMode) {
   if (!Object.values(UI_MODE).includes(nextMode)) {
@@ -14099,9 +14256,13 @@ function setUiMode(nextMode) {
 
   if (previousMode === UI_MODE.KARAOKE && nextMode !== UI_MODE.KARAOKE) {
     restoreSequencerFxAfterFullScreen();
+    applyLyricsEditorWindowGeometry(lyricsEditorWindowGeometryBeforeKaraoke);
+    lyricsEditorWindowGeometryBeforeKaraoke = null;
   }
 
   if (nextMode === UI_MODE.KARAOKE && previousMode !== UI_MODE.KARAOKE) {
+    lyricsEditorWindowGeometryBeforeKaraoke = captureLyricsEditorWindowGeometry();
+    maximizeLyricsKaraokeWindow();
     void reportProjectLoadTrace("FULL SCREEN INIT START", { previous_mode: previousMode, next_mode: nextMode });
     lyricsFullScreenMasterLevel = 1;
     if (lyricsFullScreenVolumeRange) lyricsFullScreenVolumeRange.value = "100";
@@ -16773,6 +16934,11 @@ lyricsSaveAsFormat.addEventListener(
 
     }
 
+    if (lyricsSaveAsConfirmBtn) {
+      lyricsSaveAsConfirmBtn.textContent =
+        lyricsSaveAsFormat.value === "pdf" ? "Preview" : "Save";
+    }
+
   }
 );
 
@@ -16874,6 +17040,87 @@ function escapeLyricsHtml(value) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+// 5.4.3 | PDF preview: отдельное окно внутри MyNus, не full-screen.
+function openLyricsPdfPreview(fileName, html) {
+  document.querySelector(".lyrics-pdf-preview")?.remove();
+
+  const preview = document.createElement("div");
+  preview.className = "lyrics-pdf-preview";
+
+  const head = document.createElement("div");
+  head.className = "lyrics-pdf-preview-head";
+
+  const title = document.createElement("div");
+  title.className = "lyrics-pdf-preview-title";
+  title.textContent = fileName + ".pdf";
+
+  const printBtn = document.createElement("button");
+  printBtn.type = "button";
+  printBtn.textContent = "Print / Save PDF";
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "lyrics-pdf-preview-close";
+  closeBtn.textContent = "×";
+  closeBtn.title = "Close";
+  closeBtn.setAttribute("aria-label", "Close PDF preview");
+
+  const frame = document.createElement("iframe");
+  frame.title = "PDF Preview";
+  frame.srcdoc = html;
+
+  head.appendChild(title);
+  head.appendChild(printBtn);
+  head.appendChild(closeBtn);
+  preview.appendChild(head);
+  preview.appendChild(frame);
+  document.body.appendChild(preview);
+
+  closeBtn.addEventListener("click", () => {
+    preview.remove();
+  });
+
+  printBtn.addEventListener("click", () => {
+    const printWindow = frame.contentWindow;
+    if (!printWindow) return;
+    try {
+      printWindow.document.title = fileName;
+      printWindow.focus();
+      printWindow.print();
+    }
+    catch (error) {
+      console.error("PDF print failed:", error);
+    }
+  });
+
+  let drag = null;
+  head.addEventListener("pointerdown", event => {
+    if (event.button !== 0 || event.target.closest("button")) return;
+    const rect = preview.getBoundingClientRect();
+    drag = {
+      pointerId: event.pointerId,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top
+    };
+    head.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  });
+
+  head.addEventListener("pointermove", event => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const maxLeft = Math.max(0, window.innerWidth - preview.offsetWidth);
+    const maxTop = Math.max(0, window.innerHeight - preview.offsetHeight);
+    preview.style.left = Math.max(0, Math.min(maxLeft, event.clientX - drag.offsetX)) + "px";
+    preview.style.top = Math.max(0, Math.min(maxTop, event.clientY - drag.offsetY)) + "px";
+  });
+
+  const stopDrag = event => {
+    if (drag && event.pointerId === drag.pointerId) drag = null;
+  };
+  head.addEventListener("pointerup", stopDrag);
+  head.addEventListener("pointercancel", stopDrag);
 }
 
 // Работа со Structure в Lyrics Editor.
@@ -17023,68 +17270,26 @@ function exportLyricsFile(rawName, format, encoding = "utf8") {
       + "</section>";
     const lyricsBody = "<section class='lyrics'><h2>Lyrics</h2>" + body + "</section>";
 
-    // Печатаем через временный скрытый iframe вместо всплывающего окна.
-    // После печати iframe удаляется, поэтому редактор не может остаться заблокированным
-    // за зависшим окном печати после сохранения/отмены PDF.
-    const printFrame = document.createElement("iframe");
-    printFrame.setAttribute("aria-hidden", "true");
-    printFrame.style.position = "fixed";
-    printFrame.style.right = "0";
-    printFrame.style.bottom = "0";
-    printFrame.style.width = "1px";
-    printFrame.style.height = "1px";
-    printFrame.style.border = "0";
-    printFrame.style.opacity = "0";
-    printFrame.style.pointerEvents = "none";
-    document.body.appendChild(printFrame);
-
-    const printWindow = printFrame.contentWindow;
-    const printDocument = printFrame.contentDocument || printWindow?.document;
-    if (!printWindow || !printDocument) {
-      printFrame.remove();
-      return;
-    }
-
-    let printCleaned = false;
-    const cleanupPrintFrame = () => {
-      if (printCleaned) return;
-      printCleaned = true;
-      setTimeout(() => printFrame.remove(), 0);
-    };
-
-    printWindow.onafterprint = cleanupPrintFrame;
-
-    printDocument.open();
-    printDocument.write(
+    const pdfHtml =
       "<!doctype html>"
       + "<html><head><meta charset='utf-8'>"
       + "<title>" + escapeLyricsHtml(safeName) + "</title>"
       + "<style>"
-      + "body{font-family:Arial,sans-serif;padding:40px;line-height:1.5;color:#111}"
+      + "body{font-family:Arial,sans-serif;padding:40px;line-height:1.5;color:#111;background:#fff}"
       + "h1{font-size:22px;margin:0 0 28px}"
       + "h2{font-size:16px;font-weight:700;margin:22px 0 10px}"
       + "p{margin:0 0 8px}"
       + ".structure{font-family:Consolas,monospace;font-size:12px;white-space:pre}"
+      + ".structure h2{font-family:Arial,sans-serif;font-weight:700}"
       + ".structure div{margin:0 0 4px}"
+      + "@media print{body{padding:0}}"
       + "</style></head><body>"
       + "<h1>" + escapeLyricsHtml(safeName) + "</h1>"
       + structureBody
       + lyricsBody
-      + "</body></html>"
-    );
-    printDocument.close();
+      + "</body></html>";
 
-    setTimeout(() => {
-      try {
-        printWindow.focus();
-        printWindow.print();
-      } catch (error) {
-        cleanupPrintFrame();
-      }
-    }, 50);
-
-    // Резервная очистка для браузеров, где событие afterprint срабатывает ненадёжно.
-    setTimeout(cleanupPrintFrame, 60000);
+    openLyricsPdfPreview(safeName, pdfHtml);
     return;
   }
   else {
@@ -18910,7 +19115,7 @@ updateMasterHistoryButtons();
 
 
 // ========================================
-// PROJECT / PLAYLIST: СОСТОЯНИЕ И НУМЕРАЦИЯ | 5.4.2
+// PROJECT / PLAYLIST: СОСТОЯНИЕ И НУМЕРАЦИЯ | 5.4.3
 // Project = 12 аудиослотов + Lyrics.json + Project.json
 // ========================================
 const saveProjectBtn = document.getElementById("saveProjectBtn");
@@ -18989,7 +19194,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "5.4.2",
+    version: "5.4.3",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -19229,14 +19434,14 @@ function renderFullScreenPlaylist(projects = karaokePlaylistSnapshot) {
       }
 
       // =====================================================================
-      // [5.4.2][СЦЕНАРИЙ 2 — PLAYLIST]
+      // [5.4.3][СЦЕНАРИЙ 2 — PLAYLIST]
       // Пользователь вручную выбрал Track в PlayList.
       // Здесь PlayList выполняет ТОЛЬКО свою задачу: определяет ID выбранного Project.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.4.2][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
-      await reportProjectLoadTrace("[5.4.2][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.3][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
+      await reportProjectLoadTrace("[5.4.3][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(track.id)",
         function: "loadProjectById",
         parameters: { id: track.id },
@@ -19434,14 +19639,14 @@ async function runKaraokeFinishAction(action) {
       closeKaraokeFinishedDialog();
 
       // =====================================================================
-      // [5.4.2][СЦЕНАРИЙ 3 — OPEN NEXT]
+      // [5.4.3][СЦЕНАРИЙ 3 — OPEN NEXT]
       // Команда Open next берёт первый ожидающий Track из очереди и получает его Project ID.
       // На этом сценарий выбора заканчивается.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // Дальше выполняется прямой переход в ТУ ЖЕ ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.4.2][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
-      await reportProjectLoadTrace("[5.4.2][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.3][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
+      await reportProjectLoadTrace("[5.4.3][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(nextProject.id)",
         function: "loadProjectById",
         parameters: { id: nextProject.id },
@@ -19555,10 +19760,10 @@ const projectLoaderFill = document.getElementById("projectLoaderFill");
 const projectLoaderPercent = document.getElementById("projectLoaderPercent");
 let projectLoading = false;
 
-// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.2.
+// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.3.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "5.4.2";
-const MYNUS_CLIENT_CHANGE = "Lyrics Editor: CARET single-session History; Enter commits text/time; CARET disables only auto-scroll while PLAY continues; POINTER restores transport/scroll; Structure->Lyrics export with ASCII --; Save Project / Save Lyrics";
+const MYNUS_CLIENT_VERSION = "5.4.3";
+const MYNUS_CLIENT_CHANGE = "Lyrics CARET commit rebuilds POINTER from draft; PDF movable/resizable preview with X and one final Print/Save; Full Screen starts maximized but remains resizable/movable";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
 let projectLoadTraceSource = null;
@@ -19801,7 +20006,7 @@ function clearProjectState() {
 }
 
 // =====================================================================
-// [5.4.2][ЕДИНАЯ LOAD-ФУНКЦИЯ]
+// [5.4.3][ЕДИНАЯ LOAD-ФУНКЦИЯ]
 // Это ЕДИНСТВЕННАЯ функция загрузки сохранённого Project.
 // Она получает РОВНО ОДИН входной параметр: id.
 // Функция НЕ знает, кто выбрал этот ID: Open Project, PlayList или Open next.
@@ -19810,12 +20015,12 @@ function clearProjectState() {
 // =====================================================================
 async function loadProjectById(id) {
   if (!projectLoadTraceId || projectLoadTraceProject !== (id || null)) {
-    beginProjectLoadTrace("[5.4.2][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
+    beginProjectLoadTrace("[5.4.3][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
   } else {
     projectLoadTraceProject = id || projectLoadTraceProject;
   }
 
-  await reportProjectLoadTrace("[5.4.2][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
+  await reportProjectLoadTrace("[5.4.3][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
     command: "LOAD Project",
     function: "loadProjectById",
     parameters: { id },
@@ -20044,14 +20249,14 @@ async function openLoadProjectDialog() {
       button.addEventListener("click", async () => {
         try {
           // =====================================================================
-          // [5.4.2][СЦЕНАРИЙ 1 — OPEN PROJECT]
+          // [5.4.3][СЦЕНАРИЙ 1 — OPEN PROJECT]
           // Пользователь выбрал Project в обычном окне Open Project.
           // Этот сценарий выполняет только выбор Project и получает его ID.
           // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
           // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
           // =====================================================================
-          beginProjectLoadTrace("[5.4.2][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
-          await reportProjectLoadTrace("[5.4.2][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+          beginProjectLoadTrace("[5.4.3][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
+          await reportProjectLoadTrace("[5.4.3][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
             command: "await loadProjectById(project.id)",
             function: "loadProjectById",
             parameters: { id: project.id, name: project.name },
@@ -20349,8 +20554,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.4.2 | Lyrics Editor: CARET session = one commit/History; Enter commits text/time; CARET disables only editor auto-scroll while PLAY continues; POINTER restores transport/scroll; export Structure -> Lyrics with --; Save Project / Save Lyrics.");
-console.log("[SERVICE CONSOLE] MyNus 5.4.2 | CARET history=single-session | time Enter=commit | CARET scroll=off transport=unchanged | POINTER scroll=on restore=pointer | export=Structure->Lyrics ASCII-- | buttons=Save Project/Save Lyrics");
+console.log("MyNus 5.4.3 | CARET commit -> POINTER from Lyrics Draft; PDF preview movable/resizable + X + one final Print/Save; Full Screen opens maximized and remains resizable/movable.");
+console.log("[SERVICE CONSOLE] MyNus 5.4.3 | lyrics-commit=authoritative-draft | pdf=preview+X+single-final-save | fullscreen=default-maximized+resizable+movable");
 </script>
 
 <div class="row" id="build-down">
