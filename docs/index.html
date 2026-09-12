@@ -1,4 +1,4 @@
-<!-- MyNus 5.4.1 | Structure создаётся автоматически только один раз при первичной обработке нового трека; открытие Lyrics/Full Screen и LOAD Project/Lyrics больше не пересчитывают Structure; renderLyricsStructure() только отображает сохранённую Structure; null-состояние Structure удалено; комментарии на русском. --> 
+<!-- MyNus 5.4.2 | Lyrics Editor: CARET = единая сессия правки с одним History commit; Enter завершает текст/тайм-код; CARET отключает только автоскролл, транспорт продолжает PLAY; POINTER восстанавливает транспорт и автоскролл; экспорт Structure перед Lyrics с ASCII --; Save Project / Save Lyrics. Structure lifecycle сохранён без изменений. --> 
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.4.1</title>
+  <title>MyNus 5.4.2</title>
 
 
  <style>
@@ -1370,7 +1370,15 @@
     }
 
     .lyrics-editor-status { min-width: 0; color: #666; font-size: 11px; }
-    .lyrics-editor-actions { display: flex; gap: 6px; }
+    .lyrics-editor-actions { display: flex; align-items: center; gap: 6px; }
+    #saveLyricsEditBtn, #lyricsSaveAsBtn {
+      width: 96px;
+      height: 30px;
+      padding: 6px 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
 
 
     .lyrics-editor-toolbar {
@@ -4126,7 +4134,7 @@
 </div>
 
 <!-- ========================================
-     NEW PROJECT PROMPT | 5.4.1
+     NEW PROJECT PROMPT | 5.4.2
 ======================================== -->
 <div id="newProjectPromptDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -4386,8 +4394,8 @@
         <span id="lyricsSaveNotice" style="min-width:150px; font-size:12px; text-align:right;"></span>
         <button type="button" id="cancelLyricsEditBtn">Cancel</button>
         <button type="button" id="lyricsLoadBtn">Load</button>
-        <button type="button" id="saveLyricsEditBtn">Save</button>
-        <button type="button" id="lyricsSaveAsBtn">Save As...</button>
+        <button type="button" id="saveLyricsEditBtn">Save Project</button>
+        <button type="button" id="lyricsSaveAsBtn">Save Lyrics</button>
       </div>
 
     </div>
@@ -5255,6 +5263,8 @@ let lyricsEditorDraft = [];
 let lyricsEditorSelectedLine = -1;
 let lyricsEditorEditLineIndex = -1;
 let lyricsEditorCaretOffset = 0;
+let lyricsEditorEditStartState = null;
+let lyricsEditorPointerTime = null;
 let lyricsStructureDraft = [];
 let lyricsStructureSelectedIndex = -1;
 let lyricsStructureSelectedIndices = new Set();
@@ -13411,6 +13421,7 @@ function seekLyricsWord(line, wordIndex) {
   const word = line?.words?.[wordIndex];
   const time = Number(word?.start);
   if (!Number.isFinite(time)) return;
+  lyricsEditorPointerTime = time;
   setGlobalCursorTime(time);
 }
 
@@ -13447,24 +13458,41 @@ function caretOffsetForLyricsGap(line, karaokeBox, clientX, clientY) {
 }
 
 // Работа со Structure в Lyrics Editor.
-function leaveLyricsEdit() {
-  if (lyricsEditorEditLineIndex < 0) return;
+function leaveLyricsEdit({ restorePointer = false } = {}) {
+  if (lyricsEditorEditLineIndex < 0) return false;
   const row = lyricsEditorRows.querySelector(`.lyrics-editor-row[data-index="${lyricsEditorEditLineIndex}"]`);
   const textArea = row?.querySelector("textarea");
   const textWrap = row?.querySelector(".lyrics-editor-text-wrap");
   const marker = row?.querySelector(".lyrics-editor-edit-marker");
   const line = lyricsEditorDraft[lyricsEditorEditLineIndex];
+  const beforeState = lyricsEditorEditStartState;
+  const beforeText = beforeState?.lyrics?.[lyricsEditorEditLineIndex]
+    ? lineText(beforeState.lyrics[lyricsEditorEditLineIndex])
+    : (line ? lineText(line) : "");
+  const editedText = textArea ? textArea.value : (line?._editedText ?? beforeText);
+  const changed = String(editedText) !== String(beforeText);
 
-  if (line && textArea) {
-    line._editedText = textArea.value;
+  if (line) {
+    line._editedText = editedText;
     applyEditedTextToLine(line);
   }
+  if (changed) pushLyricsHistoryState(beforeState);
+
   if (textWrap) textWrap.classList.remove("lyrics-edit-active");
   if (marker) marker.style.display = "none";
 
   lyricsEditorEditLineIndex = -1;
   lyricsEditorCaretOffset = 0;
+  lyricsEditorEditStartState = null;
+
+  // Возврат CARET -> POINTER восстанавливает транспорт на последней POINTER-позиции.
+  // Сам CARET никогда не останавливает и не ставит PLAY на паузу.
+  if (restorePointer && Number.isFinite(lyricsEditorPointerTime)) {
+    setGlobalCursorTime(lyricsEditorPointerTime);
+  }
+
   updateLyricsEditorStats();
+  return changed;
 }
 
 // Работа со Structure в Lyrics Editor.
@@ -13477,6 +13505,9 @@ function enterLyricsEditAt(line, row, textWrap, textArea, karaokeBox, clientX, c
   }
 
   const caretOffset = caretOffsetForLyricsGap(line, karaokeBox, clientX, clientY);
+  if (lyricsEditorEditLineIndex !== lineIndex) {
+    lyricsEditorEditStartState = cloneLyricsEditorState();
+  }
   lyricsEditorEditLineIndex = lineIndex;
   lyricsEditorCaretOffset = caretOffset;
   textWrap.classList.add("lyrics-edit-active");
@@ -14124,7 +14155,8 @@ function updateLyricsEditorKaraoke(currentTime) {
   });
 
   if (
-    lyricsTransportMode === "master"
+    lyricsEditorEditLineIndex < 0
+    && lyricsTransportMode === "master"
     && lyricsStructureSelectedIndex < 0
     && !lyricsStructureSelectedIndices.size
     && lyricsEditorSelectedLine !== currentLineIndex
@@ -15421,17 +15453,39 @@ function renderLyricsEditor() {
       karaokeBox
     );
 
-    startInput.addEventListener("change", event => {
-      const value = parseLyricsTime(event.target.value);
-      if (Number.isFinite(value)) line.start = value;
-      event.target.value = formatLyricsTime(line.start);
-    });
+    const bindLyricsTimeEditor = (input, key) => {
+      let startState = null;
+      let startValue = Number(line[key]);
+      let committed = false;
 
-    endInput.addEventListener("change", event => {
-      const value = parseLyricsTime(event.target.value);
-      if (Number.isFinite(value)) line.end = value;
-      event.target.value = formatLyricsTime(line.end);
-    });
+      const begin = () => {
+        startState = cloneLyricsEditorState();
+        startValue = Number(line[key]);
+        committed = false;
+      };
+
+      const commit = () => {
+        if (committed) return;
+        committed = true;
+        const value = parseLyricsTime(input.value);
+        if (Number.isFinite(value)) line[key] = value;
+        input.value = formatLyricsTime(line[key]);
+        if (Number(line[key]) !== startValue) pushLyricsHistoryState(startState);
+      };
+
+      input.addEventListener("focus", begin);
+      input.addEventListener("keydown", event => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        event.stopPropagation();
+        commit();
+        input.blur();
+      });
+      input.addEventListener("blur", commit);
+    };
+
+    bindLyricsTimeEditor(startInput, "start");
+    bindLyricsTimeEditor(endInput, "end");
 
     karaokeBox.tabIndex = 0;
     karaokeBox.addEventListener("click", event => {
@@ -15447,7 +15501,7 @@ function renderLyricsEditor() {
       const wordSpan = event.target.closest?.(".lyrics-editor-karaoke-word");
       if (wordSpan) {
         // POINTER: клик по слову управляет только транспортом.
-        if (lyricsEditorEditLineIndex >= 0) leaveLyricsEdit();
+        if (lyricsEditorEditLineIndex >= 0) leaveLyricsEdit({ restorePointer: false });
         seekLyricsWord(line, Number(wordSpan.dataset.wordIndex));
       } else {
         // CARET: клик между словами включает только редактирование текста; время транспорта не меняется.
@@ -15465,11 +15519,21 @@ function renderLyricsEditor() {
       line._editedText = event.target.value;
       rememberLyricsCaret();
     });
+    textArea.addEventListener("keydown", event => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      event.stopPropagation();
+      leaveLyricsEdit({ restorePointer: true });
+      textArea.blur();
+    });
     textArea.addEventListener("click", rememberLyricsCaret);
     textArea.addEventListener("keyup", rememberLyricsCaret);
     textArea.addEventListener("select", rememberLyricsCaret);
 
     row.addEventListener("click", event => {
+      if (lyricsEditorEditLineIndex >= 0 && lyricsEditorEditLineIndex !== index) {
+        leaveLyricsEdit({ restorePointer: false });
+      }
       if (event.target === startInput || event.target === endInput || event.target === textArea) return;
 
       clearLyricsStructureSelection();
@@ -15722,6 +15786,15 @@ function pushLyricsHistory() {
     lyricsUndoStack.shift();
   }
 
+  lyricsRedoStack = [];
+  updateLyricsUndoRedoButtons();
+}
+
+// Добавляет в History заранее сохранённое состояние до начала одной сессии редактирования.
+function pushLyricsHistoryState(state) {
+  if (!state) return;
+  lyricsUndoStack.push(JSON.parse(JSON.stringify(state)));
+  if (lyricsUndoStack.length > 100) lyricsUndoStack.shift();
   lyricsRedoStack = [];
   updateLyricsUndoRedoButtons();
 }
@@ -16789,7 +16862,7 @@ function buildLyricsStructureScheme() {
   return lyricsStructureDraft.map(segment => {
     const name = String(segment.label || segment.type || "").trim() || "[      ]";
     return formatStructureTime(segment.start)
-      + " ── " + name + " ── "
+      + " -- " + name + " -- "
       + formatStructureTime(segment.end);
   }).join("\n");
 }
@@ -16886,9 +16959,8 @@ function exportLyricsFile(rawName, format, encoding = "utf8") {
         )
         .join("\n");
 
-    if (structureScheme) {
-      content += "\n\n" + structureScheme;
-    }
+    content = (structureScheme ? "Structure\n" + structureScheme + "\n\n" : "Structure\n\n")
+      + "Lyrics\n" + content;
   }
 
   else if (format === "srt") {
@@ -16911,9 +16983,8 @@ function exportLyricsFile(rawName, format, encoding = "utf8") {
         )
         .join("\n\n");
 
-    if (structureScheme) {
-      content += "\n\n" + structureScheme;
-    }
+    content = (structureScheme ? "Structure\n" + structureScheme + "\n\n" : "Structure\n\n")
+      + "Lyrics\n" + content;
   }
 
   else if (format === "txt") {
@@ -16930,9 +17001,8 @@ function exportLyricsFile(rawName, format, encoding = "utf8") {
         )
         .join("\n");
 
-    if (structureScheme) {
-      content += "\n\n" + structureScheme;
-    }
+    content = (structureScheme ? "Structure\n" + structureScheme + "\n\n" : "Structure\n\n")
+      + "Lyrics\n" + content;
   }
 
   else if (format === "pdf") {
@@ -16946,14 +17016,12 @@ function exportLyricsFile(rawName, format, encoding = "utf8") {
         )
         .join("");
 
-    const structureBody = structureScheme
-      ? "<div class='structure'>"
-        + structureScheme
-            .split("\n")
-            .map(row => "<div>" + escapeLyricsHtml(row) + "</div>")
-            .join("")
-        + "</div>"
-      : "";
+    const structureBody = "<section class='structure'><h2>Structure</h2>"
+      + (structureScheme
+          ? structureScheme.split("\n").map(row => "<div>" + escapeLyricsHtml(row) + "</div>").join("")
+          : "")
+      + "</section>";
+    const lyricsBody = "<section class='lyrics'><h2>Lyrics</h2>" + body + "</section>";
 
     // Печатаем через временный скрытый iframe вместо всплывающего окна.
     // После печати iframe удаляется, поэтому редактор не может остаться заблокированным
@@ -16994,13 +17062,14 @@ function exportLyricsFile(rawName, format, encoding = "utf8") {
       + "<style>"
       + "body{font-family:Arial,sans-serif;padding:40px;line-height:1.5;color:#111}"
       + "h1{font-size:22px;margin:0 0 28px}"
+      + "h2{font-size:16px;font-weight:700;margin:22px 0 10px}"
       + "p{margin:0 0 8px}"
-      + ".structure{margin-top:28px;padding-top:16px;border-top:1px solid #999;font-family:Consolas,monospace;font-size:12px;white-space:pre}"
+      + ".structure{font-family:Consolas,monospace;font-size:12px;white-space:pre}"
       + ".structure div{margin:0 0 4px}"
       + "</style></head><body>"
       + "<h1>" + escapeLyricsHtml(safeName) + "</h1>"
-      + body
       + structureBody
+      + lyricsBody
       + "</body></html>"
     );
     printDocument.close();
@@ -18841,7 +18910,7 @@ updateMasterHistoryButtons();
 
 
 // ========================================
-// PROJECT / PLAYLIST: СОСТОЯНИЕ И НУМЕРАЦИЯ | 5.4.1
+// PROJECT / PLAYLIST: СОСТОЯНИЕ И НУМЕРАЦИЯ | 5.4.2
 // Project = 12 аудиослотов + Lyrics.json + Project.json
 // ========================================
 const saveProjectBtn = document.getElementById("saveProjectBtn");
@@ -18920,7 +18989,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "5.4.1",
+    version: "5.4.2",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -19160,14 +19229,14 @@ function renderFullScreenPlaylist(projects = karaokePlaylistSnapshot) {
       }
 
       // =====================================================================
-      // [5.4.1][СЦЕНАРИЙ 2 — PLAYLIST]
+      // [5.4.2][СЦЕНАРИЙ 2 — PLAYLIST]
       // Пользователь вручную выбрал Track в PlayList.
       // Здесь PlayList выполняет ТОЛЬКО свою задачу: определяет ID выбранного Project.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.4.1][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
-      await reportProjectLoadTrace("[5.4.1][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.2][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
+      await reportProjectLoadTrace("[5.4.2][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(track.id)",
         function: "loadProjectById",
         parameters: { id: track.id },
@@ -19365,14 +19434,14 @@ async function runKaraokeFinishAction(action) {
       closeKaraokeFinishedDialog();
 
       // =====================================================================
-      // [5.4.1][СЦЕНАРИЙ 3 — OPEN NEXT]
+      // [5.4.2][СЦЕНАРИЙ 3 — OPEN NEXT]
       // Команда Open next берёт первый ожидающий Track из очереди и получает его Project ID.
       // На этом сценарий выбора заканчивается.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // Дальше выполняется прямой переход в ТУ ЖЕ ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.4.1][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
-      await reportProjectLoadTrace("[5.4.1][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.2][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
+      await reportProjectLoadTrace("[5.4.2][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(nextProject.id)",
         function: "loadProjectById",
         parameters: { id: nextProject.id },
@@ -19486,10 +19555,10 @@ const projectLoaderFill = document.getElementById("projectLoaderFill");
 const projectLoaderPercent = document.getElementById("projectLoaderPercent");
 let projectLoading = false;
 
-// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.1.
+// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.2.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "5.4.1";
-const MYNUS_CLIENT_CHANGE = "Structure создаётся автоматически только при первичной обработке нового трека; Project/Lyrics LOAD только восстанавливают сохранённую Structure; Edit Lyrics, Full Screen и renderLyricsStructure() её не пересчитывают";
+const MYNUS_CLIENT_VERSION = "5.4.2";
+const MYNUS_CLIENT_CHANGE = "Lyrics Editor: CARET single-session History; Enter commits text/time; CARET disables only auto-scroll while PLAY continues; POINTER restores transport/scroll; Structure->Lyrics export with ASCII --; Save Project / Save Lyrics";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
 let projectLoadTraceSource = null;
@@ -19732,7 +19801,7 @@ function clearProjectState() {
 }
 
 // =====================================================================
-// [5.4.1][ЕДИНАЯ LOAD-ФУНКЦИЯ]
+// [5.4.2][ЕДИНАЯ LOAD-ФУНКЦИЯ]
 // Это ЕДИНСТВЕННАЯ функция загрузки сохранённого Project.
 // Она получает РОВНО ОДИН входной параметр: id.
 // Функция НЕ знает, кто выбрал этот ID: Open Project, PlayList или Open next.
@@ -19741,12 +19810,12 @@ function clearProjectState() {
 // =====================================================================
 async function loadProjectById(id) {
   if (!projectLoadTraceId || projectLoadTraceProject !== (id || null)) {
-    beginProjectLoadTrace("[5.4.1][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
+    beginProjectLoadTrace("[5.4.2][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
   } else {
     projectLoadTraceProject = id || projectLoadTraceProject;
   }
 
-  await reportProjectLoadTrace("[5.4.1][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
+  await reportProjectLoadTrace("[5.4.2][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
     command: "LOAD Project",
     function: "loadProjectById",
     parameters: { id },
@@ -19975,14 +20044,14 @@ async function openLoadProjectDialog() {
       button.addEventListener("click", async () => {
         try {
           // =====================================================================
-          // [5.4.1][СЦЕНАРИЙ 1 — OPEN PROJECT]
+          // [5.4.2][СЦЕНАРИЙ 1 — OPEN PROJECT]
           // Пользователь выбрал Project в обычном окне Open Project.
           // Этот сценарий выполняет только выбор Project и получает его ID.
           // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
           // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
           // =====================================================================
-          beginProjectLoadTrace("[5.4.1][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
-          await reportProjectLoadTrace("[5.4.1][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+          beginProjectLoadTrace("[5.4.2][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
+          await reportProjectLoadTrace("[5.4.2][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
             command: "await loadProjectById(project.id)",
             function: "loadProjectById",
             parameters: { id: project.id, name: project.name },
@@ -20280,8 +20349,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.4.1 | Structure: автосоздание только при первичной обработке нового трека; LOAD Project/Lyrics, Edit Lyrics и Full Screen Structure не пересчитывают; renderLyricsStructure() только отображает сохранённые данные.");
-console.log("[SERVICE CONSOLE] MyNus 5.4.1 | Structure lifecycle fixed | auto-detect=initial-processing-only | Project/Lyrics LOAD=restore-only | render=no-rebuild");
+console.log("MyNus 5.4.2 | Lyrics Editor: CARET session = one commit/History; Enter commits text/time; CARET disables only editor auto-scroll while PLAY continues; POINTER restores transport/scroll; export Structure -> Lyrics with --; Save Project / Save Lyrics.");
+console.log("[SERVICE CONSOLE] MyNus 5.4.2 | CARET history=single-session | time Enter=commit | CARET scroll=off transport=unchanged | POINTER scroll=on restore=pointer | export=Structure->Lyrics ASCII-- | buttons=Save Project/Save Lyrics");
 </script>
 
 <div class="row" id="build-down">
