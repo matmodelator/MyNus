@@ -1,4 +1,5 @@
-<!-- MyNus 5.4.6 | PDF print window uses current project name at 50% screen size; Full Screen reverse counter mirrors Lyrics 3-phase countdown with gray final phase; Lyrics Set Start/End moved to upper-left toolbar; footer info is 3 rows; Repeat matches Play/Loop size. Server unchanged. -->
+<!-- MyNus 5.4.7 | .lyrics-editor-card.karaoke-fullscreen-mode #lyricsStructureMasterCounter {
+  display: none !important; -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -2134,6 +2135,10 @@
       font-size: 18px;
     }
 
+.lyrics-editor-card.karaoke-fullscreen-mode #lyricsStructureMasterCounter {
+  display: none !important;
+}
+   
     .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-endpoint-value {
       bottom: 5px;
       color: #e58aa8;
@@ -20730,8 +20735,10 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.4.6 | PDF project-name print window at 50% screen; Full Screen uses Lyrics 3-phase reverse countdown with existing Full Screen styling and gray final phase; Lyrics footer layout updated.");
-console.log("[SERVICE CONSOLE] MyNus 5.4.6 | pdf=project-name+50%-print-window | fullscreen-counter=lyrics-3-phase+fullscreen-style+gray-final | lyrics-layout=set-start-end-top+3-row-info");
+console.log("MyNus 5.4.7 | .lyrics-editor-card.karaoke-fullscreen-mode #lyricsStructureMasterCounter {
+  display: none !important;");
+console.log("[SERVICE CONSOLE] MyNus 5.4.7 | .lyrics-editor-card.karaoke-fullscreen-mode #lyricsStructureMasterCounter {
+  display: none !important;");
 </script>
 
 <div class="row" id="build-down">
