@@ -1,4 +1,4 @@
-<!-- MyNus 5.3.0 | Три независимых сценария выбора Project -> один прямой вызов единой функции LOAD; русские комментарии синхронизированы с серверным TRACE  ...ЗАГРУЗКА СТРУКТУРЫ ОДИНАКОВА ДЛЯ ВЕХ СПОСОБОВ! --> 
+<!-- MyNus 5.4.0 | Единая нумерация PlayList по n; LOAD не изменён; Progress расположен ниже окна загрузки и выше него по слоям; комментарии на русском. --> 
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.3.0</title>
+  <title>MyNus 5.4.0</title>
 
 
  <style>
@@ -1651,10 +1651,15 @@
       padding-left: 7px;
     }
 
+    .lyrics-fullscreen-playlist-menu.playlist-transition-locked {
+      pointer-events: none;
+      opacity: .55;
+    }
+
     .project-loader {
       position: fixed;
       inset: 0;
-      z-index: 200;
+      z-index: 3300;
       display: none;
       align-items: center;
       justify-content: center;
@@ -1665,6 +1670,7 @@
     .project-loader.open { display: flex; }
     .project-loader-card {
       width: min(560px, 78vw);
+      transform: translateY(180px);
       padding: 28px 32px;
       box-sizing: border-box;
       border: 1px solid rgba(255,255,255,.22);
@@ -2300,8 +2306,8 @@
       font-weight: 700;
     }
 
-    /* Separate upper row for the real start/end values. It occupies its own
-       height and does not change Structure/timeline width or time mapping. */
+    /* Отдельная верхняя строка для реальных значений start/end. Она занимает собственную
+       высоту и не меняет ширину Structure/timeline или соответствие времени. */
     .lyrics-structure-endpoints {
       position: relative;
       width: 100%;
@@ -2322,8 +2328,8 @@
     .lyrics-structure-endpoint-value.start { left: 0; }
     .lyrics-structure-endpoint-value.end { right: 0; }
 
-    /* Endpoint tick anchors stay exactly at 0% / 100%; only their labels
-       live in the separate upper row. */
+    /* Опорные точки конечных делений остаются точно на 0% / 100%; только их подписи
+       выводятся в отдельной верхней строке. */
     .lyrics-structure-tick.endpoint {
       width: 1px;
       transform: none;
@@ -2425,7 +2431,7 @@
     }
 
 
-    /* LYRICS EDITOR — KARAOKE WORDS | 4.4.0 */
+    /* РЕДАКТОР LYRICS — СЛОВА KARAOKE | 4.4.0 */
     .lyrics-editor-text-wrap { position: relative; min-width: 0; display: grid; }
     .lyrics-editor-karaoke { grid-area: 1 / 1; min-height: 46px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 5px; background: white; font-size: 13px; line-height: 1.35; cursor: text; }
     .lyrics-editor-karaoke-word { display: inline; padding: 1px 2px; border-radius: 3px; cursor: pointer; }
@@ -4120,7 +4126,7 @@
 </div>
 
 <!-- ========================================
-     NEW PROJECT PROMPT | 5.3.0
+     NEW PROJECT PROMPT | 5.4.0
 ======================================== -->
 <div id="newProjectPromptDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -4439,7 +4445,7 @@
 
 
 // ========================================
-// PAGE ELEMENTS
+// ЭЛЕМЕНТЫ СТРАНИЦЫ
 // ========================================
 
 const audioFile =
@@ -5140,7 +5146,7 @@ const scrollAreas =
 
 
 // ========================================
-// APPLICATION STATE
+// СОСТОЯНИЕ ПРИЛОЖЕНИЯ
 // ========================================
 
 let mode =
@@ -5295,7 +5301,7 @@ let lyricsTransportMode =
 let lyricsLoopPaused =
   false;
 
-// Shared text marker in Lines: boundary before word N.
+// Общий текстовый маркер в Lines: граница перед словом N.
 
 
 let vocalStartTimeRaw =
@@ -5322,7 +5328,7 @@ let masterCursorDragging =
 
 
 // ========================================
-// MASTER RECORDING STATE
+// СОСТОЯНИЕ ЗАПИСИ MASTER
 // ========================================
 
 let mixAudioContext = null;
@@ -5474,7 +5480,7 @@ let masterSourceNode = null;
 
 
 // ========================================
-// DUAL TRANSPORT MIRRORS
+// ДУБЛИРОВАНИЕ ТРАНСПОРТА
 // ========================================
 
 document
@@ -5573,7 +5579,7 @@ function syncTransportMirrors() {
 
 
 // ========================================
-// RECENT AUDIO FILES
+// ПОСЛЕДНИЕ АУДИОФАЙЛЫ
 // ========================================
 
 const RECENT_AUDIO_DB = "mynus_recent_audio_v2";
@@ -5689,7 +5695,7 @@ window.addEventListener("resize", closeLyricsStructureNameMenu);
 window.addEventListener("blur", closeRecentAudioMenu);
 
 // ========================================
-// FILE SELECTION
+// ВЫБОР ФАЙЛА
 // ========================================
 
 selectFileBtn.addEventListener(
@@ -5734,7 +5740,7 @@ audioFile.addEventListener(
 
 
 // ========================================
-// AUDIO SEPARATION
+// РАЗДЕЛЕНИЕ АУДИО
 // ========================================
 
 splitBtn.addEventListener(
@@ -5774,8 +5780,8 @@ splitBtn.addEventListener(
     splitBtn.disabled =
       true;
 
-    // The selected file was already cleared through clearProjectState().
-    // Play List state is intentionally preserved.
+    // Выбранный файл уже был очищен через clearProjectState().
+    // Состояние PlayList намеренно сохраняется.
 
 
     studio.style.display =
@@ -6130,7 +6136,7 @@ studio.style.display =
       status.textContent =
         "Ready";
 
-      // Separation is complete. Offer Project creation for full Karaoke work.
+      // Разделение завершено. Предлагаем создать Project для полной работы Karaoke.
       newProjectPromptDialog?.classList.add("open");
 
     }
@@ -6162,7 +6168,7 @@ studio.style.display =
 
 
 // ========================================
-// DEMUCS PROGRESS
+// ПРОГРЕСС DEMUCS
 // ========================================
 
 // Локальная функциональная операция этого блока.
@@ -6271,7 +6277,7 @@ function sleep(
 
 
 // ========================================
-// AUDIO METADATA
+// МЕТАДАННЫЕ АУДИО
 // ========================================
 
 // Локальная функциональная операция этого блока.
@@ -6321,7 +6327,7 @@ function waitForMetadata(
 
 
 // ========================================
-// WAVEFORM DECODING
+// ДЕКОДИРОВАНИЕ ВОЛНОВОЙ ФОРМЫ
 // ========================================
 
 // Загрузка Project и восстановление рабочего состояния.
@@ -6398,7 +6404,7 @@ async function loadWaveforms(
 
 
 // ========================================
-// MASTER WAVEFORM
+// ВОЛНОВАЯ ФОРМА MASTER
 // ========================================
 
 // Работа с Master/Mix и итоговым аудиосостоянием.
@@ -6535,7 +6541,7 @@ function resetMaster() {
 
 
 // ========================================
-// WAVEFORM DRAWING
+// ОТРИСОВКА ВОЛНОВОЙ ФОРМЫ
 // ========================================
 
 
@@ -6815,7 +6821,7 @@ function drawWaveform(
 
     const start =
       x
-      * step;
+      * step; // шаг
 
 
     let min =
@@ -6873,14 +6879,14 @@ function drawWaveform(
       middle
       +
       min
-      * middle;
+      * middle; // середина
 
 
     const y2 =
       middle
       +
       max
-      * middle;
+      * middle; // середина
 
 
     context.moveTo(
@@ -6917,7 +6923,7 @@ function getTimelineWidth() {
     1,
     Math.ceil(
       duration
-      * pixelsPerSecond
+      * pixelsPerSecond // пикселей в секунду
     )
   );
 
@@ -6925,7 +6931,7 @@ function getTimelineWidth() {
 
 
 // ========================================
-// MASTER TIMELINE DRAWING
+// ОТРИСОВКА ВРЕМЕННОЙ ШКАЛЫ MASTER
 // ========================================
 
 // Работа с Master/Mix и итоговым аудиосостоянием.
@@ -6944,7 +6950,7 @@ function drawMasterTimeline() {
     "";
 
 
-  // Keep adjacent visible divisions at least about 1 cm apart (~38 CSS px).
+  // Соседние видимые деления держим на расстоянии не менее примерно 1 см (~38 CSS px).
   const minTickPixels = 38;
   const niceIntervals = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 30, 60, 120, 300, 600];
   let interval = niceIntervals[niceIntervals.length - 1];
@@ -6965,7 +6971,7 @@ function drawMasterTimeline() {
 
     const x =
       second
-      * pixelsPerSecond;
+      * pixelsPerSecond; // пикселей в секунду
 
 
     const mark =
@@ -7026,7 +7032,7 @@ function drawMasterTimeline() {
 
 
 // ========================================
-// PLAY / PAUSE
+// ВОСПРОИЗВЕДЕНИЕ / ПАУЗА
 // ========================================
 
 playBtn.addEventListener(
@@ -7201,7 +7207,7 @@ function playCurrentMode() {
 
 
 // ========================================
-// PAUSE / STOP
+// ПАУЗА / СТОП
 // ========================================
 
 // Управление транспортом и воспроизведением.
@@ -7263,7 +7269,7 @@ stopBtn.addEventListener(
 
 
 // ========================================
-// START / END
+// НАЧАЛО / КОНЕЦ
 // ========================================
 
 startBtn.addEventListener(
@@ -7421,7 +7427,7 @@ const stemCropMaskRight = {
 
 
 // ========================================
-// ORIGINAL / MASTER VOLUME
+// ГРОМКОСТЬ ORIGINAL / MASTER
 // ========================================
 
 originalVolume.addEventListener(
@@ -7467,7 +7473,7 @@ masterVolume.addEventListener(
 
 
 // ========================================
-// ORIGINAL / MIX
+// ИСХОДНАЯ ДОРОЖКА / МИКС
 // ========================================
 
 originalModeBtn.addEventListener(
@@ -7602,7 +7608,7 @@ function switchMode(
 
 
 // ========================================
-// MIX CONTROL
+// УПРАВЛЕНИЕ MIX
 
 // ========================================
 
@@ -7843,7 +7849,7 @@ function applyMix() {
 
 
 // ========================================
-// TRACK CROP IN / OUT
+// ОБРЕЗКА TRACK IN / OUT
 // ========================================
 
 stemIds.forEach(
@@ -8035,7 +8041,7 @@ function updateCropMasks() {
         Math.max(
           0,
           crop.in
-          * pixelsPerSecond
+          * pixelsPerSecond // пикселей в секунду
         );
 
 
@@ -8061,7 +8067,7 @@ function updateCropMasks() {
 
         const outX =
           crop.out
-          * pixelsPerSecond;
+          * pixelsPerSecond; // пикселей в секунду
 
 
         right.style.display =
@@ -8141,7 +8147,7 @@ function updateEffectiveVocalRange() {
   const startFrame =
     Math.floor(
       cropIn
-      * sampleRate
+      * sampleRate // частота дискретизации
     );
 
 
@@ -8150,7 +8156,7 @@ function updateEffectiveVocalRange() {
       samples.length,
       Math.floor(
         cropOut
-        * sampleRate
+        * sampleRate // частота дискретизации
       )
     );
 
@@ -8175,7 +8181,7 @@ function updateEffectiveVocalRange() {
       1,
       Math.floor(
         sampleRate
-        * windowSeconds
+        * windowSeconds // длительность окна в секундах
       )
     );
 
@@ -8357,7 +8363,7 @@ function updateEffectiveVocalRange() {
 
 
 // ========================================
-// EQ / EFFECTS PANEL
+// ПАНЕЛЬ EQ / ЭФФЕКТОВ
 
 // ========================================
 
@@ -8874,7 +8880,7 @@ loadFxPanelValues();
 
 
 // ========================================
-// MASTER AUDIO ROUTING
+// МАРШРУТИЗАЦИЯ АУДИО MASTER
 // ========================================
 
 // Работа с Master/Mix и итоговым аудиосостоянием.
@@ -9011,7 +9017,7 @@ function ensureMixAudioGraph() {
         frames;
 
 
-      // Live waveform is derived from the exact PCM being recorded.
+      // Живая волновая форма строится из того же PCM, который реально записывается.
       let peak =
         0;
 
@@ -9464,7 +9470,7 @@ function createImpulseResponse(
   const length =
     Math.floor(
       sampleRate
-      * seconds
+      * seconds // секунды
     );
 
   const impulse =
@@ -9706,7 +9712,7 @@ function applyFxSettings(
 
 
 // ========================================
-// MASTER RECORDING
+// ЗАПИСЬ MASTER
 // ========================================
 
 recordMasterBtn.addEventListener(
@@ -9748,7 +9754,7 @@ async function startMasterRecording() {
   }
 
 
-  // Freeze the exact start position on the shared song timeline.
+  // Фиксируем точную стартовую позицию на общей временной шкале песни.
   masterRecordTimelineStart =
     getCurrentTime();
 
@@ -9797,7 +9803,7 @@ async function startMasterRecording() {
   clearMasterCanvas();
 
 
-  // Start playback first, but PCM capture is still off.
+  // Сначала запускаем воспроизведение, при этом захват PCM пока выключен.
   if (
     !isPlaying
   ) {
@@ -9807,7 +9813,7 @@ async function startMasterRecording() {
   }
 
 
-  // Re-lock all six stems immediately before capture.
+  // Непосредственно перед захватом повторно синхронизируем все шесть stems.
   const lockedStart =
     getCurrentTime();
 
@@ -9866,7 +9872,7 @@ function stopMasterRecording() {
   }
 
 
-  // Stop accepting PCM first.
+  // Сначала прекращаем приём PCM.
   masterRecording =
     false;
 
@@ -9926,7 +9932,7 @@ async function finishMasterRecording() {
         1,
         Math.round(
           timelineDuration
-          * masterPcmSampleRate
+          * masterPcmSampleRate // частота дискретизации PCM Master
         )
       );
 
@@ -10088,7 +10094,7 @@ async function finishMasterRecording() {
             0,
             Math.floor(
               (replaceStart - oldStart)
-              * sampleRate
+              * sampleRate // частота дискретизации
             )
           );
 
@@ -10152,7 +10158,7 @@ async function finishMasterRecording() {
             0,
             Math.ceil(
               (replaceEnd - oldStart)
-              * sampleRate
+              * sampleRate // частота дискретизации
             )
           );
 
@@ -10377,14 +10383,14 @@ function drawBufferAtTimelinePosition(
       1,
       Math.ceil(
         audioBuffer.duration
-        * pixelsPerSecond
+        * pixelsPerSecond // пикселей в секунду
       )
     );
 
 
   const startX =
     startTime
-    * pixelsPerSecond;
+    * pixelsPerSecond; // пикселей в секунду
 
 
   const step =
@@ -10497,7 +10503,7 @@ function drawLivePeaksIntoContext(
 
   const startX =
     masterRecordTimelineStart
-    * pixelsPerSecond;
+    * pixelsPerSecond; // пикселей в секунду
 
 
   const recordedWidth =
@@ -10507,7 +10513,7 @@ function drawLivePeaksIntoContext(
         getTimelineWidth()
         - startX,
         elapsed
-        * pixelsPerSecond
+        * pixelsPerSecond // пикселей в секунду
       )
     );
 
@@ -10533,7 +10539,7 @@ function drawLivePeaksIntoContext(
         Math.floor(
           x
           / recordedWidth
-          * masterLivePeaks.length
+          * masterLivePeaks.length // число пиков
         )
       );
 
@@ -10555,7 +10561,7 @@ function drawLivePeaksIntoContext(
       drawX,
       middle
       - peak
-      * middle
+      * middle // середина
     );
 
 
@@ -10563,7 +10569,7 @@ function drawLivePeaksIntoContext(
       drawX,
       middle
       + peak
-      * middle
+      * middle // середина
     );
 
   }
@@ -10606,7 +10612,7 @@ async function rebuildMasterTrack() {
   const frameCount =
     Math.ceil(
       duration
-      * sampleRate
+      * sampleRate // частота дискретизации
     );
 
 
@@ -10630,7 +10636,7 @@ async function rebuildMasterTrack() {
           0,
           Math.floor(
             segment.start
-            * sampleRate
+            * sampleRate // частота дискретизации
           )
         );
 
@@ -10754,12 +10760,12 @@ function audioBufferToWavBlob(
 
   const blockAlign =
     channels
-    * bytesPerSample;
+    * bytesPerSample; // байтов на сэмпл
 
 
   const dataSize =
     frameCount
-    * blockAlign;
+    * blockAlign; // размер блока
 
 
   const buffer =
@@ -10852,7 +10858,7 @@ function audioBufferToWavBlob(
   view.setUint32(
     28,
     sampleRate
-    * blockAlign,
+    * blockAlign, // размер блока
     true
   );
 
@@ -10946,7 +10952,7 @@ function audioBufferToWavBlob(
 
 
 // ========================================
-// LIVE MASTER WAVEFORM
+// ЖИВАЯ ВОЛНОВАЯ ФОРМА MASTER
 // ========================================
 
 // Построение и обновление формы аудиосигнала.
@@ -11017,7 +11023,7 @@ function drawLiveMasterWaveform() {
 .forEach(
   button => {
 
-    // Prevent mouse clicks from leaving keyboard focus on Undo/Redo.
+    // Не позволяем кликам мыши оставлять клавиатурный фокус на Undo/Redo.
     button.addEventListener(
       "mousedown",
       event => {
@@ -11028,7 +11034,7 @@ function drawLiveMasterWaveform() {
     );
 
 
-    // Space must never activate Undo/Redo.
+    // Пробел никогда не должен активировать Undo/Redo.
     button.addEventListener(
       "keydown",
       event => {
@@ -11077,7 +11083,7 @@ function drawLiveMasterWaveform() {
 
 
 // ========================================
-// MASTER UNDO / REDO
+// ОТМЕНА / ПОВТОР MASTER
 // ========================================
 
 // Работа с Master/Mix и итоговым аудиосостоянием.
@@ -11264,7 +11270,7 @@ async function restoreMasterFromSegments() {
 
 
 // ========================================
-// SAVE MASTER AS
+// СОХРАНИТЬ MASTER КАК
 // ========================================
 
 saveAsMasterBtn.addEventListener(
@@ -11455,7 +11461,7 @@ async function getTrackBlob(track) {
   }
 
   if (stemIds.includes(track)) {
-    // Generated effect tracks live in generatedTrackURLs. Use them explicitly.
+    // Сгенерированные дорожки эффектов хранятся в generatedTrackURLs. Используем их явно.
     const url = generatedTrackURLs?.[track] || currentStemURLs?.[track] || stemAudio?.[track]?.src || null;
     if (!url) return { blob: null, filename: track + ".bin" };
 
@@ -11670,7 +11676,7 @@ async function exportTrack(
 
 
 // ========================================
-// GENERATED VOCAL EFFECT TRACKS | 4.6.0
+// СГЕНЕРИРОВАННЫЕ ВОКАЛЬНЫЕ ДОРОЖКИ ЭФФЕКТОВ | 4.6.0
 // ========================================
 let generatedTrackURLs = { pitchCorrection: null, harmonizer: null };
 
@@ -11922,7 +11928,7 @@ function stemTrackIsAvailable(
 
 
 // ========================================
-// COMMON TIME
+// ОБЩЕЕ ВРЕМЯ
 // ========================================
 
 // Локальная функциональная операция этого блока.
@@ -12104,7 +12110,7 @@ function setGlobalCursorTime(time) {
 
 
 // ========================================
-// FRAGMENT IN / LOOP / OUT
+// ФРАГМЕНТ IN / LOOP / OUT
 // ========================================
 
 fragmentStartBtn.addEventListener(
@@ -12187,7 +12193,7 @@ loopBtn.addEventListener(
 
 
 // ========================================
-// WAVEFORM SEEK
+// ПЕРЕХОД ПО ВОЛНОВОЙ ФОРМЕ
 // ========================================
 
 Object.values(
@@ -12246,7 +12252,7 @@ function seekFromWaveform(
 
   const time =
     ratio
-    * duration;
+    * duration; // длительность
 
 
   setGlobalCursorTime(time);
@@ -12257,7 +12263,7 @@ function seekFromWaveform(
 
 
 // ========================================
-// TIMELINE SELECTION
+// ВЫДЕЛЕНИЕ НА ВРЕМЕННОЙ ШКАЛЕ
 // ========================================
 
 masterTimelineInner.addEventListener(
@@ -12369,13 +12375,13 @@ masterTimelineInner.addEventListener(
     selectionStart =
       startX
       / rect.width
-      * duration;
+      * duration; // длительность
 
 
     selectionEnd =
       endX
       / rect.width
-      * duration;
+      * duration; // длительность
 
 
     updateSelectionDisplay();
@@ -12456,12 +12462,12 @@ function updateSelectionDisplay() {
 
   const startX =
     selectionStart
-    * pixelsPerSecond;
+    * pixelsPerSecond; // пикселей в секунду
 
 
   const endX =
     selectionEnd
-    * pixelsPerSecond;
+    * pixelsPerSecond; // пикселей в секунду
 
 
   selectionRange.style.display =
@@ -12564,7 +12570,7 @@ function updateSelectionButtons() {
 
 
 // ========================================
-// MASTER CURSOR DRAG
+// ПЕРЕТАСКИВАНИЕ КУРСОРА MASTER
 // ========================================
 
 masterCursor.addEventListener(
@@ -12670,7 +12676,7 @@ function seekFromMasterTimeline(
 
   const time =
     ratio
-    * duration;
+    * duration; // длительность
 
 
   setGlobalCursorTime(time);
@@ -12679,7 +12685,7 @@ function seekFromMasterTimeline(
 
 
 // ========================================
-// PLAYHEADS
+// УКАЗАТЕЛИ ВОСПРОИЗВЕДЕНИЯ
 // ========================================
 
 // Обновление позиции курсора и указателей воспроизведения.
@@ -12694,7 +12700,7 @@ function updatePlayheads() {
 
   const x =
     Number(masterCursorTime || 0)
-    * pixelsPerSecond;
+    * pixelsPerSecond; // пикселей в секунду
 
 
   Object.values(
@@ -12725,7 +12731,7 @@ function updateMasterCursor() {
 
   const x =
     Number(masterCursorTime || 0)
-    * pixelsPerSecond;
+    * pixelsPerSecond; // пикселей в секунду
 
 
   masterCursor.style.left =
@@ -12736,7 +12742,7 @@ function updateMasterCursor() {
 
 
 // ========================================
-// TIME DISPLAY
+// ОТОБРАЖЕНИЕ ВРЕМЕНИ
 // ========================================
 
 // Форматирование значения для отображения.
@@ -12824,7 +12830,7 @@ function formatShortTime(
 
 
 // ========================================
-// LYRICS / KARAOKE
+// ТЕКСТ / KARAOKE
 // ========================================
 
 // Логика режима Karaoke и его интерфейса.
@@ -13268,7 +13274,7 @@ function updateKaraoke(
 
 
 // ========================================
-// LYRICS EDITOR
+// РЕДАКТОР LYRICS
 // ========================================
 
 // Логика режима Karaoke и его интерфейса.
@@ -13352,8 +13358,8 @@ function nearestLyricsWordIndex(line, time) {
   return bestIndex;
 }
 
-// A Lines marker is a TEXT BOUNDARY, not the nearest word centre.
-// Boundary N means: words [0..N-1] stay left, words [N..] go right.
+// Маркер Lines — это ТЕКСТОВАЯ ГРАНИЦА, а не центр ближайшего слова.
+// Граница N означает: слова [0..N-1] остаются слева, слова [N..] уходят вправо.
 function nearestLyricsTextBoundary(line, time) {
   const words = Array.isArray(line?.words) ? line.words : [];
   if (!words.length) return { index: -1, time: NaN };
@@ -14001,8 +14007,8 @@ lyricsFullScreenBackTransportBtn?.addEventListener("click", event => {
 lyricsFullScreenStopBtn?.addEventListener("click", event => {
   event.stopPropagation();
 
-  // Full Screen STOP means: finish the song now.
-  // Sequencer Stop is intentionally not used here because it returns to 0.
+  // STOP в Full Screen означает: закончить песню прямо сейчас.
+  // Stop Sequencer здесь намеренно не используется, потому что он возвращает позицию в 0.
   pauseAll();
 
   const endTime = Math.max(
@@ -14477,7 +14483,7 @@ function detectLyricsStructure(lines) {
   const MIN_INSTRUMENTAL_GAP = 8;
   const repeated = new Array(cleanLines.length).fill(false);
 
-  // Chorus: repeated contiguous lyric chunks. Prefer longer repeated chunks first.
+  // Chorus: повторяющиеся непрерывные фрагменты текста. Сначала предпочитаем более длинные повторы.
   const maxChunk = Math.min(8, Math.floor(cleanLines.length / 2));
   for (let size = maxChunk; size >= 2; size--) {
     const occurrences = new Map();
@@ -14543,7 +14549,7 @@ function detectLyricsStructure(lines) {
 
   const pending = segments.filter(segment => segment.type === "Pending");
 
-  // Verse base T: duration shared by at least two non-chorus vocal chunks within ±1 second.
+  // База Verse T: длительность, общая минимум для двух не-Chorus вокальных фрагментов с допуском ±1 секунда.
   let verseBase = null;
   let bestMatches = 0;
 
@@ -14644,7 +14650,7 @@ function normalizeStructureCoverage(structure, requestedSongEnd = null) {
     ...items.map(item => Number(item.end) || 0)
   );
 
-  // Structure is a continuous partition of the song: no invisible gaps.
+  // Structure — непрерывное разбиение песни: никаких невидимых промежутков.
   items[0].start = 0;
   for (let i = 1; i < items.length; i++) {
     const boundary = Math.max(0, Math.min(total, Number(items[i].start) || 0));
@@ -14655,7 +14661,7 @@ function normalizeStructureCoverage(structure, requestedSongEnd = null) {
 
   items = enforceMinimumAutoStructureDuration(items);
 
-  // Merging short blocks may change neighbours; restore exact continuity.
+  // Объединение коротких блоков может изменить соседей; восстанавливаем точную непрерывность.
   if (items.length) {
     items[0].start = 0;
     for (let i = 1; i < items.length; i++) {
@@ -14804,7 +14810,7 @@ function openLyricsStructureNameMenu(event, index) {
   lyricsStructureNameMenu.style.left =
     Math.max(8, Math.min(event.clientX, window.innerWidth - 170)) + "px";
 
-  // Menu height follows its contents: no internal scroll.
+  // Высота меню следует за содержимым: внутренней прокрутки нет.
   lyricsStructureNameMenu.style.top = "8px";
   lyricsStructureNameMenu.classList.add("open");
 
@@ -14860,7 +14866,7 @@ function playLyricsStructureTimelineAt(event) {
 
   const time = ratio * structureSongEnd();
 
-  // One shared cursor for Structure, Lines and Sequencer. Transport state is preserved.
+  // Один общий курсор для Structure, Lines и Sequencer. Состояние транспорта сохраняется.
   setGlobalCursorTime(time);
 
   renderLyricsStructure();
@@ -15036,8 +15042,8 @@ function renderLyricsStructureTimeline(songEnd) {
         "endpoint",
         isStart ? "endpoint-start" : "endpoint-end"
       );
-      // Numeric endpoint values are rendered in the separate upper row.
-      // This span remains only as the exact 0% / 100% scale anchor.
+      // Числовые значения конечных точек выводятся в отдельной верхней строке.
+      // Этот span остаётся только как точная опора шкалы 0% / 100%.
     } else {
       tick.textContent = formatStructureTime(t);
     }
@@ -15121,12 +15127,12 @@ function renderLyricsStructure() {
         return;
       }
 
-      // Structure and Lines never compete for Split: only one selection is active.
+      // Structure и Lines никогда не конкурируют за Split: активно только одно выделение.
       lyricsEditorSelectedLine = -1;
       document.querySelectorAll(".lyrics-editor-row").forEach(item => item.classList.remove("selected"));
       setLyricsStructureSelection([index]);
 
-      // If Structure Loop is already active, selecting another block retargets it.
+      // Если Structure Loop уже активен, выбор другого блока переносит Loop на него.
       if (lyricsStructureTransportMode === "loop") {
         lyricsStructureLoopStart = Number(segment.start);
         lyricsStructureLoopEnd = Number(segment.end);
@@ -15293,7 +15299,7 @@ lyricsStructureTrack?.addEventListener("click", event => {
     Math.min(1, (event.clientX - rect.left) / rect.width)
   );
 
-  // One shared cursor for Structure, Lines and Sequencer. Transport state is preserved.
+  // Один общий курсор для Structure, Lines и Sequencer. Состояние транспорта сохраняется.
   setGlobalCursorTime(ratio * structureSongEnd());
 
   renderLyricsStructure();
@@ -15451,11 +15457,11 @@ function renderLyricsEditor() {
 
       const wordSpan = event.target.closest?.(".lyrics-editor-karaoke-word");
       if (wordSpan) {
-        // POINTER: a word click is transport only.
+        // POINTER: клик по слову управляет только транспортом.
         if (lyricsEditorEditLineIndex >= 0) leaveLyricsEdit();
         seekLyricsWord(line, Number(wordSpan.dataset.wordIndex));
       } else {
-        // CARET: a click between words enters text editing only; transport time is untouched.
+        // CARET: клик между словами включает только редактирование текста; время транспорта не меняется.
         enterLyricsEditAt(line, row, textWrap, textArea, karaokeBox, event.clientX, event.clientY);
       }
       updateLyricsEditorStats();
@@ -16309,7 +16315,7 @@ lyricsPlayMasterBtn.addEventListener(
 lyricsPlayLineBtn.addEventListener(
   "click",
   () => {
-    // Structure selected -> Loop works on the selected structure block.
+    // Если выбрана Structure, Loop работает по выбранному блоку Structure.
     if (lyricsStructureSelectedIndex >= 0 && lyricsStructureDraft?.[lyricsStructureSelectedIndex]) {
       const segment = lyricsStructureDraft[lyricsStructureSelectedIndex];
 
@@ -16596,13 +16602,13 @@ lyricsLoadInput.addEventListener("change", async () => {
                     start
                     +
                     d
-                    * wordIndex
+                    * wordIndex // индекс слова
                     / words.length,
                   end:
                     start
                     +
                     d
-                    * (wordIndex + 1)
+                    * (wordIndex + 1) // следующий индекс слова
                     / words.length
                 })
               )
@@ -16961,9 +16967,9 @@ function exportLyricsFile(rawName, format, encoding = "utf8") {
         + "</div>"
       : "";
 
-    // Print through a temporary hidden iframe instead of a popup window.
-    // The iframe is removed after printing, so the editor cannot remain stuck
-    // behind a dead/foreground print window after PDF save/cancel.
+    // Печатаем через временный скрытый iframe вместо всплывающего окна.
+    // После печати iframe удаляется, поэтому редактор не может остаться заблокированным
+    // за зависшим окном печати после сохранения/отмены PDF.
     const printFrame = document.createElement("iframe");
     printFrame.setAttribute("aria-hidden", "true");
     printFrame.style.position = "fixed";
@@ -17020,7 +17026,7 @@ function exportLyricsFile(rawName, format, encoding = "utf8") {
       }
     }, 50);
 
-    // Fallback cleanup for browsers that do not fire afterprint reliably.
+    // Резервная очистка для браузеров, где событие afterprint срабатывает ненадёжно.
     setTimeout(cleanupPrintFrame, 60000);
     return;
   }
@@ -17429,7 +17435,7 @@ else {
 
 
 // ========================================
-// ANIMATION LOOP
+// ЦИКЛ АНИМАЦИИ
 
 
 
@@ -17458,7 +17464,7 @@ function startAnimation() {
 
       applyMix();
 
-      // Audio transport is the source while playing; all three visual cursors use this same value.
+      // Во время воспроизведения источником является аудиотранспорт; все три визуальных курсора используют одно значение.
       masterCursorTime = getCurrentTime();
 
       updatePlayheads();
@@ -17658,7 +17664,7 @@ function stopAnimation() {
 
 
 // ========================================
-// AUDIO SYNCHRONIZATION
+// СИНХРОНИЗАЦИЯ АУДИО
 // ========================================
 
 // Работа с аудиодорожкой и её состоянием.
@@ -17706,7 +17712,7 @@ function keepTracksSynchronized() {
 
 
 // ========================================
-// AUTO SCROLL
+// АВТОПРОКРУТКА
 
 // ========================================
 
@@ -17715,7 +17721,7 @@ function followPlayhead() {
 
   const x =
     getCurrentTime()
-    * pixelsPerSecond;
+    * pixelsPerSecond; // пикселей в секунду
 
 
   const left =
@@ -17763,7 +17769,7 @@ function followPlayhead() {
 
 
 // ========================================
-// SHARED HORIZONTAL SCROLL
+// ОБЩАЯ ГОРИЗОНТАЛЬНАЯ ПРОКРУТКА
 
 // ========================================
 
@@ -17837,7 +17843,7 @@ function syncScrollTo(
 
 
 // ========================================
-// ZOOM
+// МАСШТАБ
 
 // ========================================
 
@@ -17945,7 +17951,7 @@ function changeZoom(
     Math.max(
       0,
       oldViewportCenterTime
-      * pixelsPerSecond
+      * pixelsPerSecond // пикселей в секунду
       - viewport / 2
     );
 
@@ -17955,8 +17961,8 @@ function changeZoom(
   );
 
 
-  // Audio position is the source of truth.
-  // Zoom never seeks; only redraw coordinates from the same time.
+  // Позиция аудио является единственным источником истины.
+  // Zoom никогда не меняет позицию; он только пересчитывает координаты для того же времени.
   updatePlayheads();
 
   updateMasterCursor();
@@ -17969,7 +17975,7 @@ function changeZoom(
 
 
 // ========================================
-// RESET
+// СБРОС
 
 // ========================================
 
@@ -18339,7 +18345,7 @@ fragmentStart =
 
 
 // ========================================
-// KEYBOARD SHORTCUTS
+// ГОРЯЧИЕ КЛАВИШИ
 // ========================================
 
 let modifierCandidate =
@@ -18384,9 +18390,9 @@ function seekBy(
 }
 
 
-// Dedicated Tab switch: Lyrics Editor <-> Full Screen Karaoke.
-// Capture phase prevents browser focus traversal and focused controls from
-// consuming Tab before MyNus handles it.
+// Отдельное переключение Tab: Lyrics Editor <-> Full Screen Karaoke.
+// Фаза capture не позволяет браузеру переводить фокус и не даёт активному элементу
+// перехватить Tab до обработки MyNus.
 window.addEventListener(
   "keydown",
   event => {
@@ -18423,7 +18429,7 @@ window.addEventListener(
       );
 
 
-    // Song finished: Space = Play again.
+    // Песня закончилась: Space = Play again.
     if (karaokeFinishedDialog?.classList.contains("open") && event.code === "Space") {
       event.preventDefault();
       event.stopPropagation();
@@ -18431,14 +18437,14 @@ window.addEventListener(
       return;
     }
 
-    // Lyrics Editor / Full Screen: Esc always exits directly to Sequencer.
+    // Lyrics Editor / Full Screen: Esc всегда напрямую возвращает в Sequencer.
     if (event.code === "Escape" && isLyricsUiOpen()) {
       event.preventDefault();
       closeLyricsEditor();
       return;
     }
 
-    // Full Screen-only navigation and popup controls.
+    // Навигация и popup-элементы, работающие только в Full Screen.
 
     if (isKaraokeUiMode() && event.code === "Backspace") {
       event.preventDefault();
@@ -18458,7 +18464,7 @@ window.addEventListener(
       return;
     }
 
-    // Full Screen: Space always controls transport, regardless of Lines EDIT/caret.
+    // Full Screen: Space всегда управляет транспортом независимо от Lines EDIT/caret.
     if (event.code === "Space") {
       if (isKaraokeUiMode()) {
         event.preventDefault();
@@ -18468,7 +18474,7 @@ window.addEventListener(
         return;
       }
 
-      // Lyrics Editor: active EDIT/caret keeps Space as text input.
+      // Lyrics Editor: при активном EDIT/caret пробел остаётся вводом текста.
       if (lyricsEditorEditLineIndex >= 0) {
         const edit = getLyricsEditContext();
         if (edit && event.target !== edit.textArea) {
@@ -18847,8 +18853,8 @@ updateMasterHistoryButtons();
 
 
 // ========================================
-// PROJECT / PLAYLIST | 5.3.0
-// Project = 12 audio slots + Lyrics.json + Project.json
+// PROJECT / PLAYLIST: СОСТОЯНИЕ И НУМЕРАЦИЯ | 5.4.0
+// Project = 12 аудиослотов + Lyrics.json + Project.json
 // ========================================
 const saveProjectBtn = document.getElementById("saveProjectBtn");
 const loadProjectBtn = document.getElementById("loadProjectBtn");
@@ -18888,8 +18894,8 @@ function cloneSerializable(value, fallback) {
   catch (_) { return fallback; }
 }
 
-// Snapshot the CURRENT Lyrics state for Project SAVE.
-// Unsaved text currently typed in Lyrics Editor is committed first.
+// Для Project SAVE делаем снимок ТЕКУЩЕГО состояния Lyrics.
+// Сначала фиксируем несохранённый текст, введённый сейчас в Lyrics Editor.
 function projectLyricsJson() {
   if (Array.isArray(lyricsEditorDraft) && lyricsEditorDraft.length) {
     lyricsEditorDraft.forEach(line => applyEditedTextToLine(line));
@@ -18905,7 +18911,7 @@ function projectLyricsJson() {
     words: (line.words || []).map(word => ({ ...word }))
   }));
 
-  // Keep the live Lyrics state synchronized with the snapshot being saved.
+  // Поддерживаем текущее состояние Lyrics синхронным с сохраняемым снимком.
   karaokeLines = cloneSerializable(lines, []);
   lyricsData.words = karaokeLines.flatMap(line => line.words || []);
   lyricsData.text = lyricsData.words.map(word => word.word).join(" ").trim();
@@ -18926,7 +18932,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "5.3.0",
+    version: "5.4.0",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -18985,8 +18991,8 @@ async function saveCurrentProject(projectName, savePath, conflictAction = "", op
   fd.append("lyrics_json", JSON.stringify(projectLyricsJson()));
   fd.append("project_json", JSON.stringify(projectStateJson()));
 
-  // Use the existing per-track save source: getTrackBlob().
-  // Nine current audio tracks are saved; three reserve slots stay reserved.
+  // Используем существующий источник сохранения отдельной дорожки: getTrackBlob().
+  // Сохраняются девять текущих аудиодорожек; три резервных слота остаются резервными.
   const workingTrackIds = projectTrackIds.slice(0, 9);
   for (const trackId of workingTrackIds) {
     const source = await getTrackBlob(trackId);
@@ -19007,7 +19013,7 @@ async function saveCurrentProject(projectName, savePath, conflictAction = "", op
   if (options.activateProject) {
     setProjectActive(data.id || name);
     currentPlaylistProject = data.id || name;
-    await markProjectInUse(data.id || name, "projects");
+    await markProjectInUse(data.id || name, Infinity);
   }
 
   const savedPath = data.path || targetPath || "C:\\MyNus\\Projects";
@@ -19041,16 +19047,18 @@ async function fetchSavedProjects() {
 }
 
 // Сохранение текущего Project и связанных данных.
-async function markProjectInUse(id, source = "projects", mode = null) {
+async function markProjectInUse(id, position = null, mode = null) {
+  const normalizedPosition = position === Infinity ? "inf" : position;
   const response = await fetch("/projects/use", {
     method: "POST",
     headers: loadTraceHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ id, source, mode, trace_id: projectLoadTraceId || null })
+    body: JSON.stringify({ id, position: normalizedPosition, mode, trace_id: projectLoadTraceId || null })
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "PlayList update failed");
   currentPlaylistProject = data.current || null;
   if (data.state_file) playlistStatePath = data.state_file;
+  karaokePlaylistSnapshot = Array.isArray(data.projects) ? data.projects : karaokePlaylistSnapshot;
   return data;
 }
 
@@ -19091,6 +19099,16 @@ async function deletePlaylistEntry(section, position) {
 }
 
 let playlistEditMode = null;
+let playlistTransitionLocked = false;
+let postPlayLoadAnotherPending = false;
+
+// На время перехода PlayList недоступен: старое стабильное состояние не изменяется до завершения LOAD.
+function setPlaylistTransitionLocked(locked) {
+  playlistTransitionLocked = Boolean(locked);
+  if (!lyricsFullScreenPlaylistMenu) return;
+  lyricsFullScreenPlaylistMenu.classList.toggle("playlist-transition-locked", playlistTransitionLocked);
+  lyricsFullScreenPlaylistMenu.setAttribute("aria-busy", playlistTransitionLocked ? "true" : "false");
+}
 
 // Работа с Play List и её текущим состоянием.
 function playlistPositionPicker(maxPosition, onSelect) {
@@ -19154,26 +19172,31 @@ function renderFullScreenPlaylist(projects = karaokePlaylistSnapshot) {
       }
 
       // =====================================================================
-      // [5.3.0][СЦЕНАРИЙ 2 — PLAYLIST]
+      // [5.4.0][СЦЕНАРИЙ 2 — PLAYLIST]
       // Пользователь вручную выбрал Track в PlayList.
       // Здесь PlayList выполняет ТОЛЬКО свою задачу: определяет ID выбранного Project.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.3.0][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
-      await reportProjectLoadTrace("[5.3.0][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.0][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
+      await reportProjectLoadTrace("[5.4.0][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(track.id)",
         function: "loadProjectById",
         parameters: { id: track.id },
         result: "переход в единую LOAD-функцию"
       });
-      await loadProjectById(track.id);
+      if (playlistTransitionLocked) return;
+      setPlaylistTransitionLocked(true);
+      try {
+        await loadProjectById(track.id);
 
-      // После успешной единой загрузки PlayList отдельно перестраивает только current/queue/history.
-      // Это НЕ часть LOAD и не передаёт никаких параметров в loadProjectById().
-      await markProjectInUse(track.id, source, "takeover");
-      await refreshFullScreenPlaylist();
-      lyricsFullScreenPlaylistMenu.hidden = true;
+        // После успешного LOAD передаём в единую нумерацию фактический номер n выбранного Track.
+        await markProjectInUse(track.id, position);
+        await refreshFullScreenPlaylist();
+        lyricsFullScreenPlaylistMenu.hidden = true;
+      } finally {
+        setPlaylistTransitionLocked(false);
+      }
     });
 
     lyricsFullScreenPlaylistMenu.appendChild(row);
@@ -19354,31 +19377,36 @@ async function runKaraokeFinishAction(action) {
       closeKaraokeFinishedDialog();
 
       // =====================================================================
-      // [5.3.0][СЦЕНАРИЙ 3 — OPEN NEXT]
+      // [5.4.0][СЦЕНАРИЙ 3 — OPEN NEXT]
       // Команда Open next берёт первый ожидающий Track из очереди и получает его Project ID.
       // На этом сценарий выбора заканчивается.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // Дальше выполняется прямой переход в ТУ ЖЕ ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.3.0][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
-      await reportProjectLoadTrace("[5.3.0][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.0][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
+      await reportProjectLoadTrace("[5.4.0][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(nextProject.id)",
         function: "loadProjectById",
         parameters: { id: nextProject.id },
         result: "переход в единую LOAD-функцию"
       });
-      const loaded = await loadProjectById(nextProject.id);
-      if (loaded) {
-        // После успешной единой загрузки PlayList отдельно двигает current/queue/history.
-        // Это НЕ часть LOAD и не меняет работу loadProjectById().
-        await markProjectInUse(nextProject.id, "playlist");
-        await refreshFullScreenPlaylist();
-        karaokeFinishTriggered = false;
-      } else if (isKaraokeUiMode() && karaokeFinishedDialog) {
-        karaokeFinishedDialog.classList.add("open");
+      setPlaylistTransitionLocked(true);
+      try {
+        const loaded = await loadProjectById(nextProject.id);
+        if (loaded) {
+          // После успешного LOAD передаём в ту же единую нумерацию номер n следующего Track.
+          await markProjectInUse(nextProject.id, Number(nextProject.position));
+          await refreshFullScreenPlaylist();
+          karaokeFinishTriggered = false;
+        } else if (isKaraokeUiMode() && karaokeFinishedDialog) {
+          karaokeFinishedDialog.classList.add("open");
+        }
+      } finally {
+        setPlaylistTransitionLocked(false);
       }
     } else if (action === "other") {
       closeKaraokeFinishedDialog();
+      postPlayLoadAnotherPending = true;
       beginProjectLoadTrace("Open Project button", null, "projects");
       await reportProjectLoadTrace("OPEN PROJECT BUTTON CLICK", {
         command: "Song Finished -> Load another -> Open Project",
@@ -19390,6 +19418,7 @@ async function runKaraokeFinishAction(action) {
       karaokeFinishActionRunning = false;
     }
   } catch (error) {
+    if (action === "other") postPlayLoadAnotherPending = false;
     console.error(error);
     if (isKaraokeUiMode() && karaokeFinishTriggered && karaokeFinishedDialog) {
       karaokeFinishedDialog.classList.add("open");
@@ -19469,9 +19498,9 @@ const projectLoaderFill = document.getElementById("projectLoaderFill");
 const projectLoaderPercent = document.getElementById("projectLoaderPercent");
 let projectLoading = false;
 
-// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.3.0.
+// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.0.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "5.3.0";
+const MYNUS_CLIENT_VERSION = "5.4.0";
 const MYNUS_CLIENT_CHANGE = "Три сценария выбора Project -> одна функция LOAD; русские комментарии синхронизированы с серверным TRACE";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -19616,9 +19645,9 @@ async function failProjectLoader(error) {
 
 // Сохранение текущего Project и связанных данных.
 function clearProjectState() {
-  // Clear ALL current working Project/file state.
-  // Play List is deliberately excluded: playlist.json/current/queue/history
-  // and the in-memory Play List snapshot are owned by Play List logic only.
+  // Очищаем ВСЁ текущее рабочее состояние Project/файла.
+  // PlayList намеренно исключён: playlist.json/current/queue/history
+  // и снимок PlayList в памяти принадлежат только логике PlayList.
   pauseAll();
   karaokeFinishTriggered = false;
   closeKaraokeFinishedDialog();
@@ -19715,7 +19744,7 @@ function clearProjectState() {
 }
 
 // =====================================================================
-// [5.3.0][ЕДИНАЯ LOAD-ФУНКЦИЯ]
+// [5.4.0][ЕДИНАЯ LOAD-ФУНКЦИЯ]
 // Это ЕДИНСТВЕННАЯ функция загрузки сохранённого Project.
 // Она получает РОВНО ОДИН входной параметр: id.
 // Функция НЕ знает, кто выбрал этот ID: Open Project, PlayList или Open next.
@@ -19724,12 +19753,12 @@ function clearProjectState() {
 // =====================================================================
 async function loadProjectById(id) {
   if (!projectLoadTraceId || projectLoadTraceProject !== (id || null)) {
-    beginProjectLoadTrace("[5.3.0][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
+    beginProjectLoadTrace("[5.4.0][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
   } else {
     projectLoadTraceProject = id || projectLoadTraceProject;
   }
 
-  await reportProjectLoadTrace("[5.3.0][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
+  await reportProjectLoadTrace("[5.4.0][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
     command: "LOAD Project",
     function: "loadProjectById",
     parameters: { id },
@@ -19772,7 +19801,7 @@ async function loadProjectById(id) {
     const tracks = data.tracks || {};
     if (!tracks.original) throw new Error("Project Original track not found");
 
-    // uiMode is deliberately NOT changed by LOAD.
+    // uiMode намеренно НЕ меняется при LOAD.
     await reportProjectLoadTrace("CLEAR PROJECT STATE START", { command: "clear previous working material", function: "clearProjectState", parameters: { preserve_playlist: true, ui_mode_before: uiMode }, result: "calling" });
     clearProjectState();
     await reportProjectLoadTrace("CLEAR PROJECT STATE DONE", { command: "clear previous working material", function: "clearProjectState", parameters: { preserve_playlist: true }, result: "done" });
@@ -19899,7 +19928,7 @@ async function loadProjectById(id) {
 
     await advanceProjectLoad(7);
 
-    // Restore Structure and its timeline as one visual unit.
+    // Восстанавливаем Structure и её временную шкалу как единый визуальный блок.
     await reportProjectLoadTrace("STRUCTURE RENDER START", { command: "restore Structure timeline", function: "renderLyricsStructure", parameters: { segments: Array.isArray(lyricsStructureDraft) ? lyricsStructureDraft.length : 0 }, result: "calling" });
     renderLyricsStructure();
     await reportProjectLoadTrace("STRUCTURE RENDERED", { command: "restore Structure timeline", function: "renderLyricsStructure", parameters: { segments: Array.isArray(lyricsStructureDraft) ? lyricsStructureDraft.length : 0 }, result: "done" });
@@ -19926,8 +19955,8 @@ async function loadProjectById(id) {
     await finishProjectLoader();
     await reportProjectLoadTrace("LOAD FUNCTION SUCCESS", { command: "LOAD Project complete", function: "loadProjectById", parameters: { id, ui_mode_after_load: uiMode }, result: "success" });
 
-    // uiMode remains exactly what it was before LOAD.
-    // Play List bookkeeping is intentionally outside Project LOAD.
+    // uiMode остаётся точно таким, каким был до LOAD.
+    // Учёт PlayList намеренно находится вне Project LOAD.
     return true;
   } catch (error) {
     await reportProjectLoadTrace("LOAD EXCEPTION", { command: "LOAD Project", function: "loadProjectById", parameters: { id }, result: "error", error: String(error?.stack || error?.message || error) });
@@ -19958,28 +19987,43 @@ async function openLoadProjectDialog() {
       button.addEventListener("click", async () => {
         try {
           // =====================================================================
-          // [5.3.0][СЦЕНАРИЙ 1 — OPEN PROJECT]
+          // [5.4.0][СЦЕНАРИЙ 1 — OPEN PROJECT]
           // Пользователь выбрал Project в обычном окне Open Project.
           // Этот сценарий выполняет только выбор Project и получает его ID.
           // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
           // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
           // =====================================================================
-          beginProjectLoadTrace("[5.3.0][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
-          await reportProjectLoadTrace("[5.3.0][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+          beginProjectLoadTrace("[5.4.0][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
+          await reportProjectLoadTrace("[5.4.0][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
             command: "await loadProjectById(project.id)",
             function: "loadProjectById",
             parameters: { id: project.id, name: project.name },
             result: "переход в единую LOAD-функцию"
           });
+          const postPlayNumbering = postPlayLoadAnotherPending;
+          if (postPlayNumbering) setPlaylistTransitionLocked(true);
           await loadProjectById(project.id);
 
-          // После успешной единой загрузки обычный Open Project отдельно начинает новый PlayList-контекст.
-          // Это НЕ часть LOAD и не передаёт никаких параметров в loadProjectById().
-          await reportProjectLoadTrace("PLAYLIST CURRENT UPDATE START", { mode: "open" });
-          await markProjectInUse(project.id, "projects", "open");
-          await reportProjectLoadTrace("PLAYLIST CURRENT UPDATE DONE", { mode: "open" });
+          // После успешного LOAD меняется только состояние PlayList; сам LOAD остаётся без изменений.
+          if (postPlayNumbering) {
+            try {
+              await markProjectInUse(project.id, Infinity);
+              await refreshFullScreenPlaylist();
+            } finally {
+              postPlayLoadAnotherPending = false;
+              setPlaylistTransitionLocked(false);
+            }
+          } else {
+            await reportProjectLoadTrace("PLAYLIST CURRENT UPDATE START", { mode: "open" });
+            await markProjectInUse(project.id, null, "open");
+            await reportProjectLoadTrace("PLAYLIST CURRENT UPDATE DONE", { mode: "open" });
+          }
           loadProjectDialog.classList.remove("open");
         } catch (error) {
+          if (postPlayLoadAnotherPending) {
+            postPlayLoadAnotherPending = false;
+            setPlaylistTransitionLocked(false);
+          }
           console.error(error);
           status.textContent = error.message;
         }
@@ -20165,19 +20209,24 @@ projectConflictDialog?.addEventListener("click", event => {
 
 cancelLoadProjectBtn?.addEventListener("click", () => {
   loadProjectDialog.classList.remove("open");
+  postPlayLoadAnotherPending = false;
 });
 
 loadProjectDialog?.addEventListener("click", event => {
-  if (event.target === loadProjectDialog) loadProjectDialog.classList.remove("open");
+  if (event.target === loadProjectDialog) {
+    loadProjectDialog.classList.remove("open");
+    postPlayLoadAnotherPending = false;
+  }
 });
 
 lyricsFullScreenPlaylistBtn?.addEventListener("click", event => {
   event.stopPropagation();
+  if (playlistTransitionLocked) return;
   const opening = lyricsFullScreenPlaylistMenu.hidden;
   lyricsFullScreenPlaylistMenu.hidden = !opening;
   if (!opening) return;
 
-  // Open immediately from the last known state; refresh from server in background.
+  // Сразу открываем последнее известное состояние; обновление с сервера выполняем отдельно.
   renderFullScreenPlaylist(karaokePlaylistSnapshot);
   refreshFullScreenPlaylist().catch(error => {
     console.error(error);
@@ -20243,8 +20292,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.3.0 | Detailed Project LOAD trace: source, command, function, parameters, result and timing; synchronized HTML Service Console + CMD + ЗАГРУЗКА СТРУКТУРЫ ОДИНАКОВА ДЛЯ ВЕХ СПОСОБОВ! ");
-console.log("[SERVICE CONSOLE] LOAD diagnostics enabled | endpoint=/debug/load-trace | version=5.3.0");
+console.log("MyNus 5.4.0 | Detailed Project LOAD trace: source, command, function, parameters, result and timing; synchronized HTML Service Console + CMD + ЗАГРУЗКА СТРУКТУРЫ ОДИНАКОВА ДЛЯ ВЕХ СПОСОБОВ! ");
+console.log("[SERVICE CONSOLE] LOAD diagnostics enabled | endpoint=/debug/load-trace | version=5.4.0");
 </script>
 
 <div class="row" id="build-down">
