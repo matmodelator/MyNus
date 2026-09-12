@@ -1,4 +1,4 @@
-<!-- MyNus 5.4.0 | Единая нумерация PlayList по n; LOAD не изменён; Progress расположен ниже окна загрузки и выше него по слоям; комментарии на русском. --> 
+<!-- MyNus 5.4.1 | Structure создаётся автоматически только один раз при первичной обработке нового трека; открытие Lyrics/Full Screen и LOAD Project/Lyrics больше не пересчитывают Structure; renderLyricsStructure() только отображает сохранённую Structure; null-состояние Structure удалено; комментарии на русском. --> 
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.4.0</title>
+  <title>MyNus 5.4.1</title>
 
 
  <style>
@@ -4126,7 +4126,7 @@
 </div>
 
 <!-- ========================================
-     NEW PROJECT PROMPT | 5.4.0
+     NEW PROJECT PROMPT | 5.4.1
 ======================================== -->
 <div id="newProjectPromptDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -5255,7 +5255,7 @@ let lyricsEditorDraft = [];
 let lyricsEditorSelectedLine = -1;
 let lyricsEditorEditLineIndex = -1;
 let lyricsEditorCaretOffset = 0;
-let lyricsStructureDraft = null;
+let lyricsStructureDraft = [];
 let lyricsStructureSelectedIndex = -1;
 let lyricsStructureSelectedIndices = new Set();
 let lyricsStructureTransportMode = "play";
@@ -6029,6 +6029,15 @@ splitBtn.addEventListener(
 
 
       buildKaraokeLines();
+
+      // Structure создаётся автоматически только один раз — при первичной обработке нового трека.
+      const detectedInitialStructure = detectLyricsStructure(karaokeLines);
+      lyricsStructureDraft = normalizeStructureCoverage(
+        detectedInitialStructure,
+        structureSongEnd(detectedInitialStructure)
+      ).map(item => ({ ...item }));
+      lyricsStructureSelectedIndex = -1;
+      lyricsStructureSelectedIndices = new Set();
 
       originalWhisperLyrics =
         JSON.parse(JSON.stringify(lyricsData));
@@ -14715,17 +14724,6 @@ function structureSongEnd(structure = lyricsStructureDraft) {
 }
 
 // Работа со Structure в Lyrics Editor.
-function ensureLyricsStructureDraft() {
-  if (lyricsStructureDraft !== null) return;
-  const detectedStructure = detectLyricsStructure(lyricsEditorDraft);
-  lyricsStructureDraft = normalizeStructureCoverage(
-    detectedStructure,
-    structureSongEnd(detectedStructure)
-  ).map(item => ({ ...item }));
-  lyricsStructureSelectedIndex = -1;
-}
-
-// Работа со Structure в Lyrics Editor.
 function setLyricsStructureSelection(indices) {
   lyricsStructureSelectedIndices = new Set(
     (indices || []).filter(index =>
@@ -15055,15 +15053,6 @@ function renderLyricsStructureTimeline(songEnd) {
 // Работа со Structure в Lyrics Editor.
 function renderLyricsStructure() {
   if (!lyricsStructureTrack) return;
-
-  if (lyricsStructureDraft === null) {
-    const detectedStructure = detectLyricsStructure(lyricsEditorDraft);
-    lyricsStructureDraft = normalizeStructureCoverage(
-      detectedStructure,
-      structureSongEnd(detectedStructure)
-    ).map(item => ({ ...item }));
-    lyricsStructureSelectedIndex = -1;
-  }
 
   lyricsStructureTrack.innerHTML = "";
   const structure = lyricsStructureDraft || [];
@@ -15748,7 +15737,6 @@ function updateLyricsUndoRedoButtons() {
 
 // Работа со Structure в Lyrics Editor.
 function openLyricsEditor() {
-  lyricsStructureDraft = null;
   lyricsStructureSelectedIndex = -1;
   lyricsTranscriptionMode = false;
   lyricsOriginalDraftForTranscription = null;
@@ -16545,7 +16533,7 @@ lyricsLoadInput.addEventListener("change", async () => {
             ...loaded.structure.map(item => Number(item.end) || 0)
           )
         )
-      : null;
+      : [];
     clearLyricsStructureSelection();
   }
 
@@ -18853,7 +18841,7 @@ updateMasterHistoryButtons();
 
 
 // ========================================
-// PROJECT / PLAYLIST: СОСТОЯНИЕ И НУМЕРАЦИЯ | 5.4.0
+// PROJECT / PLAYLIST: СОСТОЯНИЕ И НУМЕРАЦИЯ | 5.4.1
 // Project = 12 аудиослотов + Lyrics.json + Project.json
 // ========================================
 const saveProjectBtn = document.getElementById("saveProjectBtn");
@@ -18932,7 +18920,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "5.4.0",
+    version: "5.4.1",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -19172,14 +19160,14 @@ function renderFullScreenPlaylist(projects = karaokePlaylistSnapshot) {
       }
 
       // =====================================================================
-      // [5.4.0][СЦЕНАРИЙ 2 — PLAYLIST]
+      // [5.4.1][СЦЕНАРИЙ 2 — PLAYLIST]
       // Пользователь вручную выбрал Track в PlayList.
       // Здесь PlayList выполняет ТОЛЬКО свою задачу: определяет ID выбранного Project.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.4.0][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
-      await reportProjectLoadTrace("[5.4.0][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.1][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
+      await reportProjectLoadTrace("[5.4.1][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(track.id)",
         function: "loadProjectById",
         parameters: { id: track.id },
@@ -19377,14 +19365,14 @@ async function runKaraokeFinishAction(action) {
       closeKaraokeFinishedDialog();
 
       // =====================================================================
-      // [5.4.0][СЦЕНАРИЙ 3 — OPEN NEXT]
+      // [5.4.1][СЦЕНАРИЙ 3 — OPEN NEXT]
       // Команда Open next берёт первый ожидающий Track из очереди и получает его Project ID.
       // На этом сценарий выбора заканчивается.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // Дальше выполняется прямой переход в ТУ ЖЕ ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.4.0][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
-      await reportProjectLoadTrace("[5.4.0][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.1][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
+      await reportProjectLoadTrace("[5.4.1][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(nextProject.id)",
         function: "loadProjectById",
         parameters: { id: nextProject.id },
@@ -19481,9 +19469,9 @@ function restoreProjectLyricsJson(lyrics) {
   karaokeLines = cloneSerializable(savedLines, []);
   
   lyricsStructureDraft =
-  Array.isArray(lyrics?.structure) && lyrics.structure.length > 0
+  Array.isArray(lyrics?.structure)
     ? cloneSerializable(lyrics.structure, [])
-    : null;
+    : [];
     
   lyricsData = {
     language: lyrics?.language || null,
@@ -19498,10 +19486,10 @@ const projectLoaderFill = document.getElementById("projectLoaderFill");
 const projectLoaderPercent = document.getElementById("projectLoaderPercent");
 let projectLoading = false;
 
-// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.0.
+// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.1.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "5.4.0";
-const MYNUS_CLIENT_CHANGE = "Три сценария выбора Project -> одна функция LOAD; русские комментарии синхронизированы с серверным TRACE";
+const MYNUS_CLIENT_VERSION = "5.4.1";
+const MYNUS_CLIENT_CHANGE = "Structure создаётся автоматически только при первичной обработке нового трека; Project/Lyrics LOAD только восстанавливают сохранённую Structure; Edit Lyrics, Full Screen и renderLyricsStructure() её не пересчитывают";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
 let projectLoadTraceSource = null;
@@ -19744,7 +19732,7 @@ function clearProjectState() {
 }
 
 // =====================================================================
-// [5.4.0][ЕДИНАЯ LOAD-ФУНКЦИЯ]
+// [5.4.1][ЕДИНАЯ LOAD-ФУНКЦИЯ]
 // Это ЕДИНСТВЕННАЯ функция загрузки сохранённого Project.
 // Она получает РОВНО ОДИН входной параметр: id.
 // Функция НЕ знает, кто выбрал этот ID: Open Project, PlayList или Open next.
@@ -19753,12 +19741,12 @@ function clearProjectState() {
 // =====================================================================
 async function loadProjectById(id) {
   if (!projectLoadTraceId || projectLoadTraceProject !== (id || null)) {
-    beginProjectLoadTrace("[5.4.0][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
+    beginProjectLoadTrace("[5.4.1][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
   } else {
     projectLoadTraceProject = id || projectLoadTraceProject;
   }
 
-  await reportProjectLoadTrace("[5.4.0][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
+  await reportProjectLoadTrace("[5.4.1][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
     command: "LOAD Project",
     function: "loadProjectById",
     parameters: { id },
@@ -19987,14 +19975,14 @@ async function openLoadProjectDialog() {
       button.addEventListener("click", async () => {
         try {
           // =====================================================================
-          // [5.4.0][СЦЕНАРИЙ 1 — OPEN PROJECT]
+          // [5.4.1][СЦЕНАРИЙ 1 — OPEN PROJECT]
           // Пользователь выбрал Project в обычном окне Open Project.
           // Этот сценарий выполняет только выбор Project и получает его ID.
           // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
           // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
           // =====================================================================
-          beginProjectLoadTrace("[5.4.0][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
-          await reportProjectLoadTrace("[5.4.0][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+          beginProjectLoadTrace("[5.4.1][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
+          await reportProjectLoadTrace("[5.4.1][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
             command: "await loadProjectById(project.id)",
             function: "loadProjectById",
             parameters: { id: project.id, name: project.name },
@@ -20292,8 +20280,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.4.0 | Detailed Project LOAD trace: source, command, function, parameters, result and timing; synchronized HTML Service Console + CMD + ЗАГРУЗКА СТРУКТУРЫ ОДИНАКОВА ДЛЯ ВЕХ СПОСОБОВ! ");
-console.log("[SERVICE CONSOLE] LOAD diagnostics enabled | endpoint=/debug/load-trace | version=5.4.0");
+console.log("MyNus 5.4.1 | Structure: автосоздание только при первичной обработке нового трека; LOAD Project/Lyrics, Edit Lyrics и Full Screen Structure не пересчитывают; renderLyricsStructure() только отображает сохранённые данные.");
+console.log("[SERVICE CONSOLE] MyNus 5.4.1 | Structure lifecycle fixed | auto-detect=initial-processing-only | Project/Lyrics LOAD=restore-only | render=no-rebuild");
 </script>
 
 <div class="row" id="build-down">
