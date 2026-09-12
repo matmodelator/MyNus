@@ -1,5 +1,4 @@
-<!-- MyNus 5.4.7 | .lyrics-editor-card.karaoke-fullscreen-mode #lyricsStructureMasterCounter {
-  display: none !important; -->
+<!-- MyNus 5.4.8 | Full Screen: direct green MASTER hidden; Play List auto-shows with POSTPLAY; 10s automatic Next Track uses the unified Project LOAD and autoplay; current Structure badge added; window-state control moved right of MyNus; Input/Master sliders scale with the Full Screen window; unified loader now shows the project name. Server unchanged. -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -16,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.4.6</title>
+  <title>MyNus 5.4.8</title>
 
 
  <style>
@@ -1480,6 +1479,7 @@
 
     .lyrics-editor-card.karaoke-fullscreen-mode {
       position: fixed;
+      container-type: size;
       left: 0;
       top: 0;
       right: auto;
@@ -1804,11 +1804,33 @@
       color: #30d158;
     }
 
-    /* 5.4.6 | Third reverse-countdown phase keeps Full Screen geometry and uses gray. */
+    /* 5.4.7 | Third reverse-countdown phase keeps Full Screen geometry and uses gray. */
     .lyrics-fullscreen-counter.phase-final {
       color: #777 !important;
     }
 
+    .lyrics-fullscreen-structure-badge {
+      position: absolute;
+      left: 50%;
+      bottom: 240px;
+      transform: translateX(-50%);
+      z-index: 7;
+      max-width: calc(100% - 80px);
+      padding: 8px 18px;
+      border-radius: 12px;
+      background: rgba(248, 246, 255, .88);
+      color: #6b3fa0;
+      font-size: 48px;
+      line-height: 1.08;
+      font-weight: 800;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+    }
+
+    .lyrics-fullscreen-structure-badge[hidden] { display: none !important; }
 
     .lyrics-fullscreen-popup {
       position: fixed;
@@ -1923,39 +1945,47 @@
 
     .lyrics-fullscreen-side-control {
       position: absolute;
-      bottom: 146px;
+      bottom: clamp(92px, 14.6cqh, 146px);
       z-index: 9;
       display: flex;
       flex-direction: column;
       align-items: center;
     }
-    .lyrics-fullscreen-side-control.left { left: 24px; }
-    .lyrics-fullscreen-side-control.right { right: 24px; }
-    .lyrics-fullscreen-side-icon { width: 38px; height: 32px; padding: 0; font-size: 18px; }
+    .lyrics-fullscreen-side-control.left { left: clamp(12px, 2.4cqw, 24px); }
+    .lyrics-fullscreen-side-control.right { right: clamp(12px, 2.4cqw, 24px); }
+    .lyrics-fullscreen-side-icon {
+      width: clamp(30px, 3.8cqh, 38px);
+      height: clamp(26px, 3.2cqh, 32px);
+      padding: 0;
+      font-size: clamp(14px, 1.8cqh, 18px);
+    }
     .lyrics-fullscreen-vertical-scale {
       position: absolute;
-      bottom: 38px;
+      bottom: clamp(30px, 3.8cqh, 38px);
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 8px;
-      height: calc(95vh - 215px);
-      max-height: none;
-      min-height: 240px;
-      padding: 10px 7px;
+      gap: clamp(5px, .8cqh, 8px);
+      height: clamp(180px, calc(95cqh - 215px), 690px);
+      max-height: calc(100cqh - 180px);
+      min-height: 0;
+      padding: clamp(6px, 1cqh, 10px) clamp(5px, .7cqh, 7px);
       border: 1px solid rgba(255,255,255,.26);
-      border-radius: 8px;
+      border-radius: clamp(6px, .8cqh, 8px);
       background: rgba(18,18,18,.94);
       box-sizing: border-box;
     }
     .lyrics-fullscreen-vertical-scale[hidden] { display:none !important; }
-    .lyrics-fullscreen-vertical-scale .scale-value { font: 700 12px Consolas, monospace; color:#ddd; }
+    .lyrics-fullscreen-vertical-scale .scale-value {
+      font: 700 clamp(10px, 1.2cqh, 12px) Consolas, monospace;
+      color:#ddd;
+    }
     .lyrics-fullscreen-vertical-scale input[type="range"] {
       writing-mode: vertical-lr;
       direction: rtl;
-      width: 24px;
+      width: clamp(18px, 2.4cqh, 24px);
       height: 100%;
-      min-height: 190px;
+      min-height: 0;
       cursor: pointer;
     }
 
@@ -2116,6 +2146,10 @@
       background: #c8ff70;
     }
 
+    .lyrics-editor-card.karaoke-fullscreen-mode #lyricsStructureMasterCounter {
+      display: none !important;
+    }
+
     .lyrics-editor-card.karaoke-fullscreen-mode > .lyrics-structure-row {
       position: absolute;
       left: 24px;
@@ -2135,10 +2169,6 @@
       font-size: 18px;
     }
 
-.lyrics-editor-card.karaoke-fullscreen-mode #lyricsStructureMasterCounter {
-  display: none !important;
-}
-   
     .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-endpoint-value {
       bottom: 5px;
       color: #e58aa8;
@@ -2478,7 +2508,7 @@
       gap: 6px;
     }
 
-    /* 5.4.6 | Lyrics footer always fits inside the editor. */
+    /* 5.4.7 | Lyrics footer always fits inside the editor. */
     .lyrics-editor-footer {
       display: flex;
       flex-wrap: wrap;
@@ -2608,7 +2638,7 @@
       white-space: nowrap;
     }
 
-    /* 5.4.6 | Footer transport stays on one row; Play / Loop / Repeat are identical in size. */
+    /* 5.4.7 | Footer transport stays on one row; Play / Loop / Repeat are identical in size. */
     .lyrics-editor-transport {
       flex: 1 1 230px;
       flex-wrap: nowrap;
@@ -2625,7 +2655,7 @@
       white-space: nowrap;
     }
 
-    /* 5.4.6 | Center footer info panel: counter / Lines / language + transcription. */
+    /* 5.4.7 | Center footer info panel: counter / Lines / language + transcription. */
     .lyrics-footer-counter-group {
       display: flex;
       flex-direction: column;
@@ -4265,7 +4295,7 @@
 </div>
 
 <!-- ========================================
-     NEW PROJECT PROMPT | 5.4.6
+     NEW PROJECT PROMPT | 5.4.7
 ======================================== -->
 <div id="newProjectPromptDialog" class="export-dialog">
   <div class="export-dialog-card">
@@ -4359,6 +4389,7 @@
 <div id="projectLoader" class="project-loader" aria-live="polite" aria-hidden="true">
   <div class="project-loader-card">
     <div class="project-loader-title">Loading project</div>
+    <div id="projectLoaderProject" class="project-loader-phase" style="font-weight:800; color:#f3df72; margin-bottom:8px;"></div>
     <div id="projectLoaderPhase" class="project-loader-phase">Opening project</div>
     <div class="project-loader-track"><div id="projectLoaderFill" class="project-loader-fill"></div></div>
     <div id="projectLoaderPercent" class="project-loader-percent">0%</div>
@@ -4399,10 +4430,11 @@
           </div>
         </div>
         <div class="lyrics-fullscreen-window-controls">
-          <button type="button" id="lyricsFullScreenWindowBtn" class="lyrics-fullscreen-window-btn" title="Restore window" aria-label="Restore or maximize Full Screen window">❐</button>
           <div class="lyrics-fullscreen-brand">MyNus</div>
+          <button type="button" id="lyricsFullScreenWindowBtn" class="lyrics-fullscreen-window-btn" title="Window mode" aria-label="Switch to window mode">▫</button>
         </div>
       </div>
+      <div id="lyricsFullScreenStructureBadge" class="lyrics-fullscreen-structure-badge" hidden></div>
       <div id="lyricsFullScreenCounter" class="lyrics-fullscreen-counter">-00:00.00</div>
 
       <div class="lyrics-fullscreen-bottom-controls">
@@ -4931,6 +4963,7 @@ const lyricsModeSwitchBtn = document.getElementById("lyricsModeSwitchBtn");
 const lyricsFullScreenView = document.getElementById("lyricsFullScreenView");
 const lyricsFullScreenBackBtn = document.getElementById("lyricsFullScreenBackBtn");
 const lyricsFullScreenTrackName = document.getElementById("lyricsFullScreenTrackName");
+const lyricsFullScreenStructureBadge = document.getElementById("lyricsFullScreenStructureBadge");
 const lyricsFullScreenCounter = document.getElementById("lyricsFullScreenCounter");
 const lyricsFullScreenWindowBtn = document.getElementById("lyricsFullScreenWindowBtn");
 const lyricsFullScreenCurrent = document.getElementById("lyricsFullScreenCurrent");
@@ -13611,7 +13644,7 @@ function leaveLyricsEdit({ restorePointer = false } = {}) {
     line._editedText = editedText;
     applyEditedTextToLine(line);
 
-    // 5.4.6: POINTER после commit строится заново только из сохранённого
+    // 5.4.7: POINTER после commit строится заново только из сохранённого
     // lyricsEditorDraft. Старый DOM-текст физически не может вернуться.
     const savedScrollTop = Number(lyricsEditorRows?.scrollTop) || 0;
     const committedLineIndex = lyricsEditorEditLineIndex;
@@ -13755,6 +13788,18 @@ function updateLyricsFullScreenView(currentTime) {
     const fullScreenPhase = getLyricsEditorPhaseCountdown(currentTime);
     lyricsFullScreenCounter.textContent = "-" + formatTime(fullScreenPhase.remaining);
     updateLyricsFullScreenCounterStyle(fullScreenPhase.remaining, fullScreenPhase.phase);
+  }
+
+  if (lyricsFullScreenStructureBadge) {
+    const structure = Array.isArray(lyricsStructureDraft) ? lyricsStructureDraft : [];
+    const currentStructure = structure.find(segment =>
+      currentTime >= Number(segment.start) && currentTime < Number(segment.end)
+    ) || null;
+    const structureName = currentStructure
+      ? String(currentStructure.label || currentStructure.type || "").trim()
+      : "";
+    lyricsFullScreenStructureBadge.textContent = structureName;
+    lyricsFullScreenStructureBadge.hidden = !structureName;
   }
 
   const lines = Array.isArray(lyricsEditorDraft) ? lyricsEditorDraft : [];
@@ -14273,8 +14318,9 @@ function maximizeLyricsKaraokeWindow({ rememberRestore = false } = {}) {
   lyricsEditorCard.style.height = "100vh";
   lyricsEditorCard.dataset.karaokeMaximized = "1";
   if (lyricsFullScreenWindowBtn) {
-    lyricsFullScreenWindowBtn.textContent = "❐";
-    lyricsFullScreenWindowBtn.title = "Restore window";
+    lyricsFullScreenWindowBtn.textContent = "▫";
+    lyricsFullScreenWindowBtn.title = "Window mode";
+    lyricsFullScreenWindowBtn.setAttribute("aria-label", "Switch to window mode");
   }
 }
 
@@ -14287,7 +14333,8 @@ function restoreLyricsKaraokeWindow() {
   lyricsEditorCard.dataset.karaokeMaximized = "0";
   if (lyricsFullScreenWindowBtn) {
     lyricsFullScreenWindowBtn.textContent = "□";
-    lyricsFullScreenWindowBtn.title = "Maximize window";
+    lyricsFullScreenWindowBtn.title = "Full Screen";
+    lyricsFullScreenWindowBtn.setAttribute("aria-label", "Switch to Full Screen");
   }
 }
 
@@ -17249,7 +17296,7 @@ function escapeLyricsHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
-// 5.4.6 | PDF: isolated print document gives the native PDF dialog the current project name.
+// 5.4.7 | PDF: isolated print document gives the native PDF dialog the current project name.
 // The technical print window opens centered at 50% of the available screen.
 function printLyricsPdfDirect(fileName, html) {
   const popupWidth = Math.max(480, Math.round((screen.availWidth || window.innerWidth || 960) * 0.5));
@@ -19296,7 +19343,7 @@ updateMasterHistoryButtons();
 
 
 // ========================================
-// PROJECT / PLAYLIST: СОСТОЯНИЕ И НУМЕРАЦИЯ | 5.4.6
+// PROJECT / PLAYLIST: СОСТОЯНИЕ И НУМЕРАЦИЯ | 5.4.7
 // Project = 12 аудиослотов + Lyrics.json + Project.json
 // ========================================
 const saveProjectBtn = document.getElementById("saveProjectBtn");
@@ -19375,7 +19422,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "5.4.6",
+    version: "5.4.7",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -19615,14 +19662,14 @@ function renderFullScreenPlaylist(projects = karaokePlaylistSnapshot) {
       }
 
       // =====================================================================
-      // [5.4.6][СЦЕНАРИЙ 2 — PLAYLIST]
+      // [5.4.7][СЦЕНАРИЙ 2 — PLAYLIST]
       // Пользователь вручную выбрал Track в PlayList.
       // Здесь PlayList выполняет ТОЛЬКО свою задачу: определяет ID выбранного Project.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.4.6][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
-      await reportProjectLoadTrace("[5.4.6][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.7][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
+      await reportProjectLoadTrace("[5.4.7][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(track.id)",
         function: "loadProjectById",
         parameters: { id: track.id },
@@ -19748,10 +19795,55 @@ const karaokeFinishedMessage = document.getElementById("karaokeFinishedMessage")
 const karaokeFinishedCancelBtn = document.getElementById("karaokeFinishedCancelBtn");
 let karaokeFinishActionRunning = false;
 let karaokeFinishTriggered = false;
+let karaokePostPlayAutoNextTimer = null;
+const KARAOKE_POSTPLAY_AUTO_NEXT_MS = 10000;
+
+function cancelKaraokePostPlayAutoNext() {
+  if (karaokePostPlayAutoNextTimer) {
+    clearTimeout(karaokePostPlayAutoNextTimer);
+    karaokePostPlayAutoNextTimer = null;
+  }
+}
+
+function hideFullScreenPlaylistForPostPlayAction() {
+  if (lyricsFullScreenPlaylistMenu) lyricsFullScreenPlaylistMenu.hidden = true;
+}
+
+async function showFullScreenPlaylistWithPostPlay() {
+  if (!lyricsFullScreenPlaylistMenu) return;
+  lyricsFullScreenPlaylistMenu.hidden = false;
+  renderFullScreenPlaylist(karaokePlaylistSnapshot);
+  try {
+    await refreshFullScreenPlaylist();
+  } catch (error) {
+    console.error(error);
+    status.textContent = error.message;
+  }
+}
+
+function isPositiveWaitingPlaylistProject(project) {
+  return project?.status === "waiting" && Number(project.position) > 0;
+}
+
+function scheduleKaraokePostPlayAutoNext() {
+  cancelKaraokePostPlayAutoNext();
+  karaokePostPlayAutoNextTimer = setTimeout(async () => {
+    karaokePostPlayAutoNextTimer = null;
+    if (!karaokeFinishedDialog?.classList.contains("open") || karaokeFinishActionRunning) return;
+    let projects;
+    try {
+      projects = await refreshFullScreenPlaylist();
+    } catch (_) {
+      return;
+    }
+    if (!projects.some(isPositiveWaitingPlaylistProject)) return;
+    await runKaraokeFinishAction("next", { autoplay: true });
+  }, KARAOKE_POSTPLAY_AUTO_NEXT_MS);
+}
 
 // Сохранение текущего Project и связанных данных.
 function karaokeHasNextProject() {
-  return karaokePlaylistSnapshot.some(project => project.status === "waiting");
+  return karaokePlaylistSnapshot.some(isPositiveWaitingPlaylistProject);
 }
 
 // Логика режима Karaoke и его интерфейса.
@@ -19787,17 +19879,22 @@ function openKaraokeFinishedDialog() {
   if (karaokeFinishedMessage) karaokeFinishedMessage.textContent = "";
   resetKaraokeFinishedButtons();
   karaokeFinishedDialog.classList.add("open");
+  void showFullScreenPlaylistWithPostPlay();
+  scheduleKaraokePostPlayAutoNext();
 }
 
 // Логика режима Karaoke и его интерфейса.
 function closeKaraokeFinishedDialog() {
+  cancelKaraokePostPlayAutoNext();
   karaokeFinishedDialog?.classList.remove("open");
   karaokeFinishActionRunning = false;
 }
 
 // Логика режима Karaoke и его интерфейса.
-async function runKaraokeFinishAction(action) {
+async function runKaraokeFinishAction(action, { autoplay = false } = {}) {
   if (karaokeFinishActionRunning) return;
+  cancelKaraokePostPlayAutoNext();
+  hideFullScreenPlaylistForPostPlayAction();
   karaokeFinishActionRunning = true;
   [karaokePlayAgainBtn, karaokeNextProjectBtn, karaokeLoadAnotherBtn, karaokeFinishedCancelBtn].forEach(btn => {
     if (btn) btn.disabled = true;
@@ -19815,19 +19912,19 @@ async function runKaraokeFinishAction(action) {
       playCurrentMode();
     } else if (action === "next") {
       const projects = await fetchPlaylistProjects();
-      const nextProject = projects.find(project => project.status === "waiting") || null;
+      const nextProject = projects.find(isPositiveWaitingPlaylistProject) || null;
       if (!nextProject) throw new Error("No next project in playlist");
       closeKaraokeFinishedDialog();
 
       // =====================================================================
-      // [5.4.6][СЦЕНАРИЙ 3 — OPEN NEXT]
+      // [5.4.7][СЦЕНАРИЙ 3 — OPEN NEXT]
       // Команда Open next берёт первый ожидающий Track из очереди и получает его Project ID.
       // На этом сценарий выбора заканчивается.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // Дальше выполняется прямой переход в ТУ ЖЕ ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.4.6][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
-      await reportProjectLoadTrace("[5.4.6][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.7][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
+      await reportProjectLoadTrace("[5.4.7][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(nextProject.id)",
         function: "loadProjectById",
         parameters: { id: nextProject.id },
@@ -19841,6 +19938,7 @@ async function runKaraokeFinishAction(action) {
           await markProjectInUse(nextProject.id, Number(nextProject.position));
           await refreshFullScreenPlaylist();
           karaokeFinishTriggered = false;
+          if (autoplay) playCurrentMode();
         } else if (isKaraokeUiMode() && karaokeFinishedDialog) {
           karaokeFinishedDialog.classList.add("open");
         }
@@ -19878,7 +19976,10 @@ async function runKaraokeFinishAction(action) {
 karaokePlayAgainBtn?.addEventListener("click", () => runKaraokeFinishAction("again"));
 karaokeNextProjectBtn?.addEventListener("click", () => runKaraokeFinishAction("next"));
 karaokeLoadAnotherBtn?.addEventListener("click", () => runKaraokeFinishAction("other"));
-karaokeFinishedCancelBtn?.addEventListener("click", closeKaraokeFinishedDialog);
+karaokeFinishedCancelBtn?.addEventListener("click", () => {
+  hideFullScreenPlaylistForPostPlayAction();
+  closeKaraokeFinishedDialog();
+});
 
 // Сохранение текущего Project и связанных данных.
 function resetProjectSequencerStateForLoad() {
@@ -19936,15 +20037,16 @@ function restoreProjectLyricsJson(lyrics) {
 }
 
 const projectLoader = document.getElementById("projectLoader");
+const projectLoaderProject = document.getElementById("projectLoaderProject");
 const projectLoaderPhase = document.getElementById("projectLoaderPhase");
 const projectLoaderFill = document.getElementById("projectLoaderFill");
 const projectLoaderPercent = document.getElementById("projectLoaderPercent");
 let projectLoading = false;
 
-// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.6.
+// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.7.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "5.4.6";
-const MYNUS_CLIENT_CHANGE = "Lyrics CARET commit rebuilds POINTER from draft; PDF movable/resizable preview with X and one final Print/Save; Full Screen starts maximized but remains resizable/movable";
+const MYNUS_CLIENT_VERSION = "5.4.7";
+const MYNUS_CLIENT_CHANGE = "Full Screen: green Structure MASTER hidden; POSTPLAY auto-shows Play List and after 10s defaults to unified Next Track LOAD + autoplay when a waiting track exists; current Structure badge; window-action control moved right of MyNus; Input/Master sliders scale with window; unified Project loader shows project name";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
 let projectLoadTraceSource = null;
@@ -20044,8 +20146,9 @@ function setProjectLoadPhase(index) {
 }
 
 // Сохранение текущего Project и связанных данных.
-async function showProjectLoader() {
+async function showProjectLoader(projectName = "") {
   projectLoading = true;
+  if (projectLoaderProject) projectLoaderProject.textContent = String(projectName || "").trim();
   projectLoader?.classList.add("open");
   projectLoader?.setAttribute("aria-hidden", "false");
   setProjectLoadPhase(0);
@@ -20187,7 +20290,7 @@ function clearProjectState() {
 }
 
 // =====================================================================
-// [5.4.6][ЕДИНАЯ LOAD-ФУНКЦИЯ]
+// [5.4.7][ЕДИНАЯ LOAD-ФУНКЦИЯ]
 // Это ЕДИНСТВЕННАЯ функция загрузки сохранённого Project.
 // Она получает РОВНО ОДИН входной параметр: id.
 // Функция НЕ знает, кто выбрал этот ID: Open Project, PlayList или Open next.
@@ -20196,12 +20299,12 @@ function clearProjectState() {
 // =====================================================================
 async function loadProjectById(id) {
   if (!projectLoadTraceId || projectLoadTraceProject !== (id || null)) {
-    beginProjectLoadTrace("[5.4.6][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
+    beginProjectLoadTrace("[5.4.7][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
   } else {
     projectLoadTraceProject = id || projectLoadTraceProject;
   }
 
-  await reportProjectLoadTrace("[5.4.6][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
+  await reportProjectLoadTrace("[5.4.7][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
     command: "LOAD Project",
     function: "loadProjectById",
     parameters: { id },
@@ -20212,7 +20315,7 @@ async function loadProjectById(id) {
   await reportProjectLoadTrace("COMMAND RESULT", { command: "pause current playback", function: "pauseAll", parameters: {}, result: "done" });
   status.textContent = "Loading project...";
   await reportProjectLoadTrace("COMMAND", { command: "show Project loader", function: "showProjectLoader", parameters: {}, result: "calling" });
-  await showProjectLoader();
+  await showProjectLoader(id);
 
   try {
     const projectUrl = "/saved-projects/" + encodeURIComponent(id);
@@ -20227,6 +20330,7 @@ async function loadProjectById(id) {
       result: response.ok ? "payload received" : "HTTP error"
     });
     if (!response.ok) throw new Error(data.error || "LOAD Project failed");
+    if (projectLoaderProject) projectLoaderProject.textContent = String(data.name || id || "").trim();
     if (data.cancelled) {
       status.textContent = "Project loading cancelled";
       projectLoader?.classList.remove("open");
@@ -20430,14 +20534,14 @@ async function openLoadProjectDialog() {
       button.addEventListener("click", async () => {
         try {
           // =====================================================================
-          // [5.4.6][СЦЕНАРИЙ 1 — OPEN PROJECT]
+          // [5.4.7][СЦЕНАРИЙ 1 — OPEN PROJECT]
           // Пользователь выбрал Project в обычном окне Open Project.
           // Этот сценарий выполняет только выбор Project и получает его ID.
           // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
           // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
           // =====================================================================
-          beginProjectLoadTrace("[5.4.6][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
-          await reportProjectLoadTrace("[5.4.6][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+          beginProjectLoadTrace("[5.4.7][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
+          await reportProjectLoadTrace("[5.4.7][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
             command: "await loadProjectById(project.id)",
             function: "loadProjectById",
             parameters: { id: project.id, name: project.name },
@@ -20735,10 +20839,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.4.7 | .lyrics-editor-card.karaoke-fullscreen-mode #lyricsStructureMasterCounter {
-  display: none !important;");
-console.log("[SERVICE CONSOLE] MyNus 5.4.7 | .lyrics-editor-card.karaoke-fullscreen-mode #lyricsStructureMasterCounter {
-  display: none !important;");
+console.log("MyNus 5.4.8 | Full Screen: green MASTER hidden; Play List opens with POSTPLAY; 10s automatic Next Track uses unified LOAD + autoplay; Structure badge 48px; window control right of MyNus; Input/Master sliders scale with window; loader shows project name.");
+console.log("[SERVICE CONSOLE] MyNus 5.4.8 | fullscreen=hide-green-master+structure-badge+window-control | postplay=playlist-show+10s-next-autoplay | sliders=container-scaled | load=existing-overlay+project-name");
 </script>
 
 <div class="row" id="build-down">
