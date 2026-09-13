@@ -1,4 +1,4 @@
-<!-- MyNus 5.4.8 | Full Screen: direct green MASTER hidden; Play List auto-shows with POSTPLAY; 10s automatic Next Track uses the unified Project LOAD and autoplay; current Structure badge added; window-state control moved right of MyNus; Input/Master sliders scale with the Full Screen window; unified loader now shows the project name. Server unchanged. -->
+<!-- MyNus 5.4.9 | Sequencer: global non-destructive Trim Start/Trim End added to Master Timeline; centered Master Timeline title; pink M:SS trim timecodes above timeline; draggable trim handles below timeline; trim masks/markers span all track timelines; Play/Karaoke/Postplay respect Trim boundaries; Trim saved/restored in Project Sequencer state. Server unchanged. -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.4.8</title>
+  <title>MyNus 5.4.9</title>
 
 
  <style>
@@ -638,6 +638,8 @@
 
     .master-timeline-title {
       margin: 10px 0 4px 202px;
+      width: calc(100% - 202px);
+      text-align: center;
 
       font-size: 13px;
       font-weight: bold;
@@ -657,14 +659,14 @@
       width: 100%;
       margin-left: 0;
 
-      height: 42px;
+      height: 84px;
 
       overflow: hidden;
 
-      background: #ececec;
+      background: transparent;
 
-      border: 1px solid #ccc;
-      border-radius: 7px;
+      border: 0;
+      border-radius: 0;
 
       scrollbar-width: thin;
     }
@@ -672,7 +674,7 @@
     .master-timeline-inner {
       position: relative;
 
-      height: 100%;
+      height: 84px;
 
       min-width: 100%;
 
@@ -726,8 +728,15 @@
 
     .master-ruler {
       position: absolute;
-
-      inset: 0;
+      left: 0;
+      right: 0;
+      top: 22px;
+      height: 42px;
+      box-sizing: border-box;
+      overflow: hidden;
+      background: #ececec;
+      border: 1px solid #ccc;
+      border-radius: 7px;
     }
 
     .master-ruler-mark {
@@ -757,8 +766,8 @@
     .master-cursor {
       position: absolute;
 
-      top: 0;
-      bottom: 0;
+      top: 22px;
+      height: 42px;
 
       width: 3px;
 
@@ -793,14 +802,99 @@
 
     .selection-range {
       position: absolute;
-      top: 0;
-      bottom: 0;
+      top: 22px;
+      height: 42px;
       display: none;
       background: rgba(0,0,0,.12);
       border-left: 2px solid #555;
       border-right: 2px solid #555;
       pointer-events: none;
       z-index: 8;
+    }
+
+
+    /* 5.4.9 | Global Project Trim */
+    .project-trim-mask {
+      position: absolute;
+      top: 22px;
+      height: 42px;
+      background: rgba(0,0,0,.30);
+      pointer-events: none;
+      z-index: 6;
+    }
+
+    .project-trim-marker {
+      position: absolute;
+      top: 22px;
+      width: 2px;
+      height: 42px;
+      background: #e83e8c;
+      transform: translateX(-1px);
+      pointer-events: none;
+      z-index: 12;
+    }
+
+    .project-trim-time {
+      position: absolute;
+      top: 1px;
+      transform: translateX(-50%);
+      min-width: 42px;
+      text-align: center;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      line-height: 18px;
+      font-weight: 700;
+      color: #e83e8c;
+      pointer-events: none;
+      z-index: 14;
+    }
+
+    .project-trim-handle {
+      position: absolute;
+      top: 66px;
+      width: 18px;
+      height: 15px;
+      padding: 0;
+      border: 1px solid #b72468;
+      border-radius: 3px 3px 7px 7px;
+      background: #e83e8c;
+      transform: translateX(-50%);
+      cursor: ew-resize;
+      touch-action: none;
+      z-index: 15;
+    }
+
+    .project-trim-handle::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: -5px;
+      width: 0;
+      height: 0;
+      transform: translateX(-50%);
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-bottom: 5px solid #e83e8c;
+    }
+
+    .timeline-inner .project-trim-track-mask {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      background: rgba(0,0,0,.25);
+      pointer-events: none;
+      z-index: 6;
+    }
+
+    .timeline-inner .project-trim-track-marker {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: rgba(232,62,140,.95);
+      transform: translateX(-1px);
+      pointer-events: none;
+      z-index: 7;
     }
 
     .selection-info {
@@ -3802,6 +3896,15 @@
             class="selection-range"
           ></div>
 
+          <div id="projectTrimMaskLeft" class="project-trim-mask"></div>
+          <div id="projectTrimMaskRight" class="project-trim-mask"></div>
+          <div id="projectTrimStartMarker" class="project-trim-marker"></div>
+          <div id="projectTrimEndMarker" class="project-trim-marker"></div>
+          <div id="projectTrimStartTime" class="project-trim-time">0:00</div>
+          <div id="projectTrimEndTime" class="project-trim-time">0:00</div>
+          <button type="button" id="projectTrimStartHandle" class="project-trim-handle" aria-label="Trim Start" title="Trim Start"></button>
+          <button type="button" id="projectTrimEndHandle" class="project-trim-handle" aria-label="Trim End" title="Trim End"></button>
+
           <div
             id="masterCursor"
             class="master-cursor"
@@ -5219,6 +5322,15 @@ const masterCursor =
 const masterRuler =
   document.getElementById("masterRuler");
 
+const projectTrimMaskLeft = document.getElementById("projectTrimMaskLeft");
+const projectTrimMaskRight = document.getElementById("projectTrimMaskRight");
+const projectTrimStartMarker = document.getElementById("projectTrimStartMarker");
+const projectTrimEndMarker = document.getElementById("projectTrimEndMarker");
+const projectTrimStartTime = document.getElementById("projectTrimStartTime");
+const projectTrimEndTime = document.getElementById("projectTrimEndTime");
+const projectTrimStartHandle = document.getElementById("projectTrimStartHandle");
+const projectTrimEndHandle = document.getElementById("projectTrimEndHandle");
+
 
 const canvases = {
 
@@ -5545,6 +5657,9 @@ let selectionEnd = null;
 
 let fragmentStart = null;
 let fragmentEnd = null;
+let projectTrimStart = 0;
+let projectTrimEnd = null;
+let projectTrimDragging = null;
 let loopEnabled = false;
 let selectionDragging = false;
 let selectionPointerStartX = 0;
@@ -6894,6 +7009,7 @@ function drawAllWaveforms() {
 
 
   updateCropMasks();
+  updateProjectTrimDisplay();
 
 
   sharedScrollInner.style.width =
@@ -7118,6 +7234,147 @@ function getTimelineWidth() {
 
 
 // ========================================
+// GLOBAL PROJECT TRIM | 5.4.9
+// ========================================
+
+function formatTrimTime(value) {
+  const total = Math.max(0, Math.round(Number(value) || 0));
+  const minutes = Math.floor(total / 60);
+  const seconds = String(total % 60).padStart(2, "0");
+  return minutes + ":" + seconds;
+}
+
+function getProjectTrimStart() {
+  const end = Math.max(0, Number(duration) || 0);
+  return Math.max(0, Math.min(Number(projectTrimStart) || 0, end));
+}
+
+function getProjectTrimEnd() {
+  const fullEnd = Math.max(0, Number(duration) || 0);
+  if (projectTrimEnd === null || projectTrimEnd === undefined || projectTrimEnd === "") return fullEnd;
+  const savedEnd = Number(projectTrimEnd);
+  if (!Number.isFinite(savedEnd)) return fullEnd;
+  return Math.max(getProjectTrimStart(), Math.min(savedEnd, fullEnd));
+}
+
+function getProjectPlaybackEnd() {
+  const trimEnd = getProjectTrimEnd();
+  if (mode === "master" && masterDuration > 0) return Math.min(trimEnd, masterDuration);
+  return trimEnd;
+}
+
+function ensureProjectTrimTrackOverlays() {
+  Object.values(timelines).forEach(timeline => {
+    if (!timeline) return;
+    if (!timeline.querySelector(".project-trim-track-mask.left")) {
+      const left = document.createElement("div");
+      left.className = "project-trim-track-mask left";
+      const right = document.createElement("div");
+      right.className = "project-trim-track-mask right";
+      const start = document.createElement("div");
+      start.className = "project-trim-track-marker start";
+      const end = document.createElement("div");
+      end.className = "project-trim-track-marker end";
+      timeline.append(left, right, start, end);
+    }
+  });
+}
+
+function updateProjectTrimDisplay() {
+  const width = getTimelineWidth();
+  const start = getProjectTrimStart();
+  const end = getProjectTrimEnd();
+  const startX = Math.max(0, Math.min(width, start * pixelsPerSecond));
+  const endX = Math.max(0, Math.min(width, end * pixelsPerSecond));
+
+  if (projectTrimMaskLeft) {
+    projectTrimMaskLeft.style.left = "0px";
+    projectTrimMaskLeft.style.width = startX + "px";
+  }
+  if (projectTrimMaskRight) {
+    projectTrimMaskRight.style.left = endX + "px";
+    projectTrimMaskRight.style.width = Math.max(0, width - endX) + "px";
+  }
+  [projectTrimStartMarker, projectTrimStartTime, projectTrimStartHandle].forEach(node => {
+    if (node) node.style.left = startX + "px";
+  });
+  [projectTrimEndMarker, projectTrimEndTime, projectTrimEndHandle].forEach(node => {
+    if (node) node.style.left = endX + "px";
+  });
+  if (projectTrimStartTime) {
+    projectTrimStartTime.textContent = formatTrimTime(start);
+    projectTrimStartTime.style.transform = startX < 28 ? "translateX(0)" : "translateX(-50%)";
+  }
+  if (projectTrimEndTime) {
+    projectTrimEndTime.textContent = formatTrimTime(end);
+    projectTrimEndTime.style.transform = endX > width - 28 ? "translateX(-100%)" : "translateX(-50%)";
+  }
+  if (projectTrimStartHandle) projectTrimStartHandle.style.transform = startX < 10 ? "translateX(0)" : "translateX(-50%)";
+  if (projectTrimEndHandle) projectTrimEndHandle.style.transform = endX > width - 10 ? "translateX(-100%)" : "translateX(-50%)";
+
+  ensureProjectTrimTrackOverlays();
+  Object.values(timelines).forEach(timeline => {
+    if (!timeline) return;
+    const left = timeline.querySelector(".project-trim-track-mask.left");
+    const right = timeline.querySelector(".project-trim-track-mask.right");
+    const startMarker = timeline.querySelector(".project-trim-track-marker.start");
+    const endMarker = timeline.querySelector(".project-trim-track-marker.end");
+    if (left) { left.style.left = "0px"; left.style.width = startX + "px"; }
+    if (right) { right.style.left = endX + "px"; right.style.width = Math.max(0, width - endX) + "px"; }
+    if (startMarker) startMarker.style.left = startX + "px";
+    if (endMarker) endMarker.style.left = endX + "px";
+  });
+}
+
+function setProjectTrimBoundary(which, rawTime) {
+  if (!duration) return;
+  const snapped = Math.max(0, Math.min(duration, Math.round(Number(rawTime) || 0)));
+  if (which === "start") {
+    const maxStart = Math.max(0, getProjectTrimEnd() - 1);
+    projectTrimStart = Math.min(snapped, maxStart);
+    if (getCurrentTime() < projectTrimStart) setGlobalCursorTime(projectTrimStart);
+  } else {
+    const minEnd = Math.min(duration, getProjectTrimStart() + 1);
+    projectTrimEnd = Math.max(minEnd, snapped);
+    if (getCurrentTime() > projectTrimEnd) setGlobalCursorTime(projectTrimEnd);
+  }
+  updateProjectTrimDisplay();
+}
+
+function projectTrimTimeFromPointer(event) {
+  const rect = masterTimelineInner.getBoundingClientRect();
+  const x = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
+  return rect.width > 0 ? (x / rect.width) * duration : 0;
+}
+
+function bindProjectTrimHandle(handle, which) {
+  handle?.addEventListener("pointerdown", event => {
+    projectTrimDragging = which;
+    handle.setPointerCapture(event.pointerId);
+    event.stopPropagation();
+    event.preventDefault();
+  });
+  handle?.addEventListener("pointermove", event => {
+    if (projectTrimDragging !== which) return;
+    setProjectTrimBoundary(which, projectTrimTimeFromPointer(event));
+    event.stopPropagation();
+    event.preventDefault();
+  });
+  handle?.addEventListener("pointerup", event => {
+    if (projectTrimDragging !== which) return;
+    setProjectTrimBoundary(which, projectTrimTimeFromPointer(event));
+    projectTrimDragging = null;
+    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+    event.stopPropagation();
+    event.preventDefault();
+  });
+  handle?.addEventListener("pointercancel", () => { projectTrimDragging = null; });
+}
+
+bindProjectTrimHandle(projectTrimStartHandle, "start");
+bindProjectTrimHandle(projectTrimEndHandle, "end");
+
+// ========================================
 // ОТРИСОВКА ВРЕМЕННОЙ ШКАЛЫ MASTER
 // ========================================
 
@@ -7214,6 +7471,7 @@ function drawMasterTimeline() {
 
 
   updateMasterCursor();
+  updateProjectTrimDisplay();
 
 }
 
@@ -7245,13 +7503,15 @@ playBtn.addEventListener(
 // Управление транспортом и воспроизведением.
 function playCurrentMode() {
 
-  const time =
+  let time =
     getCurrentTime();
 
-  const playbackEnd =
-    mode === "master" && masterDuration > 0
-      ? masterDuration
-      : duration;
+  const playbackStart = getProjectTrimStart();
+  const playbackEnd = getProjectPlaybackEnd();
+
+  if (time < playbackStart || time >= playbackEnd - 0.001) {
+    time = playbackStart;
+  }
 
   if (isKaraokeUiMode() && playbackEnd > 0 && time < playbackEnd - 0.25) {
     karaokeFinishTriggered = false;
@@ -7443,7 +7703,7 @@ stopBtn.addEventListener(
 
     pauseAll();
 
-    syncAllTo(0);
+    syncAllTo(getProjectTrimStart());
 
     updatePlayheads();
 
@@ -7463,7 +7723,7 @@ startBtn.addEventListener(
   "click",
   () => {
 
-    syncAllTo(0);
+    syncAllTo(getProjectTrimStart());
 
     updatePlayheads();
 
@@ -7484,7 +7744,7 @@ endBtn.addEventListener(
     const endTime =
       Math.max(
         0,
-        duration - 0.01
+        getProjectPlaybackEnd() - 0.01
       );
 
 
@@ -14249,9 +14509,7 @@ lyricsFullScreenStopBtn?.addEventListener("click", event => {
 
   const endTime = Math.max(
     0,
-    mode === "master" && masterDuration > 0
-      ? masterDuration
-      : duration
+    getProjectPlaybackEnd()
   );
 
   syncAllTo(endTime);
@@ -18049,23 +18307,7 @@ function startAnimation() {
       }
 
 
-      if (
-        (
-          mode === "master"
-          &&
-          masterDuration > 0
-          &&
-          getCurrentTime()
-          >= masterDuration
-        )
-        ||
-        (
-          mode !== "master"
-          &&
-          getCurrentTime()
-          >= duration
-        )
-      ) {
+      if (getCurrentTime() >= getProjectPlaybackEnd()) {
 
         if (isKaraokeUiMode()) {
           pauseAll();
@@ -18082,7 +18324,7 @@ function startAnimation() {
           !lyricsEditorDialog.classList.contains("hidden")
         ) {
 
-          syncAllTo(0);
+          syncAllTo(getProjectTrimStart());
 
           lyricsEditorSelectedLine =
             lyricsEditorDraft.length
@@ -18608,6 +18850,9 @@ function resetToInitialSplit() {
   selectionStart = null;
 
   selectionEnd = null;
+
+  projectTrimStart = 0;
+  projectTrimEnd = null;
 
 
   mode = "original";
@@ -19422,13 +19667,15 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "5.4.7",
+    version: "5.4.9",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
       mode,
       fragmentStart,
       fragmentEnd,
+      trimStart: getProjectTrimStart(),
+      trimEnd: projectTrimEnd === null || projectTrimEnd === undefined ? null : getProjectTrimEnd(),
       stemState: cloneSerializable(stemState, {}),
       stemCrop: cloneSerializable(stemCrop, {}),
       fxSettings: cloneSerializable(fxSettings, {}),
@@ -19662,14 +19909,14 @@ function renderFullScreenPlaylist(projects = karaokePlaylistSnapshot) {
       }
 
       // =====================================================================
-      // [5.4.7][СЦЕНАРИЙ 2 — PLAYLIST]
+      // [5.4.9][СЦЕНАРИЙ 2 — PLAYLIST]
       // Пользователь вручную выбрал Track в PlayList.
       // Здесь PlayList выполняет ТОЛЬКО свою задачу: определяет ID выбранного Project.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.4.7][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
-      await reportProjectLoadTrace("[5.4.7][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.9][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
+      await reportProjectLoadTrace("[5.4.9][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(track.id)",
         function: "loadProjectById",
         parameters: { id: track.id },
@@ -19905,7 +20152,7 @@ async function runKaraokeFinishAction(action, { autoplay = false } = {}) {
     if (action === "again") {
       closeKaraokeFinishedDialog();
       karaokeFinishTriggered = false;
-      syncAllTo(0);
+      syncAllTo(getProjectTrimStart());
       updatePlayheads();
       updateMasterCursor();
       updateTimeDisplay();
@@ -19917,14 +20164,14 @@ async function runKaraokeFinishAction(action, { autoplay = false } = {}) {
       closeKaraokeFinishedDialog();
 
       // =====================================================================
-      // [5.4.7][СЦЕНАРИЙ 3 — OPEN NEXT]
+      // [5.4.9][СЦЕНАРИЙ 3 — OPEN NEXT]
       // Команда Open next берёт первый ожидающий Track из очереди и получает его Project ID.
       // На этом сценарий выбора заканчивается.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // Дальше выполняется прямой переход в ТУ ЖЕ ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.4.7][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
-      await reportProjectLoadTrace("[5.4.7][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.9][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
+      await reportProjectLoadTrace("[5.4.9][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(nextProject.id)",
         function: "loadProjectById",
         parameters: { id: nextProject.id },
@@ -19995,6 +20242,8 @@ function resetProjectSequencerStateForLoad() {
   if (fxSettings.master) Object.assign(fxSettings.master, cloneSerializable(defaultFxSettings, {}));
   fragmentStart = null;
   fragmentEnd = null;
+  projectTrimStart = 0;
+  projectTrimEnd = null;
   mode = "original";
 }
 
@@ -20015,6 +20264,12 @@ function restoreProjectSequencerState(saved) {
 
   fragmentStart = Number.isFinite(Number(saved.fragmentStart)) ? Number(saved.fragmentStart) : null;
   fragmentEnd = Number.isFinite(Number(saved.fragmentEnd)) ? Number(saved.fragmentEnd) : null;
+  projectTrimStart = saved.trimStart !== null && saved.trimStart !== undefined && Number.isFinite(Number(saved.trimStart))
+    ? Math.max(0, Number(saved.trimStart))
+    : 0;
+  projectTrimEnd = saved.trimEnd !== null && saved.trimEnd !== undefined && Number.isFinite(Number(saved.trimEnd))
+    ? Math.max(projectTrimStart, Number(saved.trimEnd))
+    : null;
   if (["original", "mix", "master"].includes(saved.mode)) mode = saved.mode;
 }
 
@@ -20043,10 +20298,10 @@ const projectLoaderFill = document.getElementById("projectLoaderFill");
 const projectLoaderPercent = document.getElementById("projectLoaderPercent");
 let projectLoading = false;
 
-// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.7.
+// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.9.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "5.4.7";
-const MYNUS_CLIENT_CHANGE = "Full Screen: green Structure MASTER hidden; POSTPLAY auto-shows Play List and after 10s defaults to unified Next Track LOAD + autoplay when a waiting track exists; current Structure badge; window-action control moved right of MyNus; Input/Master sliders scale with window; unified Project loader shows project name";
+const MYNUS_CLIENT_VERSION = "5.4.9";
+const MYNUS_CLIENT_CHANGE = "Sequencer: global non-destructive Trim Start/Trim End on Master Timeline; centered Master Timeline title; pink M:SS timecodes above and draggable handles below; trim masks/markers across all tracks; Play/Karaoke/Postplay respect Trim; Trim persisted in Project Sequencer state; server unchanged";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
 let projectLoadTraceSource = null;
@@ -20269,6 +20524,9 @@ function clearProjectState() {
   selectionEnd = null;
   fragmentStart = null;
   fragmentEnd = null;
+  projectTrimStart = 0;
+  projectTrimEnd = null;
+  projectTrimDragging = null;
   loopEnabled = false;
   lyricsTransportMode = "master";
   lyricsLoopPaused = false;
@@ -20290,7 +20548,7 @@ function clearProjectState() {
 }
 
 // =====================================================================
-// [5.4.7][ЕДИНАЯ LOAD-ФУНКЦИЯ]
+// [5.4.9][ЕДИНАЯ LOAD-ФУНКЦИЯ]
 // Это ЕДИНСТВЕННАЯ функция загрузки сохранённого Project.
 // Она получает РОВНО ОДИН входной параметр: id.
 // Функция НЕ знает, кто выбрал этот ID: Open Project, PlayList или Open next.
@@ -20299,12 +20557,12 @@ function clearProjectState() {
 // =====================================================================
 async function loadProjectById(id) {
   if (!projectLoadTraceId || projectLoadTraceProject !== (id || null)) {
-    beginProjectLoadTrace("[5.4.7][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
+    beginProjectLoadTrace("[5.4.9][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
   } else {
     projectLoadTraceProject = id || projectLoadTraceProject;
   }
 
-  await reportProjectLoadTrace("[5.4.7][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
+  await reportProjectLoadTrace("[5.4.9][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
     command: "LOAD Project",
     function: "loadProjectById",
     parameters: { id },
@@ -20455,8 +20713,8 @@ async function loadProjectById(id) {
 
     updateEffectiveVocalRange();
     pauseAll();
-    syncAllTo(0);
-    masterCursorTime = 0;
+    syncAllTo(getProjectTrimStart());
+    masterCursorTime = getProjectTrimStart();
     updatePlayheads();
     updateMasterCursor();
     updateTimeDisplay();
@@ -20534,14 +20792,14 @@ async function openLoadProjectDialog() {
       button.addEventListener("click", async () => {
         try {
           // =====================================================================
-          // [5.4.7][СЦЕНАРИЙ 1 — OPEN PROJECT]
+          // [5.4.9][СЦЕНАРИЙ 1 — OPEN PROJECT]
           // Пользователь выбрал Project в обычном окне Open Project.
           // Этот сценарий выполняет только выбор Project и получает его ID.
           // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
           // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
           // =====================================================================
-          beginProjectLoadTrace("[5.4.7][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
-          await reportProjectLoadTrace("[5.4.7][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+          beginProjectLoadTrace("[5.4.9][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
+          await reportProjectLoadTrace("[5.4.9][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
             command: "await loadProjectById(project.id)",
             function: "loadProjectById",
             parameters: { id: project.id, name: project.name },
@@ -20839,8 +21097,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.4.8 | Full Screen: green MASTER hidden; Play List opens with POSTPLAY; 10s automatic Next Track uses unified LOAD + autoplay; Structure badge 48px; window control right of MyNus; Input/Master sliders scale with window; loader shows project name.");
-console.log("[SERVICE CONSOLE] MyNus 5.4.8 | fullscreen=hide-green-master+structure-badge+window-control | postplay=playlist-show+10s-next-autoplay | sliders=container-scaled | load=existing-overlay+project-name");
+console.log("MyNus 5.4.9 | Sequencer global Trim: pink M:SS timecodes above Master Timeline, draggable handles below, masks/markers across all tracks; Play/Karaoke/Postplay respect Trim; Project save/load persists Trim; server unchanged.");
+console.log("[SERVICE CONSOLE] MyNus 5.4.9 | trim=global-start+end+pink-timecodes+handles+masks | playback=trim-aware | project=trim-persisted | server=unchanged");
 </script>
 
 <div class="row" id="build-down">
