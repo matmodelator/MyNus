@@ -1,4 +1,10 @@
-<!-- MyNus 5.4.13 | Karaoke non-Full-Screen minimum 620x900 + separate session-only Sequencer History Undo/Redo. Trim unchanged. Server unchanged. -->
+<!-- MyNus 5.4.14 | .master-timeline width      — не меняется
+.master-timeline overflow   — остаётся hidden
+.master-timeline-inner      — не меняется
+.project-trim-time transform — остаётся translateX(-50%)
+Trim start/end              — не меняются
+Zoom                         — не меняется
+Scroll                       — не меняется -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +21,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.4.13</title>
+  <title>MyNus 5.4.14</title>
 
 
  <style>
@@ -678,6 +684,8 @@
     }
 
     .master-timeline-row {
+position: relative;
+
       display: grid;
       grid-template-columns: 190px 1fr;
       gap: 12px;
@@ -4001,8 +4009,7 @@
           <div id="projectTrimMaskRight" class="project-trim-mask"></div>
           <div id="projectTrimStartMarker" class="project-trim-marker"></div>
           <div id="projectTrimEndMarker" class="project-trim-marker"></div>
-          <div id="projectTrimStartTime" class="project-trim-time">0:00</div>
-          <div id="projectTrimEndTime" class="project-trim-time">0:00</div>
+         
           <button type="button" id="projectTrimStartHandle" class="project-trim-handle" aria-label="Trim Start" title="Trim Start"></button>
           <button type="button" id="projectTrimEndHandle" class="project-trim-handle" aria-label="Trim End" title="Trim End"></button>
 
@@ -4011,11 +4018,14 @@
             class="master-cursor"
           ></div>
 
-        </div>
+        </div> <!-- masterTimelineInner -->
 
-      </div>
+      </div> <!-- masterTimeline --> 
 
-    </div>
+          <div id="projectTrimStartTime" class="project-trim-time">0:00</div>
+          <div id="projectTrimEndTime" class="project-trim-time">0:00</div>
+
+    </div> <!-- master-timeline-row -->
 
 
     <div class="shared-scroll-row">
@@ -7365,9 +7375,21 @@ function getProjectTrimStart() {
 
 function getProjectTrimEnd() {
   const fullEnd = Math.max(0, Number(duration) || 0);
+
+  if (projectTrimEnd == null) {
+    return fullEnd;
+  }
+
   const savedEnd = Number(projectTrimEnd);
-  if (!Number.isFinite(savedEnd)) return fullEnd;
-  return Math.max(getProjectTrimStart(), Math.min(savedEnd, fullEnd));
+
+  if (!Number.isFinite(savedEnd)) {
+    return fullEnd;
+  }
+
+  return Math.max(
+    getProjectTrimStart(),
+    Math.min(savedEnd, fullEnd)
+  );
 }
 
 function getProjectPlaybackEnd() {
@@ -7408,12 +7430,41 @@ function updateProjectTrimDisplay() {
     projectTrimMaskRight.style.left = endX + "px";
     projectTrimMaskRight.style.width = Math.max(0, width - endX) + "px";
   }
-  [projectTrimStartMarker, projectTrimStartTime, projectTrimStartHandle].forEach(node => {
+  [projectTrimStartMarker, projectTrimStartHandle].forEach(node => {
     if (node) node.style.left = startX + "px";
-  });
-  [projectTrimEndMarker, projectTrimEndTime, projectTrimEndHandle].forEach(node => {
+});
+
+[projectTrimEndMarker, projectTrimEndHandle].forEach(node => {
     if (node) node.style.left = endX + "px";
-  });
+});
+
+const scrollLeft = getSharedScrollLeft();
+const rowRect =
+    masterTimeline.parentElement.getBoundingClientRect();
+
+if (projectTrimStartTime && projectTrimStartHandle) {
+    const handleRect =
+        projectTrimStartHandle.getBoundingClientRect();
+
+    projectTrimStartTime.style.left =
+        (
+            handleRect.left
+            + handleRect.width / 2
+            - rowRect.left
+        ) + "px";
+}
+
+if (projectTrimEndTime && projectTrimEndHandle) {
+    const handleRect =
+        projectTrimEndHandle.getBoundingClientRect();
+
+    projectTrimEndTime.style.left =
+        (
+            handleRect.left
+            + handleRect.width / 2
+            - rowRect.left
+        ) + "px";
+}
   if (projectTrimStartTime) projectTrimStartTime.textContent = formatTrimTime(start);
   if (projectTrimEndTime) projectTrimEndTime.textContent = formatTrimTime(end);
 
@@ -18909,6 +18960,43 @@ function applySharedScroll() {
     + (-left)
     + "px)";
 
+const width = getTimelineWidth();
+const startX = Math.max(
+    0,
+    Math.min(width, getProjectTrimStart() * pixelsPerSecond)
+);
+const endX = Math.max(
+    0,
+    Math.min(width, getProjectTrimEnd() * pixelsPerSecond)
+);
+
+const rowRect =
+    masterTimeline.parentElement.getBoundingClientRect();
+
+if (projectTrimStartTime && projectTrimStartHandle) {
+    const handleRect =
+        projectTrimStartHandle.getBoundingClientRect();
+
+    projectTrimStartTime.style.left =
+        (
+            handleRect.left
+            + handleRect.width / 2
+            - rowRect.left
+        ) + "px";
+}
+
+if (projectTrimEndTime && projectTrimEndHandle) {
+    const handleRect =
+        projectTrimEndHandle.getBoundingClientRect();
+
+    projectTrimEndTime.style.left =
+        (
+            handleRect.left
+            + handleRect.width / 2
+            - rowRect.left
+        ) + "px";
+}
+
 }
 
 
@@ -20631,7 +20719,13 @@ function restoreProjectSequencerState(saved) {
   fragmentStart = Number.isFinite(Number(saved.fragmentStart)) ? Number(saved.fragmentStart) : null;
   fragmentEnd = Number.isFinite(Number(saved.fragmentEnd)) ? Number(saved.fragmentEnd) : null;
   projectTrimStart = Number.isFinite(Number(saved.trimStart)) ? Math.max(0, Number(saved.trimStart)) : 0;
-  projectTrimEnd = Number.isFinite(Number(saved.trimEnd)) ? Math.max(projectTrimStart, Number(saved.trimEnd)) : null;
+  projectTrimEnd = saved.trimEnd == null
+  ? null
+  : (
+      Number.isFinite(Number(saved.trimEnd))
+        ? Math.max(projectTrimStart, Number(saved.trimEnd))
+        : null
+    );
   if (["original", "mix", "master"].includes(saved.mode)) mode = saved.mode;
 }
 
@@ -21103,6 +21197,7 @@ async function loadProjectById(id) {
     updateCropButtons();
     updateMixButtons();
     studio.style.display = "block";
+    updateProjectTrimDisplay();
 
     await advanceProjectLoad(8);
 
@@ -21459,8 +21554,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.4.13 | Karaoke non-Full-Screen minimum 620x900 + separate session-only Sequencer History Undo/Redo; Trim unchanged; server unchanged.");
-console.log("[SERVICE CONSOLE] MyNus 5.4.13 | karaoke-window-min=620x900 | sequencer-history=undo+redo+session-only | trim=unchanged | server=unchanged");
+console.log("MyNus 5.4.14 | TRIM updateProjectTrimDisplay();");
+console.log("[SERVICE CONSOLE] MyNus 5.4.14 | TRIM updateProjectTrimDisplay();");
 </script>
 
 <div class="row" id="build-down">
