@@ -1,8 +1,4 @@
-<!-- MyNus 5.4.17 | позиционирование IN/OUT;
-цвет Selection;
-подсветка цифр шкалы;
-положение цифр Timeline;
-визуальная индикация звучащих/молчащих дорожек. -->
+<!-- MyNus 5.4.18 | New Project; tracks color&heihgt; Master track; Clear Select&Loop -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -19,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.4.17</title>
+  <title>MyNus 5.4.18</title>
 
 
  <style>
@@ -474,24 +470,83 @@
 
       gap: 12px;
 
-      margin-bottom: 6px;
+      margin-bottom: 4px;
+      min-height: 62px;
     }
 
-    /* 5.4.17 | Визуальное состояние дорожек во время воспроизведения. */
-    .track.track-audible .track-controls,
-    .track.track-audible .timeline-scroll {
-      background: #ffe0b2;
-      border-color: #ff9800;
-      box-shadow: inset 0 0 0 1px rgba(255, 152, 0, .45);
+    /* 5.4.18 | Состояние дорожек: active = обычная чёрная волна на белом;
+       passive = обелённая/серая волна; muted = розовый фон + серая волна. */
+    .track.track-active .track-controls,
+    .track.track-active .timeline-scroll {
+      background: #fff;
+      border-color: #ddd;
+      box-shadow: none;
     }
 
-    .track.track-silent .track-controls,
-    .track.track-silent .timeline-scroll {
+    .track.track-active canvas {
+      opacity: 1;
+      filter: none;
+    }
+
+    .track.track-passive .track-controls,
+    .track.track-passive .timeline-scroll {
       background: #fff;
       border-color: #eee;
       box-shadow: none;
     }
 
+    .track.track-passive canvas {
+      opacity: .28;
+      filter: grayscale(1);
+    }
+
+    .track.track-muted .track-controls,
+    .track.track-muted .timeline-scroll {
+      background: #ffd9e6;
+      border-color: #ef9ab8;
+      box-shadow: none;
+    }
+
+    .track.track-muted canvas {
+      opacity: .28;
+      filter: grayscale(1);
+    }
+
+    /* 5.4.18 | Selection проходит зелёной зоной через все активные аудиодорожки. */
+    .track-selection-overlay {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      display: none;
+      background: rgba(0, 200, 83, .16);
+      border-left: 2px solid #00c853;
+      border-right: 2px solid #00c853;
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    /* 5.4.18 | Высота waveform соответствует высоте левого основания строки. */
+    .track:has(.timeline-scroll) {
+      align-items: stretch;
+    }
+
+    .track:has(.timeline-scroll) .timeline-scroll,
+    .track:has(.timeline-scroll) .timeline-inner,
+    .track:has(.timeline-scroll) canvas {
+      height: 100%;
+      min-height: 0;
+    }
+
+    /* Original ниже обычных дорожек, Master выше обычных. */
+    .track:has(.timeline-scroll[data-track="original"]) {
+      min-height: 54px;
+    }
+
+    .track:has(.timeline-scroll[data-track="master"]) {
+      min-height: 96px;
+    }
+
+   
     .track-controls {
       display: grid;
       grid-template-columns: 52px 1fr;
@@ -518,6 +573,39 @@
 
       font-size: 11px;
       font-weight: bold;
+    }
+
+    /* 5.4.18 | Master получает отдельную верхнюю строку Clear Rec / Save Rec.
+       Rec On / Rec Off / Export Track / Export Selection остаются на прежних местах. */
+    .master-controls {
+      grid-template-areas:
+        "title title"
+        "buttons buttons"
+        "volume volume"
+        "save save"
+        "crop crop";
+      padding-top: 6px;
+    }
+
+    .master-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      width: 100%;
+    }
+
+    .master-rec-commit-buttons {
+      display: flex;
+      gap: 4px;
+      margin-left: auto;
+    }
+
+    .master-rec-commit-buttons button {
+      padding: 2px 5px;
+      font-size: 10px;
+      line-height: 14px;
+      border-radius: 7px;
     }
 
     .track-buttons {
@@ -675,7 +763,7 @@
 
       width: 2px;
 
-      /* 5.4.17 | Playhead Sequencer всегда синий, как в Lyrics. */
+      /* 5.4.18 | Playhead Sequencer всегда синий, как в Lyrics. */
       background: #0066ff;
 
       pointer-events: none;
@@ -807,7 +895,7 @@ position: relative;
     .master-ruler-label {
       position: absolute;
 
-      /* 5.4.17 | Цифры делений прижаты изнутри к нижней границе Timeline. */
+      /* 5.4.18 | Цифры делений прижаты изнутри к нижней границе Timeline. */
       bottom: 3px;
 
       transform: translateX(4px);
@@ -818,7 +906,7 @@ position: relative;
       pointer-events: none;
     }
 
-    /* 5.4.17 | Как в Lyrics: цифра текущего деления подсвечивается синим. */
+    /* 5.4.18 | Как в Lyrics: цифра текущего деления подсвечивается синим. */
     .master-ruler-label.active {
       color: #0066ff;
       font-weight: 700;
@@ -832,7 +920,7 @@ position: relative;
 
       width: 3px;
 
-      /* 5.4.17 | Master Playhead всегда синий. */
+      /* 5.4.18 | Master Playhead всегда синий. */
       background: #0066ff;
 
       cursor: ew-resize;
@@ -867,7 +955,7 @@ position: relative;
       top: 22px;
       height: 42px;
       display: none;
-      /* 5.4.17 | Selection зелёный вместо жёлтого. */
+      /* 5.4.18 | Selection зелёный вместо жёлтого. */
       background: rgba(0, 200, 83, .20);
       border-left: 2px solid #00c853;
       border-right: 2px solid #00c853;
@@ -878,7 +966,7 @@ position: relative;
       font-weight: 700;
     }
 
-    /* 5.4.17 | По X подписи направлены внутрь Selection; по Y совпадают с уровнями Trim. */
+    /* 5.4.18 | По X подписи направлены внутрь Selection; по Y совпадают с уровнями Trim. */
     .selection-edge-label {
       position: absolute;
       z-index: 16;
@@ -3194,6 +3282,7 @@ position: relative;
               <div class="shortcut-line"><span class="shortcut-key">Page Up</span><span>IN</span></div>
               <div class="shortcut-line"><span class="shortcut-key">Page Down</span><span>OUT</span></div>
               <div class="shortcut-line"><span class="shortcut-key">Insert</span><span>Loop</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Delete</span><span>Clear Selection</span></div>
               <div class="shortcut-line"><span class="shortcut-key">↑ / ↓</span><span>Zoom + / −</span></div>
               <div class="shortcut-line"><span class="shortcut-key">← / →</span><span>Cursor − / + 1 sec</span></div>
               <div class="shortcut-line"><span class="shortcut-key">1–6</span><span>Effects track</span></div>
@@ -3910,8 +3999,12 @@ position: relative;
 
       <div class="track-controls master-controls">
 
-        <div class="track-title">
-          Master
+        <div class="track-title master-title-row">
+          <span>Master</span>
+          <span class="master-rec-commit-buttons">
+            <button id="clearMasterRecBtn" type="button">Clear Rec</button>
+            <button id="saveMasterRecBtn" type="button" disabled>Save Rec</button>
+          </span>
         </div>
 
         <div class="track-buttons">
@@ -3925,8 +4018,8 @@ position: relative;
         </div>
 
         <div class="track-buttons">
-          <button id="undoMasterBtn" disabled>Undo</button>
-          <button id="redoMasterBtn" disabled>Redo</button>
+          <button id="undoMasterBtn" disabled>Undo Rec</button>
+          <button id="redoMasterBtn" disabled>Redo Rec</button>
         </div>
 
         <div class="volume-row">
@@ -4123,6 +4216,7 @@ position: relative;
               <div class="shortcut-line"><span class="shortcut-key">Page Up</span><span>IN</span></div>
               <div class="shortcut-line"><span class="shortcut-key">Page Down</span><span>OUT</span></div>
               <div class="shortcut-line"><span class="shortcut-key">Insert</span><span>Loop</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Delete</span><span>Clear Selection</span></div>
               <div class="shortcut-line"><span class="shortcut-key">↑ / ↓</span><span>Zoom + / −</span></div>
               <div class="shortcut-line"><span class="shortcut-key">← / →</span><span>Cursor − / + 1 sec</span></div>
               <div class="shortcut-line"><span class="shortcut-key">1–6</span><span>Effects track</span></div>
@@ -4937,6 +5031,12 @@ const undoMasterBtn =
 
 const redoMasterBtn =
   document.getElementById("redoMasterBtn");
+
+const clearMasterRecBtn =
+  document.getElementById("clearMasterRecBtn");
+
+const saveMasterRecBtn =
+  document.getElementById("saveMasterRecBtn");
 
 const saveMasterSelectionBtn =
   document.getElementById("saveMasterSelectionBtn");
@@ -7702,7 +7802,7 @@ function setProjectTrimBoundary(which, rawTime) {
     if (getCurrentTime() > projectTrimEnd) setGlobalCursorTime(projectTrimEnd);
   }
   updateProjectTrimDisplay();
-  // 5.4.17 | IN / OUT и Selection всегда остаются внутри изменившегося Trim.
+  // 5.4.18 | IN / OUT и Selection всегда остаются внутри изменившегося Trim.
   updateSelectionDisplay();
   // Structure reads the same Project Trim values; rerender immediately so its
   // masks, boundary markers and endpoint timecodes move with the Sequencer handle.
@@ -7823,7 +7923,7 @@ function drawMasterTimeline() {
       + "px";
 
 
-    // 5.4.17 | Нужны для синей подсветки: текущее деление и его цена при данном Zoom.
+    // 5.4.18 | Нужны для синей подсветки: текущее деление и его цена при данном Zoom.
     label.dataset.time = String(second);
     label.dataset.interval = String(interval);
 
@@ -8082,6 +8182,11 @@ stopBtn.addEventListener(
   () => {
 
     pauseAll();
+
+    // 5.4.18 | STOP всегда сбрасывает LOOP.
+    loopEnabled = false;
+    loopBtn.classList.remove("active");
+    syncTransportMirrors();
 
     syncAllTo(getProjectTrimStart());
 
@@ -8676,8 +8781,8 @@ function applyMix() {
 }
 
 
-// 5.4.17 | Оранжевым отмечается дорожка, которая сейчас реально включена в Mix.
-// Mute, Solo-исключение, выход за Crop, нулевая громкость, отсутствие файла или Pause => белая дорожка.
+// 5.4.18 | Визуальное состояние дорожек определяется по реальной строке Timeline,
+ // а не через скрытые <audio>. Active / passive / muted разделены явно.
 function updateStemPlaybackVisuals() {
 
   const anySolo =
@@ -8689,6 +8794,18 @@ function updateStemPlaybackVisuals() {
 
   const current = getCurrentTime();
 
+  const setRowState = (trackId, stateName) => {
+    const timeline = document.querySelector('.timeline-scroll[data-track="' + trackId + '"]');
+    const row = timeline?.closest(".track");
+    if (!row) return;
+    row.classList.toggle("track-active", stateName === "active");
+    row.classList.toggle("track-passive", stateName === "passive");
+    row.classList.toggle("track-muted", stateName === "muted");
+  };
+
+  // Original активен только в режиме Original; в остальных режимах он пассивен.
+  setRowState("original", mode === "original" ? "active" : "passive");
+
   stemIds.forEach(stemId => {
     const fsState = isKaraokeUiMode() ? lyricsFullScreenTrackState?.[stemId] : null;
     const state = fsState || stemState[stemId];
@@ -8697,22 +8814,25 @@ function updateStemPlaybackVisuals() {
       current >= crop.in
       && (crop.out === null || current < crop.out);
 
-    const audible = Boolean(
-      isPlaying
-      && mode === "mix"
+    if (state.muted) {
+      setRowState(stemId, "muted");
+      return;
+    }
+
+    const active = Boolean(
+      mode === "mix"
       && stemTrackIsAvailable(stemId)
-      && !state.muted
       && insideCrop
       && (!anySolo || state.solo)
       && Number(state.volume) > 0
     );
 
-    const row = stemAudio[stemId]?.closest(".track");
-    if (!row) return;
-
-    row.classList.toggle("track-audible", audible);
-    row.classList.toggle("track-silent", !audible);
+    setRowState(stemId, active ? "active" : "passive");
   });
+
+  setRowState("master", mode === "master" && Boolean(masterBlob) ? "active" : "passive");
+
+  updateTrackSelectionOverlays();
 }
 
 
@@ -10650,10 +10770,7 @@ async function startMasterRecording() {
     null;
 
 
-  savedMasterBlob =
-    null;
-
-
+  // 5.4.18 | Save Rec — отдельный commit. Новая запись не уничтожает уже сохранённый commit.
   masterLivePeaks =
     [];
 
@@ -11985,6 +12102,9 @@ function updateMasterHistoryButtons() {
   redoMasterBtn.disabled =
     masterRedoStack.length === 0;
 
+  if (clearMasterRecBtn) clearMasterRecBtn.disabled = !masterBlob && masterSegments.length === 0;
+  if (saveMasterRecBtn) saveMasterRecBtn.disabled = !masterBlob || savedMasterBlob === masterBlob;
+
 }
 
 
@@ -12054,6 +12174,30 @@ redoMasterBtn.addEventListener(
 );
 
 
+// 5.4.18 | Clear Rec очищает текущую Master-запись как отдельный шаг Rec History.
+clearMasterRecBtn?.addEventListener("click", async () => {
+  if (masterRecording) stopMasterRecording();
+  if (!masterSegments.length && !masterBlob) return;
+
+  masterUndoStack.push(cloneMasterSegments(masterSegments));
+  masterRedoStack = [];
+  masterSegments = [];
+  await restoreMasterFromSegments();
+  updateMasterHistoryButtons();
+  if (saveMasterRecBtn) saveMasterRecBtn.disabled = !masterBlob;
+});
+
+// 5.4.18 | Save Rec фиксирует текущее состояние Master-дорожки для следующего Save Project.
+// Это НЕ Export: файл наружу не создаётся.
+saveMasterRecBtn?.addEventListener("click", () => {
+  if (!masterBlob) return;
+  savedMasterBlob = masterBlob;
+  masterState.textContent = "Recording saved in project state";
+  saveMasterRecBtn.disabled = true;
+});
+
+
+
 // Работа с Master/Mix и итоговым аудиосостоянием.
 async function restoreMasterFromSegments() {
 
@@ -12069,10 +12213,7 @@ async function restoreMasterFromSegments() {
       null;
 
 
-    savedMasterBlob =
-      null;
-
-
+    // 5.4.18 | Undo/Clear текущей Rec не стирают состояние, зафиксированное Save Rec.
     masterDuration =
       0;
 
@@ -12992,7 +13133,7 @@ fragmentStartBtn.addEventListener(
   "click",
   () => {
 
-    // 5.4.17 | Повторное нажатие снимает только IN. OUT остаётся как есть.
+    // 5.4.18 | Повторное нажатие снимает только IN. OUT остаётся как есть.
     if (fragmentStart !== null) {
       fragmentStart = null;
       updateSelectionDisplay();
@@ -13013,7 +13154,7 @@ fragmentEndBtn.addEventListener(
   "click",
   () => {
 
-    // 5.4.17 | Повторное нажатие снимает только OUT. IN остаётся как есть.
+    // 5.4.18 | Повторное нажатие снимает только OUT. IN остаётся как есть.
     if (fragmentEnd !== null) {
       fragmentEnd = null;
       updateSelectionDisplay();
@@ -13041,6 +13182,19 @@ loopBtn.addEventListener(
       "active",
       loopEnabled
     );
+
+
+    // 5.4.18 | Включение LOOP при готовом Selection сразу стартует с IN.
+    if (loopEnabled && hasSelection()) {
+      syncAllTo(fragmentStart);
+      updatePlayheads();
+      updateMasterCursor();
+      updateTimeDisplay();
+
+      if (!isPlaying) {
+        playCurrentMode();
+      }
+    }
 
 
     syncTransportMirrors();
@@ -13149,7 +13303,7 @@ masterTimelineInner.addEventListener(
         .getBoundingClientRect();
 
 
-    // 5.4.17 | Начало Selection не может оказаться за пределами Project Trim.
+    // 5.4.18 | Начало Selection не может оказаться за пределами Project Trim.
     const trimStartX = getProjectTrimStart() / duration * rect.width;
     const trimEndX = getProjectTrimEnd() / duration * rect.width;
 
@@ -13190,7 +13344,7 @@ masterTimelineInner.addEventListener(
         .getBoundingClientRect();
 
 
-    // 5.4.17 | Оба края мышиного Selection жёстко ограничены Trim.
+    // 5.4.18 | Оба края мышиного Selection жёстко ограничены Trim.
     const trimStartX = getProjectTrimStart() / duration * rect.width;
     const trimEndX = getProjectTrimEnd() / duration * rect.width;
 
@@ -13287,9 +13441,8 @@ masterTimelineInner.addEventListener(
 
     if (!selectionMoved) {
 
-      clearSelection();
-
-
+      // 5.4.18 | Обычный клик по Master Timeline только переводит курсор.
+      // Selection / IN / OUT таким кликом НЕ снимаются.
       seekFromMasterTimeline(
         event
       );
@@ -13303,13 +13456,38 @@ masterTimelineInner.addEventListener(
 );
 
 
-// 5.4.17 | Ограничение любой точки IN / OUT текущими границами Project Trim.
+// 5.4.18 | Ограничение любой точки IN / OUT текущими границами Project Trim.
 function clampSelectionTimeToTrim(value) {
   const start = getProjectTrimStart();
   const end = getProjectTrimEnd();
   const numeric = Number(value);
   const safe = Number.isFinite(numeric) ? numeric : start;
   return Math.max(start, Math.min(end, safe));
+}
+
+
+// 5.4.18 | Зелёный Selection дублируется на всех активных аудиодорожках.
+function updateTrackSelectionOverlays() {
+  document.querySelectorAll(".timeline-scroll[data-track]").forEach(timeline => {
+    const row = timeline.closest(".track");
+    const inner = timeline.querySelector(".timeline-inner");
+    if (!row || !inner) return;
+
+    let overlay = inner.querySelector(".track-selection-overlay");
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.className = "track-selection-overlay";
+      inner.appendChild(overlay);
+    }
+
+    const show = hasSelection() && row.classList.contains("track-active");
+    overlay.style.display = show ? "block" : "none";
+
+    if (show) {
+      overlay.style.left = (fragmentStart * pixelsPerSecond) + "px";
+      overlay.style.width = Math.max(1, (fragmentEnd - fragmentStart) * pixelsPerSecond) + "px";
+    }
+  });
 }
 
 
@@ -13324,6 +13502,7 @@ function updateSelectionDisplay() {
     selectionRange.style.display = "none";
     selectionInfo.textContent = "Selection: none";
     updateSelectionButtons();
+    updateTrackSelectionOverlays();
     return;
   }
 
@@ -13345,6 +13524,7 @@ function updateSelectionDisplay() {
     + formatTime(fragmentEnd);
 
   updateSelectionButtons();
+  updateTrackSelectionOverlays();
 }
 
 
@@ -13357,6 +13537,7 @@ function clearSelection() {
   selectionInfo.textContent = "Selection: none";
 
   updateSelectionButtons();
+  updateTrackSelectionOverlays();
 }
 
 
@@ -13551,7 +13732,7 @@ function updatePlayheads() {
 }
 
 
-// 5.4.17 | Подсветка цифр делений Master Timeline как в Lyrics.
+// 5.4.18 | Подсветка цифр делений Master Timeline как в Lyrics.
 // Радиус подсветки = 1/5 цены текущего деления в каждую сторону.
 function updateMasterRulerActiveTick() {
 
@@ -16419,6 +16600,21 @@ document.addEventListener("keydown", event => {
   if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) return;
   event.preventDefault();
   deleteSelectedLyricsStructure();
+});
+
+
+// 5.4.18 | Delete снимает Selection только в главном Sequencer.
+// В Lyrics/Structure и полях ввода Delete сохраняет их собственное назначение.
+document.addEventListener("keydown", event => {
+  if (event.key !== "Delete") return;
+  if (isLyricsUiOpen()) return;
+  const active = document.activeElement;
+  if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) return;
+  if (!fragmentStart && fragmentStart !== 0 && !fragmentEnd && fragmentEnd !== 0) return;
+
+  event.preventDefault();
+  clearSelection();
+  updateTimeDisplay();
 });
 
 // Работа со Structure в Lyrics Editor.
@@ -19871,7 +20067,7 @@ window.addEventListener(
 
       event.preventDefault();
 
-      // 5.4.17 | Page Up не меняет IN, а переводит курсор точно на установленный IN.
+      // 5.4.18 | Page Up не меняет IN, а переводит курсор точно на установленный IN.
       if (fragmentStart !== null) {
         setGlobalCursorTime(fragmentStart);
       }
@@ -19884,7 +20080,7 @@ window.addEventListener(
 
       event.preventDefault();
 
-      // 5.4.17 | Page Down не меняет OUT, а переводит курсор точно на установленный OUT.
+      // 5.4.18 | Page Down не меняет OUT, а переводит курсор точно на установленный OUT.
       if (fragmentEnd !== null) {
         setGlobalCursorTime(fragmentEnd);
       }
@@ -20162,7 +20358,7 @@ function setProjectActive(projectId = null) {
 
 const projectTrackIds = [
   "original", "vocals", "pitchCorrection", "harmonizer",
-  "drums", "bass", "guitar", "piano", "other",
+  "drums", "bass", "guitar", "piano", "other", "master",
   "reserve1", "reserve2", "reserve3"
 ];
 
@@ -20219,7 +20415,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "5.4.17",
+    version: "5.4.18",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -20260,6 +20456,7 @@ const renameProjectBtn = document.getElementById("renameProjectBtn");
 const saveProjectCopyBtn = document.getElementById("saveProjectCopyBtn");
 const cancelProjectConflictBtn = document.getElementById("cancelProjectConflictBtn");
 let pendingProjectConflict = null;
+let newProjectAfterSavePending = false;
 
 // Сохранение текущего Project и связанных данных.
 function projectTrackFilename(trackId, source) {
@@ -20281,8 +20478,9 @@ async function saveCurrentProject(projectName, savePath, conflictAction = "", op
   fd.append("project_json", JSON.stringify(projectStateJson()));
 
   // Используем существующий источник сохранения отдельной дорожки: getTrackBlob().
-  // Сохраняются девять текущих аудиодорожек; три резервных слота остаются резервными.
-  const workingTrackIds = projectTrackIds.slice(0, 9);
+  // 5.4.18 | Сохраняются девять исходных/рабочих дорожек + Master Rec.
+  // Три резервных слота остаются резервными.
+  const workingTrackIds = projectTrackIds.slice(0, 10);
   for (const trackId of workingTrackIds) {
     const source = await getTrackBlob(trackId);
     if (!source?.blob) continue;
@@ -20855,7 +21053,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "5.4.17";
+const MYNUS_CLIENT_VERSION = "5.4.18";
 const MYNUS_CLIENT_CHANGE = "Karaoke non-Full-Screen minimum 620x900; separate session-only Sequencer History with Undo/Redo; Lyrics History, Trim, startup Select File/Open Project, and server unchanged";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -21425,6 +21623,7 @@ browseSaveProjectPathBtn?.addEventListener("click", async () => {
 
 cancelSaveProjectBtn?.addEventListener("click", () => {
   projectCreationPending = false;
+  newProjectAfterSavePending = false;
   saveProjectDialog.classList.remove("open");
 });
 
@@ -21449,6 +21648,12 @@ confirmSaveProjectBtn?.addEventListener("click", async () => {
     await saveCurrentProject(name, savePath, "", { activateProject: projectCreationPending });
     projectCreationPending = false;
     saveProjectDialog.classList.remove("open");
+
+    if (newProjectAfterSavePending) {
+      newProjectAfterSavePending = false;
+      window.location.reload();
+      return;
+    }
   } catch (error) {
     console.error(error);
     if (error.projectConflict) {
@@ -21475,11 +21680,14 @@ saveProjectNameInput?.addEventListener("keydown", event => {
 
 // Сохранение текущего Project и связанных данных.
 function openNewProjectSaveDialog() {
+  // 5.4.18 | New Project сначала предлагает Save Project текущего состояния.
+  // После успешного Save страница перезапускается в чистое пустое рабочее пространство.
   if (!currentOriginalFile) {
-    status.textContent = "Open and separate an audio file first";
+    window.location.reload();
     return;
   }
-  projectCreationPending = true;
+  newProjectAfterSavePending = true;
+  projectCreationPending = false;
   saveProjectNameInput.value = projectSafeName();
   if (saveProjectPathInput && !saveProjectPathInput.value.trim()) saveProjectPathInput.value = "C:\\MyNus\\Projects";
   if (saveProjectMessage) saveProjectMessage.textContent = "";
@@ -21523,6 +21731,11 @@ overwriteProjectBtn?.addEventListener("click", async () => {
     projectConflictDialog.classList.remove("open");
     saveProjectDialog.classList.remove("open");
     pendingProjectConflict = null;
+    if (newProjectAfterSavePending) {
+      newProjectAfterSavePending = false;
+      window.location.reload();
+      return;
+    }
   } catch (error) {
     status.textContent = error.message;
   } finally {
@@ -21540,6 +21753,11 @@ saveProjectCopyBtn?.addEventListener("click", async () => {
     projectConflictDialog.classList.remove("open");
     saveProjectDialog.classList.remove("open");
     pendingProjectConflict = null;
+    if (newProjectAfterSavePending) {
+      newProjectAfterSavePending = false;
+      window.location.reload();
+      return;
+    }
   } catch (error) {
     status.textContent = error.message;
   } finally {
@@ -21559,6 +21777,7 @@ renameProjectBtn?.addEventListener("click", () => {
 cancelProjectConflictBtn?.addEventListener("click", () => {
   projectConflictDialog.classList.remove("open");
   pendingProjectConflict = null;
+  newProjectAfterSavePending = false;
 });
 
 projectConflictDialog?.addEventListener("click", event => {
@@ -21653,8 +21872,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.4.17 | Independent IN / OUT; yellow Trim-bounded Selection; Page Up/Down navigation; TRIM unchanged.");
-console.log("[SERVICE CONSOLE] MyNus 5.4.17 | Independent IN / OUT; yellow Trim-bounded Selection; Page Up/Down navigation; TRIM unchanged.");
+console.log("MyNus 5.4.18 | New Project; tracks color&heihgt; Master track; Clear Select&Loop");
+console.log("[SERVICE CONSOLE] MyNus 5.4.18 | New Project; tracks color&heihgt; Master track; Clear Select&Loop");
 </script>
 
 <div class="row" id="build-down">
