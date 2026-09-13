@@ -1,4 +1,4 @@
-<!-- MyNus 5.4.12 | getProjectTrimEnd -->
+<!-- MyNus 5.4.13 | Karaoke non-Full-Screen minimum 620x900 + separate session-only Sequencer History Undo/Redo. Trim unchanged. Server unchanged. -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.4.12</title>
+  <title>MyNus 5.4.13</title>
 
 
  <style>
@@ -208,6 +208,38 @@
     .studio-main {
       min-width: 0;
       width: 100%;
+    }
+
+    /* 5.4.13 | Separate Sequencer History block. */
+    .sequencer-history-block {
+      width: 190px;
+      margin: 0 0 6px 0;
+      padding: 5px 6px;
+      box-sizing: border-box;
+      background: #f5f5f5;
+      border-radius: 8px;
+    }
+
+    .sequencer-history-title {
+      margin-bottom: 4px;
+      text-align: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .sequencer-history-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+    }
+
+    .sequencer-history-buttons button {
+      min-width: 0;
+      padding: 4px 6px;
+      font-size: 10px;
     }
 
     .fx-panel {
@@ -1593,6 +1625,11 @@
       box-shadow: 0 18px 50px rgba(0,0,0,.38);
     }
 
+    .lyrics-editor-card.karaoke-fullscreen-mode[data-karaoke-maximized="0"] {
+      min-width: 620px;
+      min-height: 900px;
+    }
+
     .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-fullscreen-topbar {
       cursor: move;
       user-select: none;
@@ -2415,6 +2452,14 @@
       user-select: none;
     }
 
+    .lyrics-structure-segment-label {
+      display: block;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      pointer-events: none;
+    }
+
     .lyrics-structure-segment.selected {
       outline: none;
       box-shadow: none;
@@ -2446,7 +2491,8 @@
       background: rgba(0,0,0,.08);
     }
 
-    .lyrics-structure-trim-mask {
+    .lyrics-structure-track::before,
+    .lyrics-structure-track::after {
       position: absolute;
       top: 0;
       bottom: 0;
@@ -2464,6 +2510,18 @@
       white-space: nowrap;
     }
 
+    .lyrics-structure-track::before {
+      content: "OUT OF TRACK";
+      left: 0;
+      width: var(--structure-trim-left-width, 0%);
+    }
+
+    .lyrics-structure-track::after {
+      content: "OUT OF TRACK";
+      left: var(--structure-trim-right-left, 100%);
+      width: var(--structure-trim-right-width, 0%);
+    }
+
     .lyrics-structure-trim-marker {
       position: absolute;
       top: -1px;
@@ -2474,7 +2532,8 @@
       z-index: 12;
     }
 
-    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-trim-mask {
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-track::before,
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-track::after {
       font-size: 13px;
     }
 
@@ -3047,6 +3106,15 @@
     <div class="studio-layout">
 
       <div class="studio-main">
+
+    <div class="sequencer-history-block" aria-label="Sequencer History">
+      <div class="sequencer-history-title">History</div>
+      <div class="sequencer-history-buttons">
+        <button type="button" id="sequencerUndoBtn" disabled>Undo</button>
+        <button type="button" id="sequencerRedoBtn" disabled>Redo</button>
+      </div>
+    </div>
+
 
 
 
@@ -4981,6 +5049,8 @@ const lyricsPanel =
   document.getElementById("lyricsPanel");
 
 const lyricsUndoBtn = document.getElementById("lyricsUndoBtn");
+const sequencerUndoBtn = document.getElementById("sequencerUndoBtn");
+const sequencerRedoBtn = document.getElementById("sequencerRedoBtn");
 const lyricsTranscriptionBtn = document.getElementById("lyricsTranscriptionBtn");
 const lyricsLanguageInfo = document.getElementById("lyricsLanguageInfo");
 const lyricsRedoBtn = document.getElementById("lyricsRedoBtn");
@@ -5698,6 +5768,12 @@ let fragmentEnd = null;
 let projectTrimStart = 0;
 let projectTrimEnd = null;
 let projectTrimDragging = null;
+
+// 5.4.13 | Separate Sequencer history. Session-only; never saved into Project JSON.
+let sequencerUndoStack = [];
+let sequencerRedoStack = [];
+let sequencerHistoryRestoring = false;
+const SEQUENCER_HISTORY_LIMIT = 100;
 let loopEnabled = false;
 let selectionDragging = false;
 let selectionPointerStartX = 0;
@@ -7272,7 +7348,7 @@ function getTimelineWidth() {
 
 
 // ========================================
-// GLOBAL PROJECT TRIM | 5.4.12
+// GLOBAL PROJECT TRIM | 5.4.11
 // ========================================
 
 function formatTrimTime(value) {
@@ -7289,12 +7365,8 @@ function getProjectTrimStart() {
 
 function getProjectTrimEnd() {
   const fullEnd = Math.max(0, Number(duration) || 0);
-
-  if (projectTrimEnd == null) return fullEnd;
-
   const savedEnd = Number(projectTrimEnd);
   if (!Number.isFinite(savedEnd)) return fullEnd;
-
   return Math.max(getProjectTrimStart(), Math.min(savedEnd, fullEnd));
 }
 
@@ -7358,6 +7430,158 @@ function updateProjectTrimDisplay() {
     if (endMarker) endMarker.style.left = endX + "px";
   });
 }
+
+// SEQUENCER HISTORY | 5.4.13
+// ========================================
+
+function cloneSequencerHistoryState() {
+  return {
+    stemState: cloneSerializable(stemState, {}),
+    stemCrop: cloneSerializable(stemCrop, {}),
+    fxSettings: cloneSerializable(fxSettings, {}),
+    trimStart: projectTrimStart,
+    trimEnd: projectTrimEnd,
+    originalVolume: Number(originalVolume?.value ?? 100),
+    masterVolume: Number(masterVolume?.value ?? 100)
+  };
+}
+
+function sequencerHistoryStateKey(state) {
+  try { return JSON.stringify(state); }
+  catch (_) { return ""; }
+}
+
+function updateSequencerUndoRedoButtons() {
+  if (sequencerUndoBtn) sequencerUndoBtn.disabled = !sequencerUndoStack.length;
+  if (sequencerRedoBtn) sequencerRedoBtn.disabled = !sequencerRedoStack.length;
+}
+
+function clearSequencerHistory() {
+  sequencerUndoStack = [];
+  sequencerRedoStack = [];
+  updateSequencerUndoRedoButtons();
+}
+
+function pushSequencerHistorySnapshot() {
+  if (sequencerHistoryRestoring) return;
+  const state = cloneSequencerHistoryState();
+  const last = sequencerUndoStack[sequencerUndoStack.length - 1];
+  if (last && sequencerHistoryStateKey(last) === sequencerHistoryStateKey(state)) return;
+  sequencerUndoStack.push(state);
+  if (sequencerUndoStack.length > SEQUENCER_HISTORY_LIMIT) sequencerUndoStack.shift();
+  sequencerRedoStack = [];
+  updateSequencerUndoRedoButtons();
+}
+
+function applySequencerHistoryState(state) {
+  if (!state) return;
+  sequencerHistoryRestoring = true;
+  try {
+    stemIds.forEach(stemId => {
+      if (state.stemState?.[stemId]) Object.assign(stemState[stemId], cloneSerializable(state.stemState[stemId], {}));
+      if (state.stemCrop?.[stemId]) Object.assign(stemCrop[stemId], cloneSerializable(state.stemCrop[stemId], {}));
+    });
+
+    if (state.fxSettings && typeof state.fxSettings === "object") {
+      Object.keys(fxSettings).forEach(target => {
+        if (state.fxSettings[target]) Object.assign(fxSettings[target], cloneSerializable(state.fxSettings[target], {}));
+      });
+    }
+
+    projectTrimStart = Number.isFinite(Number(state.trimStart)) ? Math.max(0, Number(state.trimStart)) : 0;
+    projectTrimEnd = state.trimEnd == null
+      ? null
+      : (Number.isFinite(Number(state.trimEnd)) ? Math.max(projectTrimStart, Number(state.trimEnd)) : null);
+
+    if (originalVolume && Number.isFinite(Number(state.originalVolume))) {
+      originalVolume.value = String(state.originalVolume);
+      originalVolumeValue.textContent = String(state.originalVolume) + "%";
+      originalAudio.volume = (Number(state.originalVolume) / 100) *
+        (typeof lyricsFullScreenMasterLevel === "number" ? lyricsFullScreenMasterLevel : 1);
+    }
+
+    if (masterVolume && Number.isFinite(Number(state.masterVolume))) {
+      masterVolume.value = String(state.masterVolume);
+      masterVolumeValue.textContent = String(state.masterVolume) + "%";
+      masterAudio.volume = (Number(state.masterVolume) / 100) *
+        (typeof lyricsFullScreenMasterLevel === "number" ? lyricsFullScreenMasterLevel : 1);
+    }
+
+    stemIds.forEach(stemId => {
+      if (stemVolumeControls[stemId]) {
+        stemVolumeControls[stemId].value =
+          String(Math.round((Number(stemState[stemId]?.volume) || 0) * 100));
+      }
+      if (stemVolumeValues[stemId]) {
+        stemVolumeValues[stemId].textContent =
+          String(Math.round((Number(stemState[stemId]?.volume) || 0) * 100)) + "%";
+      }
+    });
+
+    updateMixButtons();
+    updateCropButtons();
+    updateCropMasks();
+    updateEffectiveVocalRange();
+    loadFxPanelValues();
+    stemIds.forEach(stemId => applyFxSettings(stemId));
+    applyFxSettings("master");
+    applyMix();
+    updateProjectTrimDisplay();
+    renderLyricsStructure();
+  } finally {
+    sequencerHistoryRestoring = false;
+  }
+}
+
+function undoSequencer() {
+  if (!sequencerUndoStack.length) return;
+  sequencerRedoStack.push(cloneSequencerHistoryState());
+  applySequencerHistoryState(sequencerUndoStack.pop());
+  updateSequencerUndoRedoButtons();
+}
+
+function redoSequencer() {
+  if (!sequencerRedoStack.length) return;
+  sequencerUndoStack.push(cloneSequencerHistoryState());
+  applySequencerHistoryState(sequencerRedoStack.pop());
+  updateSequencerUndoRedoButtons();
+}
+
+function bindSequencerHistoryCapture() {
+  const clickControls = [
+    ...Object.values(stemMuteButtons),
+    ...Object.values(stemSoloButtons),
+    ...Object.values(stemCropInButtons),
+    ...Object.values(stemCropOutButtons),
+    compressorToggleBtn, reverbToggleBtn, delayToggleBtn, limiterToggleBtn
+  ].filter(Boolean);
+
+  clickControls.forEach(control =>
+    control.addEventListener("click", pushSequencerHistorySnapshot, true)
+  );
+
+  const rangeControls = [
+    originalVolume, masterVolume,
+    ...Object.values(stemVolumeControls),
+    eqLow, eqLowMid, eqMid, eqHighMid, eqHigh, panControl,
+    compressorThreshold, compressorRatio, reverbAmount,
+    delayTime, delayFeedback, limiterCeiling, fxOutputGain
+  ].filter(Boolean);
+
+  rangeControls.forEach(control => {
+    control.addEventListener("pointerdown", pushSequencerHistorySnapshot, true);
+    control.addEventListener("keydown", event => {
+      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown",
+           "PageUp", "PageDown", "Home", "End"].includes(event.key)) {
+        pushSequencerHistorySnapshot();
+      }
+    }, true);
+  });
+
+  projectTrimStartHandle?.addEventListener("pointerdown", pushSequencerHistorySnapshot, true);
+  projectTrimEndHandle?.addEventListener("pointerdown", pushSequencerHistorySnapshot, true);
+}
+
 
 function setProjectTrimBoundary(which, rawTime) {
   if (!duration) return;
@@ -9360,6 +9584,12 @@ limiterToggleBtn
 
 
 loadFxPanelValues();
+
+
+sequencerUndoBtn?.addEventListener("click", undoSequencer);
+sequencerRedoBtn?.addEventListener("click", redoSequencer);
+bindSequencerHistoryCapture();
+updateSequencerUndoRedoButtons();
 
 
 // ========================================
@@ -15742,9 +15972,32 @@ function renderLyricsStructure() {
     }
 
     const structureName = String(segment.label || segment.type || "").trim();
-    block.textContent = structureName || "[      ]";
+    const structureDisplayName = structureName || "[ ]";
+
+    // Trim does NOT split or rename Structure segments. If Trim cuts through a segment,
+    // keep the same segment/name and center its label in the visible in-track portion
+    // so the mask cannot make that remainder look like a separate undefined zone.
+    const trimStartForLabel = Math.max(0, Math.min(getProjectTrimStart(), songEnd));
+    const trimEndForLabel = Math.max(trimStartForLabel, Math.min(getProjectTrimEnd(), songEnd));
+    const segmentStart = Number(segment.start) || 0;
+    const segmentEnd = Number(segment.end) || 0;
+    const visibleStart = Math.max(segmentStart, trimStartForLabel);
+    const visibleEnd = Math.min(segmentEnd, trimEndForLabel);
+
+    const label = document.createElement("span");
+    label.className = "lyrics-structure-segment-label";
+    label.textContent = structureDisplayName;
+    if (visibleEnd > visibleStart && segmentEnd > segmentStart) {
+      const visibleCenter = (visibleStart + visibleEnd) / 2;
+      label.style.position = "absolute";
+      label.style.left = (((visibleCenter - segmentStart) / (segmentEnd - segmentStart)) * 100) + "%";
+      label.style.transform = "translateX(-50%)";
+      label.style.maxWidth = (((visibleEnd - visibleStart) / (segmentEnd - segmentStart)) * 100) + "%";
+    }
+    block.appendChild(label);
+
     block.title =
-      (structureName || "[      ]")
+      structureDisplayName
       + "  "
       + formatStructureTime(segment.start)
       + " – "
@@ -15882,23 +16135,14 @@ function renderLyricsStructure() {
   const trimStartPercent = trimStart / songEnd * 100;
   const trimEndPercent = trimEnd / songEnd * 100;
 
-  if (trimStart > 0) {
-    const leftMask = document.createElement("div");
-    leftMask.className = "lyrics-structure-trim-mask left";
-    leftMask.style.left = "0%";
-    leftMask.style.width = trimStartPercent + "%";
-    leftMask.textContent = "OUT OF TRACK";
-    lyricsStructureTrack.appendChild(leftMask);
-  }
-
-  if (trimEnd < songEnd) {
-    const rightMask = document.createElement("div");
-    rightMask.className = "lyrics-structure-trim-mask right";
-    rightMask.style.left = trimEndPercent + "%";
-    rightMask.style.width = (100 - trimEndPercent) + "%";
-    rightMask.textContent = "OUT OF TRACK";
-    lyricsStructureTrack.appendChild(rightMask);
-  }
+  // OUT OF TRACK is only a visual overlay of the Structure track itself.
+  // Do not append any mask elements: Trim must never create an extra/undefined Structure block.
+  lyricsStructureTrack.style.setProperty("--structure-trim-left-width",
+    trimStart > 0 ? trimStartPercent + "%" : "0%");
+  lyricsStructureTrack.style.setProperty("--structure-trim-right-left",
+    trimEnd < songEnd ? trimEndPercent + "%" : "100%");
+  lyricsStructureTrack.style.setProperty("--structure-trim-right-width",
+    trimEnd < songEnd ? (100 - trimEndPercent) + "%" : "0%");
 
   const trimStartMarker = document.createElement("div");
   trimStartMarker.className = "lyrics-structure-trim-marker start";
@@ -15994,6 +16238,28 @@ lyricsStructureTrack?.addEventListener("click", event => {
   setGlobalCursorTime(ratio * structureSongEnd());
 
   renderLyricsStructure();
+});
+
+document.addEventListener("keydown", event => {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+  const key = String(event.key || "").toLowerCase();
+  if (key !== "z" && key !== "y") return;
+
+  const active = document.activeElement;
+  if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) return;
+
+  if (isLyricsStructureEditable()) {
+    event.preventDefault();
+    if (key === "y" || (key === "z" && event.shiftKey)) lyricsRedoBtn?.click();
+    else lyricsUndoBtn?.click();
+    return;
+  }
+
+  if (!isLyricsUiOpen()) {
+    event.preventDefault();
+    if (key === "y" || (key === "z" && event.shiftKey)) redoSequencer();
+    else undoSequencer();
+  }
 });
 
 document.addEventListener("keydown", event => {
@@ -19766,7 +20032,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "5.4.11",
+    version: "5.4.13",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -20008,14 +20274,14 @@ function renderFullScreenPlaylist(projects = karaokePlaylistSnapshot) {
       }
 
       // =====================================================================
-      // [5.4.11][СЦЕНАРИЙ 2 — PLAYLIST]
+      // [5.4.13][СЦЕНАРИЙ 2 — PLAYLIST]
       // Пользователь вручную выбрал Track в PlayList.
       // Здесь PlayList выполняет ТОЛЬКО свою задачу: определяет ID выбранного Project.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.4.11][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
-      await reportProjectLoadTrace("[5.4.11][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.13][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
+      await reportProjectLoadTrace("[5.4.13][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(track.id)",
         function: "loadProjectById",
         parameters: { id: track.id },
@@ -20263,14 +20529,14 @@ async function runKaraokeFinishAction(action, { autoplay = false } = {}) {
       closeKaraokeFinishedDialog();
 
       // =====================================================================
-      // [5.4.11][СЦЕНАРИЙ 3 — OPEN NEXT]
+      // [5.4.13][СЦЕНАРИЙ 3 — OPEN NEXT]
       // Команда Open next берёт первый ожидающий Track из очереди и получает его Project ID.
       // На этом сценарий выбора заканчивается.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // Дальше выполняется прямой переход в ТУ ЖЕ ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.4.11][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
-      await reportProjectLoadTrace("[5.4.11][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.13][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
+      await reportProjectLoadTrace("[5.4.13][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(nextProject.id)",
         function: "loadProjectById",
         parameters: { id: nextProject.id },
@@ -20329,6 +20595,7 @@ karaokeFinishedCancelBtn?.addEventListener("click", () => {
 
 // Сохранение текущего Project и связанных данных.
 function resetProjectSequencerStateForLoad() {
+  clearSequencerHistory();
   stemIds.forEach(stemId => {
     Object.assign(stemState[stemId], {
       muted: stemId === "pitchCorrection" || stemId === "harmonizer",
@@ -20364,7 +20631,7 @@ function restoreProjectSequencerState(saved) {
   fragmentStart = Number.isFinite(Number(saved.fragmentStart)) ? Number(saved.fragmentStart) : null;
   fragmentEnd = Number.isFinite(Number(saved.fragmentEnd)) ? Number(saved.fragmentEnd) : null;
   projectTrimStart = Number.isFinite(Number(saved.trimStart)) ? Math.max(0, Number(saved.trimStart)) : 0;
- projectTrimEnd = saved.trimEnd == null ? null : (Number.isFinite(Number(saved.trimEnd)) ? Math.max(projectTrimStart, Number(saved.trimEnd)) : null);
+  projectTrimEnd = Number.isFinite(Number(saved.trimEnd)) ? Math.max(projectTrimStart, Number(saved.trimEnd)) : null;
   if (["original", "mix", "master"].includes(saved.mode)) mode = saved.mode;
 }
 
@@ -20393,10 +20660,10 @@ const projectLoaderFill = document.getElementById("projectLoaderFill");
 const projectLoaderPercent = document.getElementById("projectLoaderPercent");
 let projectLoading = false;
 
-// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.11.
+// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "5.4.11";
-const MYNUS_CLIENT_CHANGE = "Structure shares Sequencer global Trim Start/End as one parameter; full physical Structure remains visible with OUT OF TRACK masks outside Trim; endpoint timecodes sit on Trim Start/End; Full Screen Structure stays read-only; server unchanged";
+const MYNUS_CLIENT_VERSION = "5.4.13";
+const MYNUS_CLIENT_CHANGE = "Karaoke non-Full-Screen minimum 620x900; separate session-only Sequencer History with Undo/Redo; Lyrics History, Trim, startup Select File/Open Project, and server unchanged";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
 let projectLoadTraceSource = null;
@@ -20643,7 +20910,7 @@ function clearProjectState() {
 }
 
 // =====================================================================
-// [5.4.11][ЕДИНАЯ LOAD-ФУНКЦИЯ]
+// [5.4.13][ЕДИНАЯ LOAD-ФУНКЦИЯ]
 // Это ЕДИНСТВЕННАЯ функция загрузки сохранённого Project.
 // Она получает РОВНО ОДИН входной параметр: id.
 // Функция НЕ знает, кто выбрал этот ID: Open Project, PlayList или Open next.
@@ -20652,12 +20919,12 @@ function clearProjectState() {
 // =====================================================================
 async function loadProjectById(id) {
   if (!projectLoadTraceId || projectLoadTraceProject !== (id || null)) {
-    beginProjectLoadTrace("[5.4.11][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
+    beginProjectLoadTrace("[5.4.13][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
   } else {
     projectLoadTraceProject = id || projectLoadTraceProject;
   }
 
-  await reportProjectLoadTrace("[5.4.11][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
+  await reportProjectLoadTrace("[5.4.13][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
     command: "LOAD Project",
     function: "loadProjectById",
     parameters: { id },
@@ -20887,14 +21154,14 @@ async function openLoadProjectDialog() {
       button.addEventListener("click", async () => {
         try {
           // =====================================================================
-          // [5.4.11][СЦЕНАРИЙ 1 — OPEN PROJECT]
+          // [5.4.13][СЦЕНАРИЙ 1 — OPEN PROJECT]
           // Пользователь выбрал Project в обычном окне Open Project.
           // Этот сценарий выполняет только выбор Project и получает его ID.
           // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
           // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
           // =====================================================================
-          beginProjectLoadTrace("[5.4.11][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
-          await reportProjectLoadTrace("[5.4.11][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+          beginProjectLoadTrace("[5.4.13][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
+          await reportProjectLoadTrace("[5.4.13][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
             command: "await loadProjectById(project.id)",
             function: "loadProjectById",
             parameters: { id: project.id, name: project.name },
@@ -21192,8 +21459,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.4.12 | getProjectTrimEnd");
-console.log("[SERVICE CONSOLE] MyNus 5.4.12 | getProjectTrimEnd");
+console.log("MyNus 5.4.13 | Karaoke non-Full-Screen minimum 620x900 + separate session-only Sequencer History Undo/Redo; Trim unchanged; server unchanged.");
+console.log("[SERVICE CONSOLE] MyNus 5.4.13 | karaoke-window-min=620x900 | sequencer-history=undo+redo+session-only | trim=unchanged | server=unchanged");
 </script>
 
 <div class="row" id="build-down">
