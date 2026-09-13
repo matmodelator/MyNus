@@ -1,4 +1,8 @@
-<!-- MyNus 5.4.16 | Selection -->
+<!-- MyNus 5.4.17 | позиционирование IN/OUT;
+цвет Selection;
+подсветка цифр шкалы;
+положение цифр Timeline;
+визуальная индикация звучащих/молчащих дорожек. -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +19,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.4.16</title>
+  <title>MyNus 5.4.17</title>
 
 
  <style>
@@ -473,6 +477,21 @@
       margin-bottom: 6px;
     }
 
+    /* 5.4.17 | Визуальное состояние дорожек во время воспроизведения. */
+    .track.track-audible .track-controls,
+    .track.track-audible .timeline-scroll {
+      background: #ffe0b2;
+      border-color: #ff9800;
+      box-shadow: inset 0 0 0 1px rgba(255, 152, 0, .45);
+    }
+
+    .track.track-silent .track-controls,
+    .track.track-silent .timeline-scroll {
+      background: #fff;
+      border-color: #eee;
+      box-shadow: none;
+    }
+
     .track-controls {
       display: grid;
       grid-template-columns: 52px 1fr;
@@ -656,7 +675,8 @@
 
       width: 2px;
 
-      background: #111;
+      /* 5.4.17 | Playhead Sequencer всегда синий, как в Lyrics. */
+      background: #0066ff;
 
       pointer-events: none;
 
@@ -787,7 +807,8 @@ position: relative;
     .master-ruler-label {
       position: absolute;
 
-      top: 4px;
+      /* 5.4.17 | Цифры делений прижаты изнутри к нижней границе Timeline. */
+      bottom: 3px;
 
       transform: translateX(4px);
 
@@ -795,6 +816,12 @@ position: relative;
       color: #666;
 
       pointer-events: none;
+    }
+
+    /* 5.4.17 | Как в Lyrics: цифра текущего деления подсвечивается синим. */
+    .master-ruler-label.active {
+      color: #0066ff;
+      font-weight: 700;
     }
 
     .master-cursor {
@@ -805,7 +832,8 @@ position: relative;
 
       width: 3px;
 
-      background: #111;
+      /* 5.4.17 | Master Playhead всегда синий. */
+      background: #0066ff;
 
       cursor: ew-resize;
 
@@ -839,21 +867,22 @@ position: relative;
       top: 22px;
       height: 42px;
       display: none;
-      background: rgba(255, 214, 10, .20);
-      border-left: 2px solid #ffd60a;
-      border-right: 2px solid #ffd60a;
+      /* 5.4.17 | Selection зелёный вместо жёлтого. */
+      background: rgba(0, 200, 83, .20);
+      border-left: 2px solid #00c853;
+      border-right: 2px solid #00c853;
       pointer-events: none;
       z-index: 8;
-      color: #d6a900;
+      color: #00a844;
       font-family: Consolas, monospace;
       font-weight: 700;
     }
 
-    /* 5.4.16 | Подписи IN / OUT всегда направлены внутрь жёлтого Selection. */
+    /* 5.4.17 | По X подписи направлены внутрь Selection; по Y совпадают с уровнями Trim. */
     .selection-edge-label {
       position: absolute;
-      z-index: 9;
-      color: #d6a900;
+      z-index: 16;
+      color: #00a844;
       white-space: nowrap;
       pointer-events: none;
       line-height: 1;
@@ -861,8 +890,12 @@ position: relative;
 
     .selection-edge-label.in { left: 4px; text-align: left; }
     .selection-edge-label.out { right: 4px; text-align: right; }
-    .selection-edge-label.time { top: 3px; font-size: 11px; }
-    .selection-edge-label.name { bottom: 3px; font-size: 10px; }
+
+    /* selectionRange начинается на Y=22px. Trim-time стоит на Y=1px => -21px относительно Selection. */
+    .selection-edge-label.time { top: -21px; font-size: 12px; line-height: 18px; }
+
+    /* Trim-handle начинается на Y=66px => 44px относительно Selection. */
+    .selection-edge-label.name { top: 44px; font-size: 10px; line-height: 15px; }
 
 
     /* 5.4.11 | Global Project Trim */
@@ -7669,7 +7702,7 @@ function setProjectTrimBoundary(which, rawTime) {
     if (getCurrentTime() > projectTrimEnd) setGlobalCursorTime(projectTrimEnd);
   }
   updateProjectTrimDisplay();
-  // 5.4.16 | IN / OUT и Selection всегда остаются внутри изменившегося Trim.
+  // 5.4.17 | IN / OUT и Selection всегда остаются внутри изменившегося Trim.
   updateSelectionDisplay();
   // Structure reads the same Project Trim values; rerender immediately so its
   // masks, boundary markers and endpoint timecodes move with the Sequencer handle.
@@ -7790,6 +7823,11 @@ function drawMasterTimeline() {
       + "px";
 
 
+    // 5.4.17 | Нужны для синей подсветки: текущее деление и его цена при данном Zoom.
+    label.dataset.time = String(second);
+    label.dataset.interval = String(interval);
+
+
     {
       const total = Math.max(0, Math.round(Number(second) || 0));
       const mm = Math.floor(total / 60);
@@ -7806,6 +7844,7 @@ function drawMasterTimeline() {
 
 
   updateMasterCursor();
+  updateMasterRulerActiveTick();
   updateProjectTrimDisplay();
 
 }
@@ -7975,6 +8014,9 @@ function playCurrentMode() {
     true;
 
 
+  updateStemPlaybackVisuals();
+
+
   playBtn.textContent =
     "Pause";
 
@@ -8014,6 +8056,9 @@ function pauseAll() {
 
   isPlaying =
     false;
+
+
+  updateStemPlaybackVisuals();
 
 
   playBtn.textContent =
@@ -8626,7 +8671,48 @@ function applyMix() {
 
   if (isKaraokeUiMode()) applyLyricsFullScreenTrackFxNodes();
   updatePlayheads();
+  updateStemPlaybackVisuals();
 
+}
+
+
+// 5.4.17 | Оранжевым отмечается дорожка, которая сейчас реально включена в Mix.
+// Mute, Solo-исключение, выход за Crop, нулевая громкость, отсутствие файла или Pause => белая дорожка.
+function updateStemPlaybackVisuals() {
+
+  const anySolo =
+    stemIds.some(stemId =>
+      isKaraokeUiMode() && lyricsFullScreenTrackState?.[stemId]
+        ? Boolean(lyricsFullScreenTrackState[stemId].solo)
+        : Boolean(stemState[stemId].solo)
+    );
+
+  const current = getCurrentTime();
+
+  stemIds.forEach(stemId => {
+    const fsState = isKaraokeUiMode() ? lyricsFullScreenTrackState?.[stemId] : null;
+    const state = fsState || stemState[stemId];
+    const crop = stemCrop[stemId];
+    const insideCrop =
+      current >= crop.in
+      && (crop.out === null || current < crop.out);
+
+    const audible = Boolean(
+      isPlaying
+      && mode === "mix"
+      && stemTrackIsAvailable(stemId)
+      && !state.muted
+      && insideCrop
+      && (!anySolo || state.solo)
+      && Number(state.volume) > 0
+    );
+
+    const row = stemAudio[stemId]?.closest(".track");
+    if (!row) return;
+
+    row.classList.toggle("track-audible", audible);
+    row.classList.toggle("track-silent", !audible);
+  });
 }
 
 
@@ -12906,7 +12992,7 @@ fragmentStartBtn.addEventListener(
   "click",
   () => {
 
-    // 5.4.16 | Повторное нажатие снимает только IN. OUT остаётся как есть.
+    // 5.4.17 | Повторное нажатие снимает только IN. OUT остаётся как есть.
     if (fragmentStart !== null) {
       fragmentStart = null;
       updateSelectionDisplay();
@@ -12927,7 +13013,7 @@ fragmentEndBtn.addEventListener(
   "click",
   () => {
 
-    // 5.4.16 | Повторное нажатие снимает только OUT. IN остаётся как есть.
+    // 5.4.17 | Повторное нажатие снимает только OUT. IN остаётся как есть.
     if (fragmentEnd !== null) {
       fragmentEnd = null;
       updateSelectionDisplay();
@@ -13063,7 +13149,7 @@ masterTimelineInner.addEventListener(
         .getBoundingClientRect();
 
 
-    // 5.4.16 | Начало Selection не может оказаться за пределами Project Trim.
+    // 5.4.17 | Начало Selection не может оказаться за пределами Project Trim.
     const trimStartX = getProjectTrimStart() / duration * rect.width;
     const trimEndX = getProjectTrimEnd() / duration * rect.width;
 
@@ -13104,7 +13190,7 @@ masterTimelineInner.addEventListener(
         .getBoundingClientRect();
 
 
-    // 5.4.16 | Оба края мышиного Selection жёстко ограничены Trim.
+    // 5.4.17 | Оба края мышиного Selection жёстко ограничены Trim.
     const trimStartX = getProjectTrimStart() / duration * rect.width;
     const trimEndX = getProjectTrimEnd() / duration * rect.width;
 
@@ -13217,7 +13303,7 @@ masterTimelineInner.addEventListener(
 );
 
 
-// 5.4.16 | Ограничение любой точки IN / OUT текущими границами Project Trim.
+// 5.4.17 | Ограничение любой точки IN / OUT текущими границами Project Trim.
 function clampSelectionTimeToTrim(value) {
   const start = getProjectTrimStart();
   const end = getProjectTrimEnd();
@@ -13465,6 +13551,32 @@ function updatePlayheads() {
 }
 
 
+// 5.4.17 | Подсветка цифр делений Master Timeline как в Lyrics.
+// Радиус подсветки = 1/5 цены текущего деления в каждую сторону.
+function updateMasterRulerActiveTick() {
+
+  if (!masterRuler) return;
+
+  const current = Number(masterCursorTime || 0);
+  const labels = masterRuler.querySelectorAll(".master-ruler-label");
+
+  labels.forEach(label => {
+    const tickTime = Number(label.dataset.time);
+    const interval = Number(label.dataset.interval);
+    const threshold = Number.isFinite(interval) && interval > 0
+      ? interval / 5
+      : 0;
+
+    label.classList.toggle(
+      "active",
+      Number.isFinite(tickTime)
+      && threshold > 0
+      && Math.abs(current - tickTime) <= threshold
+    );
+  });
+}
+
+
 // Обновление позиции курсора и указателей воспроизведения.
 function updateMasterCursor() {
 
@@ -13483,6 +13595,9 @@ function updateMasterCursor() {
   masterCursor.style.left =
     x
     + "px";
+
+
+  updateMasterRulerActiveTick();
 
 }
 
@@ -19756,7 +19871,7 @@ window.addEventListener(
 
       event.preventDefault();
 
-      // 5.4.16 | Page Up не меняет IN, а переводит курсор точно на установленный IN.
+      // 5.4.17 | Page Up не меняет IN, а переводит курсор точно на установленный IN.
       if (fragmentStart !== null) {
         setGlobalCursorTime(fragmentStart);
       }
@@ -19769,7 +19884,7 @@ window.addEventListener(
 
       event.preventDefault();
 
-      // 5.4.16 | Page Down не меняет OUT, а переводит курсор точно на установленный OUT.
+      // 5.4.17 | Page Down не меняет OUT, а переводит курсор точно на установленный OUT.
       if (fragmentEnd !== null) {
         setGlobalCursorTime(fragmentEnd);
       }
@@ -20104,7 +20219,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "5.4.16",
+    version: "5.4.17",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -20740,7 +20855,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "5.4.16";
+const MYNUS_CLIENT_VERSION = "5.4.17";
 const MYNUS_CLIENT_CHANGE = "Karaoke non-Full-Screen minimum 620x900; separate session-only Sequencer History with Undo/Redo; Lyrics History, Trim, startup Select File/Open Project, and server unchanged";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -21538,8 +21653,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.4.16 | Independent IN / OUT; yellow Trim-bounded Selection; Page Up/Down navigation; TRIM unchanged.");
-console.log("[SERVICE CONSOLE] MyNus 5.4.16 | Independent IN / OUT; yellow Trim-bounded Selection; Page Up/Down navigation; TRIM unchanged.");
+console.log("MyNus 5.4.17 | Independent IN / OUT; yellow Trim-bounded Selection; Page Up/Down navigation; TRIM unchanged.");
+console.log("[SERVICE CONSOLE] MyNus 5.4.17 | Independent IN / OUT; yellow Trim-bounded Selection; Page Up/Down navigation; TRIM unchanged.");
 </script>
 
 <div class="row" id="build-down">
