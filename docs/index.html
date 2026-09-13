@@ -1,10 +1,4 @@
-<!-- MyNus 5.4.15 | .master-timeline width      — не меняется
-.master-timeline overflow   — остаётся hidden
-.master-timeline-inner      — не меняется
-.project-trim-time transform — остаётся translateX(-50%)
-Trim start/end              — не меняются
-Zoom                         — не меняется
-Scroll                       — не меняется -->
+<!-- MyNus 5.4.16 | Selection -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -21,7 +15,7 @@ Scroll                       — не меняется -->
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.4.15</title>
+  <title>MyNus 5.4.16</title>
 
 
  <style>
@@ -845,12 +839,30 @@ position: relative;
       top: 22px;
       height: 42px;
       display: none;
-      background: rgba(0,0,0,.12);
-      border-left: 2px solid #555;
-      border-right: 2px solid #555;
+      background: rgba(255, 214, 10, .20);
+      border-left: 2px solid #ffd60a;
+      border-right: 2px solid #ffd60a;
       pointer-events: none;
       z-index: 8;
+      color: #d6a900;
+      font-family: Consolas, monospace;
+      font-weight: 700;
     }
+
+    /* 5.4.16 | Подписи IN / OUT всегда направлены внутрь жёлтого Selection. */
+    .selection-edge-label {
+      position: absolute;
+      z-index: 9;
+      color: #d6a900;
+      white-space: nowrap;
+      pointer-events: none;
+      line-height: 1;
+    }
+
+    .selection-edge-label.in { left: 4px; text-align: left; }
+    .selection-edge-label.out { right: 4px; text-align: right; }
+    .selection-edge-label.time { top: 3px; font-size: 11px; }
+    .selection-edge-label.name { bottom: 3px; font-size: 10px; }
 
 
     /* 5.4.11 | Global Project Trim */
@@ -4003,7 +4015,12 @@ position: relative;
           <div
             id="selectionRange"
             class="selection-range"
-          ></div>
+          >
+            <span id="selectionInTime" class="selection-edge-label in time"></span>
+            <span class="selection-edge-label in name">IN</span>
+            <span id="selectionOutTime" class="selection-edge-label out time"></span>
+            <span class="selection-edge-label out name">OUT</span>
+          </div>
 
           <div id="projectTrimMaskLeft" class="project-trim-mask"></div>
           <div id="projectTrimMaskRight" class="project-trim-mask"></div>
@@ -4896,6 +4913,12 @@ const selectionRange =
 
 const selectionInfo =
   document.getElementById("selectionInfo");
+
+const selectionInTime =
+  document.getElementById("selectionInTime");
+
+const selectionOutTime =
+  document.getElementById("selectionOutTime");
 
 const masterState =
   document.getElementById("masterState");
@@ -7646,6 +7669,8 @@ function setProjectTrimBoundary(which, rawTime) {
     if (getCurrentTime() > projectTrimEnd) setGlobalCursorTime(projectTrimEnd);
   }
   updateProjectTrimDisplay();
+  // 5.4.16 | IN / OUT и Selection всегда остаются внутри изменившегося Trim.
+  updateSelectionDisplay();
   // Structure reads the same Project Trim values; rerender immediately so its
   // masks, boundary markers and endpoint timecodes move with the Sequencer handle.
   renderLyricsStructure();
@@ -12881,19 +12906,16 @@ fragmentStartBtn.addEventListener(
   "click",
   () => {
 
-    // Повторное нажатие на уже установленный IN снимает весь диапазон.
+    // 5.4.16 | Повторное нажатие снимает только IN. OUT остаётся как есть.
     if (fragmentStart !== null) {
-      clearSelection();
+      fragmentStart = null;
+      updateSelectionDisplay();
       updateTimeDisplay();
       return;
     }
 
-    fragmentStart = getCurrentTime();
-
-    // Без корректного OUT выделение пока не рисуется.
-    if (fragmentEnd !== null && fragmentEnd <= fragmentStart) {
-      fragmentEnd = null;
-    }
+    // IN можно поставить независимо от OUT, но только внутри Project Trim.
+    fragmentStart = clampSelectionTimeToTrim(getCurrentTime());
 
     updateSelectionDisplay();
     updateTimeDisplay();
@@ -12905,25 +12927,21 @@ fragmentEndBtn.addEventListener(
   "click",
   () => {
 
-    // Повторное нажатие на уже установленный OUT снимает весь диапазон.
+    // 5.4.16 | Повторное нажатие снимает только OUT. IN остаётся как есть.
     if (fragmentEnd !== null) {
-      clearSelection();
+      fragmentEnd = null;
+      updateSelectionDisplay();
       updateTimeDisplay();
       return;
     }
 
-    const current = getCurrentTime();
-
-    // OUT принимается только после IN и только правее него.
-    if (fragmentStart !== null && current > fragmentStart) {
-      fragmentEnd = current;
-    }
+    // OUT можно поставить независимо от IN, но только внутри Project Trim.
+    fragmentEnd = clampSelectionTimeToTrim(getCurrentTime());
 
     updateSelectionDisplay();
     updateTimeDisplay();
   }
 );
-
 
 loopBtn.addEventListener(
   "click",
@@ -13045,11 +13063,15 @@ masterTimelineInner.addEventListener(
         .getBoundingClientRect();
 
 
+    // 5.4.16 | Начало Selection не может оказаться за пределами Project Trim.
+    const trimStartX = getProjectTrimStart() / duration * rect.width;
+    const trimEndX = getProjectTrimEnd() / duration * rect.width;
+
     selectionPointerStartX =
       Math.max(
-        0,
+        trimStartX,
         Math.min(
-          rect.width,
+          trimEndX,
           event.clientX
           - rect.left
         )
@@ -13082,11 +13104,15 @@ masterTimelineInner.addEventListener(
         .getBoundingClientRect();
 
 
+    // 5.4.16 | Оба края мышиного Selection жёстко ограничены Trim.
+    const trimStartX = getProjectTrimStart() / duration * rect.width;
+    const trimEndX = getProjectTrimEnd() / duration * rect.width;
+
     const x =
       Math.max(
-        0,
+        trimStartX,
         Math.min(
-          rect.width,
+          trimEndX,
           event.clientX
           - rect.left
         )
@@ -13191,8 +13217,22 @@ masterTimelineInner.addEventListener(
 );
 
 
+// 5.4.16 | Ограничение любой точки IN / OUT текущими границами Project Trim.
+function clampSelectionTimeToTrim(value) {
+  const start = getProjectTrimStart();
+  const end = getProjectTrimEnd();
+  const numeric = Number(value);
+  const safe = Number.isFinite(numeric) ? numeric : start;
+  return Math.max(start, Math.min(end, safe));
+}
+
+
 // Перерисовка единого диапазона Selection / IN / OUT.
 function updateSelectionDisplay() {
+
+  // Если Trim был сдвинут после установки IN / OUT, точки также остаются внутри Trim.
+  if (fragmentStart !== null) fragmentStart = clampSelectionTimeToTrim(fragmentStart);
+  if (fragmentEnd !== null) fragmentEnd = clampSelectionTimeToTrim(fragmentEnd);
 
   if (!hasSelection()) {
     selectionRange.style.display = "none";
@@ -13208,6 +13248,10 @@ function updateSelectionDisplay() {
   selectionRange.style.left = startX + "px";
   selectionRange.style.width = Math.max(1, endX - startX) + "px";
 
+  // Верхние коды имеют ровно тот же формат, что и Trim.
+  if (selectionInTime) selectionInTime.textContent = formatTrimTime(fragmentStart);
+  if (selectionOutTime) selectionOutTime.textContent = formatTrimTime(fragmentEnd);
+
   selectionInfo.textContent =
     "Selection: "
     + formatTime(fragmentStart)
@@ -13218,7 +13262,7 @@ function updateSelectionDisplay() {
 }
 
 
-// Снимаем весь единый диапазон сразу: IN, OUT и визуальный Selection.
+// Полный сброс используется там, где приложение действительно снимает весь Selection.
 function clearSelection() {
   fragmentStart = null;
   fragmentEnd = null;
@@ -19712,7 +19756,10 @@ window.addEventListener(
 
       event.preventDefault();
 
-      fragmentStartBtn.click();
+      // 5.4.16 | Page Up не меняет IN, а переводит курсор точно на установленный IN.
+      if (fragmentStart !== null) {
+        setGlobalCursorTime(fragmentStart);
+      }
 
     }
 
@@ -19722,7 +19769,10 @@ window.addEventListener(
 
       event.preventDefault();
 
-      fragmentEndBtn.click();
+      // 5.4.16 | Page Down не меняет OUT, а переводит курсор точно на установленный OUT.
+      if (fragmentEnd !== null) {
+        setGlobalCursorTime(fragmentEnd);
+      }
 
     }
 
@@ -20054,7 +20104,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "5.4.15",
+    version: "5.4.16",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -20690,7 +20740,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "5.4.15";
+const MYNUS_CLIENT_VERSION = "5.4.16";
 const MYNUS_CLIENT_CHANGE = "Karaoke non-Full-Screen minimum 620x900; separate session-only Sequencer History with Undo/Redo; Lyrics History, Trim, startup Select File/Open Project, and server unchanged";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -21488,8 +21538,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.4.15 | Unified Selection / IN / OUT range; TRIM updateProjectTrimDisplay();");
-console.log("[SERVICE CONSOLE] MyNus 5.4.15 | Unified Selection / IN / OUT range; TRIM updateProjectTrimDisplay();");
+console.log("MyNus 5.4.16 | Independent IN / OUT; yellow Trim-bounded Selection; Page Up/Down navigation; TRIM unchanged.");
+console.log("[SERVICE CONSOLE] MyNus 5.4.16 | Independent IN / OUT; yellow Trim-bounded Selection; Page Up/Down navigation; TRIM unchanged.");
 </script>
 
 <div class="row" id="build-down">
