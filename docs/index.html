@@ -1,4 +1,4 @@
-<!-- MyNus 5.4.10 | Full Screen Structure is read-only: the same current Structure is rendered with identical timing/segments/playhead, but editor-only selection, rename/context menu and draggable boundaries are not created in Karaoke mode; Structure mutations are guarded to Lyrics Editor only. Existing Full Screen Structure styling remains unchanged. Server unchanged. -->
+<!-- MyNus 5.4.11 | Structure uses the same global Project Trim as Sequencer: Trim Start/End are the single source of truth; Structure keeps full physical duration visible, shades out-of-track zones before/after Trim with OUT OF TRACK labels, and places the pink endpoint timecodes exactly at Trim Start/End. Playback continues to use the same Trim boundaries. Full Screen Structure remains read-only. Server unchanged. -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.4.10</title>
+  <title>MyNus 5.4.11</title>
 
 
  <style>
@@ -813,7 +813,7 @@
     }
 
 
-    /* 5.4.10 | Global Project Trim */
+    /* 5.4.11 | Global Project Trim */
     .project-trim-mask {
       position: absolute;
       top: 22px;
@@ -2444,6 +2444,38 @@
     .lyrics-structure-segment:hover .lyrics-structure-boundary,
     .lyrics-structure-segment.selected .lyrics-structure-boundary {
       background: rgba(0,0,0,.08);
+    }
+
+    .lyrics-structure-trim-mask {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      background: rgba(0,0,0,.58);
+      pointer-events: none;
+      z-index: 8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      color: rgba(255,255,255,.78);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      white-space: nowrap;
+    }
+
+    .lyrics-structure-trim-marker {
+      position: absolute;
+      top: -1px;
+      bottom: -1px;
+      width: 1px;
+      background: #e58aa8;
+      pointer-events: none;
+      z-index: 12;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-trim-mask {
+      font-size: 13px;
     }
 
     .lyrics-structure-playhead {
@@ -7240,7 +7272,7 @@ function getTimelineWidth() {
 
 
 // ========================================
-// GLOBAL PROJECT TRIM | 5.4.10
+// GLOBAL PROJECT TRIM | 5.4.11
 // ========================================
 
 function formatTrimTime(value) {
@@ -7336,6 +7368,9 @@ function setProjectTrimBoundary(which, rawTime) {
     if (getCurrentTime() > projectTrimEnd) setGlobalCursorTime(projectTrimEnd);
   }
   updateProjectTrimDisplay();
+  // Structure reads the same Project Trim values; rerender immediately so its
+  // masks, boundary markers and endpoint timecodes move with the Sequencer handle.
+  renderLyricsStructure();
 }
 
 function projectTrimTimeFromPointer(event) {
@@ -15617,12 +15652,24 @@ function renderLyricsStructureTimeline(songEnd) {
   if (!lyricsStructureTimeline) return;
   lyricsStructureTimeline.innerHTML = "";
   const total = Math.max(0.001, Number(songEnd) || 0.001);
+  const trimStart = Math.max(0, Math.min(getProjectTrimStart(), total));
+  const trimEnd = Math.max(trimStart, Math.min(getProjectTrimEnd(), total));
+  const startPercent = trimStart / total * 100;
+  const endPercent = trimEnd / total * 100;
 
+  // Structure does not own separate start/end values. These are the exact same
+  // global Project Trim boundaries used by Sequencer and playback.
   if (lyricsStructureStartValue) {
-    lyricsStructureStartValue.textContent = formatStructureTime(0);
+    lyricsStructureStartValue.textContent = formatStructureTime(trimStart);
+    lyricsStructureStartValue.style.left = startPercent + "%";
+    lyricsStructureStartValue.style.right = "auto";
+    lyricsStructureStartValue.style.transform = trimStart > 0 ? "translateX(-50%)" : "none";
   }
   if (lyricsStructureEndValue) {
-    lyricsStructureEndValue.textContent = formatStructureTime(total);
+    lyricsStructureEndValue.textContent = formatStructureTime(trimEnd);
+    lyricsStructureEndValue.style.left = endPercent + "%";
+    lyricsStructureEndValue.style.right = "auto";
+    lyricsStructureEndValue.style.transform = trimEnd < total ? "translateX(-50%)" : "translateX(-100%)";
   }
   let step = 15;
   if (total > 240) step = 30;
@@ -15823,6 +15870,41 @@ function renderLyricsStructure() {
     });
 
   }
+
+  // Same global Trim as Sequencer: keep the physical Structure visible, but shade
+  // everything outside the working Project range. No duplicate Structure trim state.
+  const trimStart = Math.max(0, Math.min(getProjectTrimStart(), songEnd));
+  const trimEnd = Math.max(trimStart, Math.min(getProjectTrimEnd(), songEnd));
+  const trimStartPercent = trimStart / songEnd * 100;
+  const trimEndPercent = trimEnd / songEnd * 100;
+
+  if (trimStart > 0) {
+    const leftMask = document.createElement("div");
+    leftMask.className = "lyrics-structure-trim-mask left";
+    leftMask.style.left = "0%";
+    leftMask.style.width = trimStartPercent + "%";
+    leftMask.textContent = "OUT OF TRACK";
+    lyricsStructureTrack.appendChild(leftMask);
+  }
+
+  if (trimEnd < songEnd) {
+    const rightMask = document.createElement("div");
+    rightMask.className = "lyrics-structure-trim-mask right";
+    rightMask.style.left = trimEndPercent + "%";
+    rightMask.style.width = (100 - trimEndPercent) + "%";
+    rightMask.textContent = "OUT OF TRACK";
+    lyricsStructureTrack.appendChild(rightMask);
+  }
+
+  const trimStartMarker = document.createElement("div");
+  trimStartMarker.className = "lyrics-structure-trim-marker start";
+  trimStartMarker.style.left = trimStartPercent + "%";
+  lyricsStructureTrack.appendChild(trimStartMarker);
+
+  const trimEndMarker = document.createElement("div");
+  trimEndMarker.className = "lyrics-structure-trim-marker end";
+  trimEndMarker.style.left = trimEndPercent + "%";
+  lyricsStructureTrack.appendChild(trimEndMarker);
 
   const playhead = document.createElement("div");
   playhead.className = "lyrics-structure-playhead";
@@ -19680,7 +19762,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "5.4.10",
+    version: "5.4.11",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -19922,14 +20004,14 @@ function renderFullScreenPlaylist(projects = karaokePlaylistSnapshot) {
       }
 
       // =====================================================================
-      // [5.4.10][СЦЕНАРИЙ 2 — PLAYLIST]
+      // [5.4.11][СЦЕНАРИЙ 2 — PLAYLIST]
       // Пользователь вручную выбрал Track в PlayList.
       // Здесь PlayList выполняет ТОЛЬКО свою задачу: определяет ID выбранного Project.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.4.10][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
-      await reportProjectLoadTrace("[5.4.10][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.11][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
+      await reportProjectLoadTrace("[5.4.11][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(track.id)",
         function: "loadProjectById",
         parameters: { id: track.id },
@@ -20177,14 +20259,14 @@ async function runKaraokeFinishAction(action, { autoplay = false } = {}) {
       closeKaraokeFinishedDialog();
 
       // =====================================================================
-      // [5.4.10][СЦЕНАРИЙ 3 — OPEN NEXT]
+      // [5.4.11][СЦЕНАРИЙ 3 — OPEN NEXT]
       // Команда Open next берёт первый ожидающий Track из очереди и получает его Project ID.
       // На этом сценарий выбора заканчивается.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // Дальше выполняется прямой переход в ТУ ЖЕ ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.4.10][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
-      await reportProjectLoadTrace("[5.4.10][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.11][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
+      await reportProjectLoadTrace("[5.4.11][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(nextProject.id)",
         function: "loadProjectById",
         parameters: { id: nextProject.id },
@@ -20307,10 +20389,10 @@ const projectLoaderFill = document.getElementById("projectLoaderFill");
 const projectLoaderPercent = document.getElementById("projectLoaderPercent");
 let projectLoading = false;
 
-// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.10.
+// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.11.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "5.4.10";
-const MYNUS_CLIENT_CHANGE = "Sequencer: global non-destructive Trim Start/Trim End on Master Timeline; centered Master Timeline title; pink M:SS timecodes above and draggable handles below; trim masks/markers across all tracks; Play/Karaoke/Postplay respect Trim; Trim persisted in Project Sequencer state; server unchanged";
+const MYNUS_CLIENT_VERSION = "5.4.11";
+const MYNUS_CLIENT_CHANGE = "Structure shares Sequencer global Trim Start/End as one parameter; full physical Structure remains visible with OUT OF TRACK masks outside Trim; endpoint timecodes sit on Trim Start/End; Full Screen Structure stays read-only; server unchanged";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
 let projectLoadTraceSource = null;
@@ -20557,7 +20639,7 @@ function clearProjectState() {
 }
 
 // =====================================================================
-// [5.4.10][ЕДИНАЯ LOAD-ФУНКЦИЯ]
+// [5.4.11][ЕДИНАЯ LOAD-ФУНКЦИЯ]
 // Это ЕДИНСТВЕННАЯ функция загрузки сохранённого Project.
 // Она получает РОВНО ОДИН входной параметр: id.
 // Функция НЕ знает, кто выбрал этот ID: Open Project, PlayList или Open next.
@@ -20566,12 +20648,12 @@ function clearProjectState() {
 // =====================================================================
 async function loadProjectById(id) {
   if (!projectLoadTraceId || projectLoadTraceProject !== (id || null)) {
-    beginProjectLoadTrace("[5.4.10][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
+    beginProjectLoadTrace("[5.4.11][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
   } else {
     projectLoadTraceProject = id || projectLoadTraceProject;
   }
 
-  await reportProjectLoadTrace("[5.4.10][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
+  await reportProjectLoadTrace("[5.4.11][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
     command: "LOAD Project",
     function: "loadProjectById",
     parameters: { id },
@@ -20801,14 +20883,14 @@ async function openLoadProjectDialog() {
       button.addEventListener("click", async () => {
         try {
           // =====================================================================
-          // [5.4.10][СЦЕНАРИЙ 1 — OPEN PROJECT]
+          // [5.4.11][СЦЕНАРИЙ 1 — OPEN PROJECT]
           // Пользователь выбрал Project в обычном окне Open Project.
           // Этот сценарий выполняет только выбор Project и получает его ID.
           // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
           // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
           // =====================================================================
-          beginProjectLoadTrace("[5.4.10][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
-          await reportProjectLoadTrace("[5.4.10][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+          beginProjectLoadTrace("[5.4.11][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
+          await reportProjectLoadTrace("[5.4.11][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
             command: "await loadProjectById(project.id)",
             function: "loadProjectById",
             parameters: { id: project.id, name: project.name },
@@ -21106,8 +21188,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.4.10 | Full Screen Structure: same Structure view, read-only; no segment selection/rename/context menu/boundary drag in Karaoke. Trim and existing Full Screen playback behavior preserved. Server unchanged.");
-console.log("[SERVICE CONSOLE] MyNus 5.4.10 | structure=lyrics-editor-editable+fullscreen-readonly | trim=global-nondestructive | server=unchanged");
+console.log("MyNus 5.4.11 | Structure shares Sequencer Trim Start/End; OUT OF TRACK masks outside Trim; endpoint timecodes at Trim boundaries; Full Screen Structure remains read-only. Server unchanged.");
+console.log("[SERVICE CONSOLE] MyNus 5.4.11 | structure=shared-global-trim+fullscreen-readonly | out-of-track=masked | trim=single-source | server=unchanged");
 </script>
 
 <div class="row" id="build-down">
