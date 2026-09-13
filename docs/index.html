@@ -1,4 +1,4 @@
-<!-- MyNus 5.4.14 | .master-timeline width      — не меняется
+<!-- MyNus 5.4.15 | .master-timeline width      — не меняется
 .master-timeline overflow   — остаётся hidden
 .master-timeline-inner      — не меняется
 .project-trim-time transform — остаётся translateX(-50%)
@@ -21,7 +21,7 @@ Scroll                       — не меняется -->
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.4.14</title>
+  <title>MyNus 5.4.15</title>
 
 
  <style>
@@ -3217,10 +3217,10 @@ position: relative;
 
         <div class="track-save-row">
           <button data-export-track="original" data-export-scope="full">
-            Save As...
+            Export Track
           </button>
           <button data-export-track="original" data-export-scope="selection">
-            Save Selection
+            Export Selection
           </button>
         </div>
 
@@ -3295,10 +3295,10 @@ position: relative;
 
         <div class="track-save-row">
           <button data-export-track="vocals" data-export-scope="full">
-            Save As...
+            Export Track
           </button>
           <button data-export-track="vocals" data-export-scope="selection">
-            Save Selection
+            Export Selection
           </button>
         </div>
         <div class="track-save-row crop-row">
@@ -3357,7 +3357,7 @@ position: relative;
         <div class="track-title">Pitch Correct</div>
         <div class="track-buttons"><button id="pitchCorrectionMuteBtn">Mute</button><button id="pitchCorrectionSoloBtn">Solo</button></div>
         <div class="volume-row"><input type="range" id="pitchCorrectionVolume" min="0" max="100" value="100"><span id="pitchCorrectionVolumeValue" class="volume-value">100%</span></div>
-        <div class="track-save-row"><button data-export-track="pitchCorrection" data-export-scope="full">Save As...</button><button data-export-track="pitchCorrection" data-export-scope="selection">Save Selection</button></div>
+        <div class="track-save-row"><button data-export-track="pitchCorrection" data-export-scope="full">Export Track</button><button data-export-track="pitchCorrection" data-export-scope="selection">Export Selection</button></div>
         <div class="track-save-row crop-row"><button id="pitchCorrectionCropInBtn">Crop In</button><button id="pitchCorrectionCropOutBtn">Crop Out</button></div>
       </div>
       <div class="timeline-scroll" data-track="pitchCorrection"><div class="timeline-inner" id="pitchCorrectionTimeline"><canvas id="pitchCorrectionCanvas"></canvas><div id="pitchCorrectionCropMaskLeft" class="crop-mask"></div><div id="pitchCorrectionCropMaskRight" class="crop-mask"></div><div class="playhead" id="pitchCorrectionPlayhead"></div></div></div>
@@ -3371,7 +3371,7 @@ position: relative;
         <div class="track-title">Harmonizer</div>
         <div class="track-buttons"><button id="harmonizerMuteBtn">Mute</button><button id="harmonizerSoloBtn">Solo</button></div>
         <div class="volume-row"><input type="range" id="harmonizerVolume" min="0" max="100" value="100"><span id="harmonizerVolumeValue" class="volume-value">100%</span></div>
-        <div class="track-save-row"><button data-export-track="harmonizer" data-export-scope="full">Save As...</button><button data-export-track="harmonizer" data-export-scope="selection">Save Selection</button></div>
+        <div class="track-save-row"><button data-export-track="harmonizer" data-export-scope="full">Export Track</button><button data-export-track="harmonizer" data-export-scope="selection">Export Selection</button></div>
         <div class="track-save-row crop-row"><button id="harmonizerCropInBtn">Crop In</button><button id="harmonizerCropOutBtn">Crop Out</button></div>
       </div>
       <div class="timeline-scroll" data-track="harmonizer"><div class="timeline-inner" id="harmonizerTimeline"><canvas id="harmonizerCanvas"></canvas><div id="harmonizerCropMaskLeft" class="crop-mask"></div><div id="harmonizerCropMaskRight" class="crop-mask"></div><div class="playhead" id="harmonizerPlayhead"></div></div></div>
@@ -3422,10 +3422,10 @@ position: relative;
 
         <div class="track-save-row">
           <button data-export-track="drums" data-export-scope="full">
-            Save As...
+            Export Track
           </button>
           <button data-export-track="drums" data-export-scope="selection">
-            Save Selection
+            Export Selection
           </button>
         </div>
         <div class="track-save-row crop-row">
@@ -3518,10 +3518,10 @@ position: relative;
 
         <div class="track-save-row">
           <button data-export-track="bass" data-export-scope="full">
-            Save As...
+            Export Track
           </button>
           <button data-export-track="bass" data-export-scope="selection">
-            Save Selection
+            Export Selection
           </button>
         </div>
         <div class="track-save-row crop-row">
@@ -3614,10 +3614,10 @@ position: relative;
 
         <div class="track-save-row">
           <button data-export-track="guitar" data-export-scope="full">
-            Save As...
+            Export Track
           </button>
           <button data-export-track="guitar" data-export-scope="selection">
-            Save Selection
+            Export Selection
           </button>
         </div>
         <div class="track-save-row crop-row">
@@ -3710,10 +3710,10 @@ position: relative;
 
         <div class="track-save-row">
           <button data-export-track="piano" data-export-scope="full">
-            Save As...
+            Export Track
           </button>
           <button data-export-track="piano" data-export-scope="selection">
-            Save Selection
+            Export Selection
           </button>
         </div>
         <div class="track-save-row crop-row">
@@ -3806,10 +3806,10 @@ position: relative;
 
         <div class="track-save-row">
           <button data-export-track="other" data-export-scope="full">
-            Save As...
+            Export Track
           </button>
           <button data-export-track="other" data-export-scope="selection">
-            Save Selection
+            Export Selection
           </button>
         </div>
         <div class="track-save-row crop-row">
@@ -3875,8 +3875,8 @@ position: relative;
         </div>
 
         <div class="track-buttons">
-          <button id="saveAsMasterBtn" disabled>Save As...</button>
-          <button id="saveMasterSelectionBtn" disabled>Save Selection</button>
+          <button id="saveAsMasterBtn" disabled>Export Track</button>
+          <button id="saveMasterSelectionBtn" disabled>Export Selection</button>
         </div>
 
         <div class="track-buttons">
@@ -5770,9 +5770,8 @@ let masterSegments = [];
 let masterUndoStack = [];
 let masterRedoStack = [];
 
-let selectionStart = null;
-let selectionEnd = null;
-
+// 5.4.15 | Единый диапазон Selection / IN / OUT.
+// fragmentStart и fragmentEnd — единственный источник данных для выделения, Loop и Export Selection.
 let fragmentStart = null;
 let fragmentEnd = null;
 let projectTrimStart = 0;
@@ -11048,9 +11047,7 @@ async function finishMasterRecording() {
 
 
   saveMasterSelectionBtn.disabled =
-    selectionStart !== null
-    &&
-    selectionEnd !== null;
+    !hasSelection();
 
 
   status.textContent =
@@ -12034,7 +12031,7 @@ async function restoreMasterFromSegments() {
 
 
 // ========================================
-// СОХРАНИТЬ MASTER КАК
+// ЭКСПОРТ MASTER
 // ========================================
 
 saveAsMasterBtn.addEventListener(
@@ -12300,7 +12297,7 @@ async function exportTrack(
     formData.append(
       "start",
       String(
-        selectionStart
+        fragmentStart
       )
     );
 
@@ -12308,7 +12305,7 @@ async function exportTrack(
     formData.append(
       "end",
       String(
-        selectionEnd
+        fragmentEnd
       )
     );
 
@@ -12874,31 +12871,32 @@ function setGlobalCursorTime(time) {
 
 
 // ========================================
-// ФРАГМЕНТ IN / LOOP / OUT
+// ЕДИНЫЙ ДИАПАЗОН SELECTION / IN / OUT / LOOP / EXPORT
 // ========================================
+// В 5.4.15 отдельного Selection больше нет.
+// IN = fragmentStart, OUT = fragmentEnd.
+// Визуальный Selection, Loop и Export Selection читают эти же два значения.
 
 fragmentStartBtn.addEventListener(
   "click",
   () => {
 
-    fragmentStart =
-      getCurrentTime();
-
-
-    if (
-      fragmentEnd !== null
-      &&
-      fragmentEnd <= fragmentStart
-    ) {
-
-      fragmentEnd =
-        null;
-
+    // Повторное нажатие на уже установленный IN снимает весь диапазон.
+    if (fragmentStart !== null) {
+      clearSelection();
+      updateTimeDisplay();
+      return;
     }
 
+    fragmentStart = getCurrentTime();
 
+    // Без корректного OUT выделение пока не рисуется.
+    if (fragmentEnd !== null && fragmentEnd <= fragmentStart) {
+      fragmentEnd = null;
+    }
+
+    updateSelectionDisplay();
     updateTimeDisplay();
-
   }
 );
 
@@ -12907,31 +12905,22 @@ fragmentEndBtn.addEventListener(
   "click",
   () => {
 
-    const current =
-      getCurrentTime();
-
-
-    if (
-      fragmentStart !== null
-      &&
-      current > fragmentStart
-    ) {
-
-      fragmentEnd =
-        current;
-
+    // Повторное нажатие на уже установленный OUT снимает весь диапазон.
+    if (fragmentEnd !== null) {
+      clearSelection();
+      updateTimeDisplay();
+      return;
     }
 
-    else {
+    const current = getCurrentTime();
 
-      fragmentEnd =
-        null;
-
+    // OUT принимается только после IN и только правее него.
+    if (fragmentStart !== null && current > fragmentStart) {
+      fragmentEnd = current;
     }
 
-
+    updateSelectionDisplay();
     updateTimeDisplay();
-
   }
 );
 
@@ -13136,19 +13125,21 @@ masterTimelineInner.addEventListener(
       );
 
 
-    selectionStart =
+    // Мышью задаём тот же диапазон, что и кнопками IN / OUT.
+    fragmentStart =
       startX
       / rect.width
       * duration; // длительность
 
 
-    selectionEnd =
+    fragmentEnd =
       endX
       / rect.width
       * duration; // длительность
 
 
     updateSelectionDisplay();
+    updateTimeDisplay();
 
   }
 );
@@ -13200,137 +13191,84 @@ masterTimelineInner.addEventListener(
 );
 
 
-// Управление транспортом и воспроизведением.
+// Перерисовка единого диапазона Selection / IN / OUT.
 function updateSelectionDisplay() {
 
-  if (
-    selectionStart === null
-    ||
-    selectionEnd === null
-    ||
-    selectionEnd <= selectionStart
-  ) {
-
-    selectionRange.style.display =
-      "none";
-
-
-    selectionInfo.textContent =
-      "Selection: none";
-
-
+  if (!hasSelection()) {
+    selectionRange.style.display = "none";
+    selectionInfo.textContent = "Selection: none";
+    updateSelectionButtons();
     return;
-
   }
 
+  const startX = fragmentStart * pixelsPerSecond; // пикселей в секунду
+  const endX = fragmentEnd * pixelsPerSecond;     // пикселей в секунду
 
-  const startX =
-    selectionStart
-    * pixelsPerSecond; // пикселей в секунду
-
-
-  const endX =
-    selectionEnd
-    * pixelsPerSecond; // пикселей в секунду
-
-
-  selectionRange.style.display =
-    "block";
-
-
-  selectionRange.style.left =
-    startX + "px";
-
-
-  selectionRange.style.width =
-    Math.max(
-      1,
-      endX - startX
-    )
-    + "px";
-
+  selectionRange.style.display = "block";
+  selectionRange.style.left = startX + "px";
+  selectionRange.style.width = Math.max(1, endX - startX) + "px";
 
   selectionInfo.textContent =
     "Selection: "
-    + formatTime(
-        selectionStart
-      )
+    + formatTime(fragmentStart)
     + " — "
-    + formatTime(
-        selectionEnd
-      );
-
+    + formatTime(fragmentEnd);
 
   updateSelectionButtons();
-
 }
 
 
-// Очистка или сброс локального рабочего состояния.
+// Снимаем весь единый диапазон сразу: IN, OUT и визуальный Selection.
 function clearSelection() {
+  fragmentStart = null;
+  fragmentEnd = null;
 
-  selectionStart =
-    null;
-
-
-  selectionEnd =
-    null;
-
-
-  selectionRange.style.display =
-    "none";
-
-
-  selectionInfo.textContent =
-    "Selection: none";
-
+  selectionRange.style.display = "none";
+  selectionInfo.textContent = "Selection: none";
 
   updateSelectionButtons();
-
 }
 
 
-// Локальная функциональная операция этого блока.
+// Selection существует только при корректной паре IN < OUT.
 function hasSelection() {
-
   return (
-    selectionStart !== null
+    fragmentStart !== null
     &&
-    selectionEnd !== null
+    fragmentEnd !== null
     &&
-    selectionEnd > selectionStart
+    fragmentEnd > fragmentStart
   );
-
 }
 
 
-// Перерисовка и синхронизация интерфейса.
+// Синхронизируем состояние IN / OUT и доступность Export Selection.
 function updateSelectionButtons() {
+  const enabled = hasSelection();
+  const hasIn = fragmentStart !== null;
+  const hasOut = fragmentEnd !== null;
 
-  const enabled =
-    hasSelection();
+  // Установленные IN / OUT серые; снятые возвращаются к обычному чёрному состоянию.
+  fragmentStartBtn.classList.toggle("active", hasIn);
+  fragmentEndBtn.classList.toggle("active", hasOut);
 
+  // То же состояние показываем в верхних зеркальных кнопках транспорта.
+  document.querySelectorAll('[data-proxy="fragmentStartBtn"]').forEach(button => {
+    button.classList.toggle("active", hasIn);
+  });
+  document.querySelectorAll('[data-proxy="fragmentEndBtn"]').forEach(button => {
+    button.classList.toggle("active", hasOut);
+  });
 
   document
-    .querySelectorAll(
-      '[data-export-scope="selection"]'
-    )
-    .forEach(
-      button => {
+    .querySelectorAll('[data-export-scope="selection"]')
+    .forEach(button => {
+      button.disabled = !enabled;
+    });
 
-        button.disabled =
-          !enabled;
-
-      }
-    );
-
-
-  saveMasterSelectionBtn.disabled =
-    !enabled
-    ||
-    !masterBlob;
-
+  saveMasterSelectionBtn.disabled = !enabled || !masterBlob;
 }
+
 
 
 // ========================================
@@ -19300,10 +19238,6 @@ function resetToInitialSplit() {
   loopEnabled = false;
 
 
-  selectionStart = null;
-
-  selectionEnd = null;
-
   projectTrimStart = 0;
   projectTrimEnd = null;
 
@@ -20120,7 +20054,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "5.4.13",
+    version: "5.4.15",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -20756,7 +20690,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "5.4.13";
+const MYNUS_CLIENT_VERSION = "5.4.15";
 const MYNUS_CLIENT_CHANGE = "Karaoke non-Full-Screen minimum 620x900; separate session-only Sequencer History with Undo/Redo; Lyrics History, Trim, startup Select File/Open Project, and server unchanged";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -20976,8 +20910,6 @@ function clearProjectState() {
   vocalStartTime = null;
   vocalEndTime = null;
 
-  selectionStart = null;
-  selectionEnd = null;
   fragmentStart = null;
   fragmentEnd = null;
   projectTrimStart = 0;
@@ -21177,6 +21109,8 @@ async function loadProjectById(id) {
     syncScrollTo(0);
     drawAllWaveforms();
     drawMasterTimeline();
+    // 5.4.15 | Восстановленные IN / OUT сразу отображаем тем же Selection.
+    updateSelectionDisplay();
 
     await advanceProjectLoad(6);
 
@@ -21554,8 +21488,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.4.14 | TRIM updateProjectTrimDisplay();");
-console.log("[SERVICE CONSOLE] MyNus 5.4.14 | TRIM updateProjectTrimDisplay();");
+console.log("MyNus 5.4.15 | Unified Selection / IN / OUT range; TRIM updateProjectTrimDisplay();");
+console.log("[SERVICE CONSOLE] MyNus 5.4.15 | Unified Selection / IN / OUT range; TRIM updateProjectTrimDisplay();");
 </script>
 
 <div class="row" id="build-down">
