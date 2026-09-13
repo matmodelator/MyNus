@@ -1,4 +1,4 @@
-<!-- MyNus 5.4.11 | Structure uses the same global Project Trim as Sequencer: Trim Start/End are the single source of truth; Structure keeps full physical duration visible, shades out-of-track zones before/after Trim with OUT OF TRACK labels, and places the pink endpoint timecodes exactly at Trim Start/End. Playback continues to use the same Trim boundaries. Full Screen Structure remains read-only. Server unchanged. -->
+<!-- MyNus 5.4.12 | getProjectTrimEnd -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.4.11</title>
+  <title>MyNus 5.4.12</title>
 
 
  <style>
@@ -7272,7 +7272,7 @@ function getTimelineWidth() {
 
 
 // ========================================
-// GLOBAL PROJECT TRIM | 5.4.11
+// GLOBAL PROJECT TRIM | 5.4.12
 // ========================================
 
 function formatTrimTime(value) {
@@ -7289,8 +7289,12 @@ function getProjectTrimStart() {
 
 function getProjectTrimEnd() {
   const fullEnd = Math.max(0, Number(duration) || 0);
+
+  if (projectTrimEnd == null) return fullEnd;
+
   const savedEnd = Number(projectTrimEnd);
   if (!Number.isFinite(savedEnd)) return fullEnd;
+
   return Math.max(getProjectTrimStart(), Math.min(savedEnd, fullEnd));
 }
 
@@ -20360,7 +20364,7 @@ function restoreProjectSequencerState(saved) {
   fragmentStart = Number.isFinite(Number(saved.fragmentStart)) ? Number(saved.fragmentStart) : null;
   fragmentEnd = Number.isFinite(Number(saved.fragmentEnd)) ? Number(saved.fragmentEnd) : null;
   projectTrimStart = Number.isFinite(Number(saved.trimStart)) ? Math.max(0, Number(saved.trimStart)) : 0;
-  projectTrimEnd = Number.isFinite(Number(saved.trimEnd)) ? Math.max(projectTrimStart, Number(saved.trimEnd)) : null;
+ projectTrimEnd = saved.trimEnd == null ? null : (Number.isFinite(Number(saved.trimEnd)) ? Math.max(projectTrimStart, Number(saved.trimEnd)) : null);
   if (["original", "mix", "master"].includes(saved.mode)) mode = saved.mode;
 }
 
@@ -21188,8 +21192,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.4.11 | Structure shares Sequencer Trim Start/End; OUT OF TRACK masks outside Trim; endpoint timecodes at Trim boundaries; Full Screen Structure remains read-only. Server unchanged.");
-console.log("[SERVICE CONSOLE] MyNus 5.4.11 | structure=shared-global-trim+fullscreen-readonly | out-of-track=masked | trim=single-source | server=unchanged");
+console.log("MyNus 5.4.12 | getProjectTrimEnd");
+console.log("[SERVICE CONSOLE] MyNus 5.4.12 | getProjectTrimEnd");
 </script>
 
 <div class="row" id="build-down">
