@@ -1,4 +1,4 @@
-<!-- MyNus 5.4.9 | Sequencer: global non-destructive Trim Start/Trim End added to Master Timeline; centered Master Timeline title; pink M:SS trim timecodes above timeline; draggable trim handles below timeline; trim masks/markers span all track timelines; Play/Karaoke/Postplay respect Trim boundaries; Trim saved/restored in Project Sequencer state. Server unchanged. -->
+<!-- MyNus 5.4.10 | Full Screen Structure is read-only: the same current Structure is rendered with identical timing/segments/playhead, but editor-only selection, rename/context menu and draggable boundaries are not created in Karaoke mode; Structure mutations are guarded to Lyrics Editor only. Existing Full Screen Structure styling remains unchanged. Server unchanged. -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.4.9</title>
+  <title>MyNus 5.4.10</title>
 
 
  <style>
@@ -813,7 +813,7 @@
     }
 
 
-    /* 5.4.9 | Global Project Trim */
+    /* 5.4.10 | Global Project Trim */
     .project-trim-mask {
       position: absolute;
       top: 22px;
@@ -2279,6 +2279,7 @@
       font-size: 20px;
       padding-left: 10px;
       padding-right: 10px;
+      cursor: default;
     }
 
     .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-timeline {
@@ -5567,6 +5568,11 @@ function isKaraokeUiMode() {
 function isLyricsUiOpen() {
   return uiMode !== UI_MODE.SEQUENCER;
 }
+
+// Structure редактируется только в Lyrics Editor. Full Screen показывает те же данные read-only.
+function isLyricsStructureEditable() {
+  return uiMode === UI_MODE.LYRICS;
+}
 let recentSelectedAudioFile = null;
 
 let lyricsUndoStack = [];
@@ -7234,7 +7240,7 @@ function getTimelineWidth() {
 
 
 // ========================================
-// GLOBAL PROJECT TRIM | 5.4.9
+// GLOBAL PROJECT TRIM | 5.4.10
 // ========================================
 
 function formatTrimTime(value) {
@@ -7251,7 +7257,6 @@ function getProjectTrimStart() {
 
 function getProjectTrimEnd() {
   const fullEnd = Math.max(0, Number(duration) || 0);
-  if (projectTrimEnd === null || projectTrimEnd === undefined || projectTrimEnd === "") return fullEnd;
   const savedEnd = Number(projectTrimEnd);
   if (!Number.isFinite(savedEnd)) return fullEnd;
   return Math.max(getProjectTrimStart(), Math.min(savedEnd, fullEnd));
@@ -7301,16 +7306,8 @@ function updateProjectTrimDisplay() {
   [projectTrimEndMarker, projectTrimEndTime, projectTrimEndHandle].forEach(node => {
     if (node) node.style.left = endX + "px";
   });
-  if (projectTrimStartTime) {
-    projectTrimStartTime.textContent = formatTrimTime(start);
-    projectTrimStartTime.style.transform = startX < 28 ? "translateX(0)" : "translateX(-50%)";
-  }
-  if (projectTrimEndTime) {
-    projectTrimEndTime.textContent = formatTrimTime(end);
-    projectTrimEndTime.style.transform = endX > width - 28 ? "translateX(-100%)" : "translateX(-50%)";
-  }
-  if (projectTrimStartHandle) projectTrimStartHandle.style.transform = startX < 10 ? "translateX(0)" : "translateX(-50%)";
-  if (projectTrimEndHandle) projectTrimEndHandle.style.transform = endX > width - 10 ? "translateX(-100%)" : "translateX(-50%)";
+  if (projectTrimStartTime) projectTrimStartTime.textContent = formatTrimTime(start);
+  if (projectTrimEndTime) projectTrimEndTime.textContent = formatTrimTime(end);
 
   ensureProjectTrimTrackOverlays();
   Object.values(timelines).forEach(timeline => {
@@ -15362,6 +15359,7 @@ function closeLyricsStructureNameMenu() {
 
 // Работа со Structure в Lyrics Editor.
 function openLyricsStructureNameMenu(event, index) {
+  if (!isLyricsStructureEditable()) return;
   if (!lyricsStructureNameMenu || !lyricsStructureDraft?.[index]) return;
 
   const names = [
@@ -15476,6 +15474,7 @@ function playLyricsStructureTimelineAt(event) {
 
 // Работа со Structure в Lyrics Editor.
 function splitSelectedLyricsStructure() {
+  if (!isLyricsStructureEditable()) return false;
   const index = lyricsStructureSelectedIndex;
   const segment = lyricsStructureDraft?.[index];
   if (!segment) return false;
@@ -15517,6 +15516,7 @@ function splitSelectedLyricsStructure() {
 
 // Работа со Structure в Lyrics Editor.
 function mergeSelectedLyricsStructureBefore() {
+  if (!isLyricsStructureEditable()) return false;
   const index = lyricsStructureSelectedIndex;
   if (!lyricsStructureDraft || index <= 0) return index >= 0;
 
@@ -15540,6 +15540,7 @@ function mergeSelectedLyricsStructureBefore() {
 
 // Работа со Structure в Lyrics Editor.
 function mergeSelectedLyricsStructureAfter() {
+  if (!isLyricsStructureEditable()) return false;
   const index = lyricsStructureSelectedIndex;
   if (
     !lyricsStructureDraft
@@ -15571,6 +15572,7 @@ function mergeSelectedLyricsStructureAfter() {
 
 // Работа со Structure в Lyrics Editor.
 function deleteSelectedLyricsStructure() {
+  if (!isLyricsStructureEditable()) return false;
   if (!lyricsStructureDraft?.length) return false;
 
   let indices = [...lyricsStructureSelectedIndices].sort((a, b) => a - b);
@@ -15658,6 +15660,7 @@ function renderLyricsStructureTimeline(songEnd) {
 function renderLyricsStructure() {
   if (!lyricsStructureTrack) return;
 
+  const editable = isLyricsStructureEditable();
   lyricsStructureTrack.innerHTML = "";
   const structure = lyricsStructureDraft || [];
 
@@ -15680,7 +15683,10 @@ function renderLyricsStructure() {
   structure.forEach((segment, index) => {
     const block = document.createElement("div");
     block.className = "lyrics-structure-segment";
-    if (lyricsStructureSelectedIndices.has(index) || index === lyricsStructureSelectedIndex) {
+    if (
+      editable
+      && (lyricsStructureSelectedIndices.has(index) || index === lyricsStructureSelectedIndex)
+    ) {
       block.classList.add("selected");
     }
 
@@ -15699,118 +15705,124 @@ function renderLyricsStructure() {
     block.style.width =
       ((segment.end - segment.start) / songEnd * 100) + "%";
 
-    block.addEventListener("click", event => {
-      event.stopPropagation();
-      closeLyricsStructureNameMenu();
+    if (editable) {
+      block.addEventListener("click", event => {
+        event.stopPropagation();
+        closeLyricsStructureNameMenu();
 
-      if (event.shiftKey) {
-        const current = [...lyricsStructureSelectedIndices].sort((a, b) => a - b);
-        const anchor = current.length
-          ? (index < current[0] ? current[0] : current[current.length - 1])
-          : (lyricsStructureSelectedIndex >= 0 ? lyricsStructureSelectedIndex : index);
-        const from = Math.min(anchor, index);
-        const to = Math.max(anchor, index);
+        if (event.shiftKey) {
+          const current = [...lyricsStructureSelectedIndices].sort((a, b) => a - b);
+          const anchor = current.length
+            ? (index < current[0] ? current[0] : current[current.length - 1])
+            : (lyricsStructureSelectedIndex >= 0 ? lyricsStructureSelectedIndex : index);
+          const from = Math.min(anchor, index);
+          const to = Math.max(anchor, index);
+          lyricsEditorSelectedLine = -1;
+          document.querySelectorAll(".lyrics-editor-row").forEach(item => item.classList.remove("selected"));
+          setLyricsStructureSelection(
+            Array.from({ length: to - from + 1 }, (_, offset) => from + offset)
+          );
+          clearLyricsStructureLoop();
+          renderLyricsStructure();
+          return;
+        }
+
+        // Structure и Lines никогда не конкурируют за Split: активно только одно выделение.
         lyricsEditorSelectedLine = -1;
         document.querySelectorAll(".lyrics-editor-row").forEach(item => item.classList.remove("selected"));
-        setLyricsStructureSelection(
-          Array.from({ length: to - from + 1 }, (_, offset) => from + offset)
-        );
-        clearLyricsStructureLoop();
+        setLyricsStructureSelection([index]);
+
+        // Если Structure Loop уже активен, выбор другого блока переносит Loop на него.
+        if (lyricsStructureTransportMode === "loop") {
+          lyricsStructureLoopStart = Number(segment.start);
+          lyricsStructureLoopEnd = Number(segment.end);
+          setGlobalCursorTime(lyricsStructureLoopStart);
+        }
         renderLyricsStructure();
-        return;
-      }
+        updateLyricsTransportButtons();
+      });
 
-      // Structure и Lines никогда не конкурируют за Split: активно только одно выделение.
-      lyricsEditorSelectedLine = -1;
-      document.querySelectorAll(".lyrics-editor-row").forEach(item => item.classList.remove("selected"));
-      setLyricsStructureSelection([index]);
+      block.addEventListener("dblclick", event => {
+        event.preventDefault();
+        event.stopPropagation();
 
-      // Если Structure Loop уже активен, выбор другого блока переносит Loop на него.
-      if (lyricsStructureTransportMode === "loop") {
-        lyricsStructureLoopStart = Number(segment.start);
-        lyricsStructureLoopEnd = Number(segment.end);
-        setGlobalCursorTime(lyricsStructureLoopStart);
-      }
-      renderLyricsStructure();
-      updateLyricsTransportButtons();
-    });
+        const oldName = segment.label || segment.type;
+        const nextName = window.prompt("Section name:", oldName);
+        if (nextName === null) return;
 
-    block.addEventListener("dblclick", event => {
-      event.preventDefault();
-      event.stopPropagation();
+        const clean = nextName.trim();
+        if (!clean) return;
+        if (clean === oldName) return;
 
-      const oldName = segment.label || segment.type;
-      const nextName = window.prompt("Section name:", oldName);
-      if (nextName === null) return;
+        pushLyricsHistory();
 
-      const clean = nextName.trim();
-      if (!clean) return;
-      if (clean === oldName) return;
+        segment.label = clean;
+        renderLyricsStructure();
+      });
 
-      pushLyricsHistory();
+      block.addEventListener("contextmenu", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        openLyricsStructureNameMenu(event, index);
+        renderLyricsStructure();
+      });
 
-      segment.label = clean;
-      renderLyricsStructure();
-    });
-
-    block.addEventListener("contextmenu", event => {
-      event.preventDefault();
-      event.stopPropagation();
-      openLyricsStructureNameMenu(event, index);
-      renderLyricsStructure();
-    });
+    }
 
     lyricsStructureTrack.appendChild(block);
   });
 
-  structure.forEach((segment, index) => {
-    if (index >= structure.length - 1) return;
+  if (editable) {
+    structure.forEach((segment, index) => {
+      if (index >= structure.length - 1) return;
 
-    const next = structure[index + 1];
-    const handle = document.createElement("span");
-    handle.className = "lyrics-structure-boundary";
-    handle.title = "Drag section boundary";
-    handle.style.left = (segment.end / songEnd * 100) + "%";
+      const next = structure[index + 1];
+      const handle = document.createElement("span");
+      handle.className = "lyrics-structure-boundary";
+      handle.title = "Drag section boundary";
+      handle.style.left = (segment.end / songEnd * 100) + "%";
 
-    handle.addEventListener("pointerdown", event => {
-      event.preventDefault();
-      event.stopPropagation();
+      handle.addEventListener("pointerdown", event => {
+        event.preventDefault();
+        event.stopPropagation();
 
-      pushLyricsHistory();
+        pushLyricsHistory();
 
-      const rect = lyricsStructureTrack.getBoundingClientRect();
-      const min = Number(segment.start);
-      const max = Number(next.end);
+        const rect = lyricsStructureTrack.getBoundingClientRect();
+        const min = Number(segment.start);
+        const max = Number(next.end);
 
-      handle.setPointerCapture?.(event.pointerId);
+        handle.setPointerCapture?.(event.pointerId);
 
-      const move = moveEvent => {
-        const ratio = Math.max(
-          0,
-          Math.min(1, (moveEvent.clientX - rect.left) / rect.width)
-        );
+        const move = moveEvent => {
+          const ratio = Math.max(
+            0,
+            Math.min(1, (moveEvent.clientX - rect.left) / rect.width)
+          );
 
-        const boundary = Math.max(
-          min,
-          Math.min(max, ratio * songEnd)
-        );
+          const boundary = Math.max(
+            min,
+            Math.min(max, ratio * songEnd)
+          );
 
-        segment.end = boundary;
-        next.start = boundary;
-        renderLyricsStructure();
-      };
+          segment.end = boundary;
+          next.start = boundary;
+          renderLyricsStructure();
+        };
 
-      const up = () => {
-        window.removeEventListener("pointermove", move);
-        window.removeEventListener("pointerup", up);
-      };
+        const up = () => {
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", up);
+        };
 
-      window.addEventListener("pointermove", move);
-      window.addEventListener("pointerup", up);
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+      });
+
+      lyricsStructureTrack.appendChild(handle);
     });
 
-    lyricsStructureTrack.appendChild(handle);
-  });
+  }
 
   const playhead = document.createElement("div");
   playhead.className = "lyrics-structure-playhead";
@@ -15900,6 +15912,7 @@ lyricsStructureTrack?.addEventListener("click", event => {
 
 document.addEventListener("keydown", event => {
   if (!isLyricsUiOpen()) return;
+  if (!isLyricsStructureEditable()) return;
   if (event.key !== "Delete") return;
   if (!lyricsStructureSelectedIndices.size && lyricsStructureSelectedIndex < 0 || !lyricsStructureDraft?.length) return;
   const active = document.activeElement;
@@ -19667,7 +19680,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "5.4.9",
+    version: "5.4.10",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -19675,7 +19688,7 @@ function projectStateJson() {
       fragmentStart,
       fragmentEnd,
       trimStart: getProjectTrimStart(),
-      trimEnd: projectTrimEnd === null || projectTrimEnd === undefined ? null : getProjectTrimEnd(),
+      trimEnd: Number.isFinite(Number(projectTrimEnd)) ? getProjectTrimEnd() : null,
       stemState: cloneSerializable(stemState, {}),
       stemCrop: cloneSerializable(stemCrop, {}),
       fxSettings: cloneSerializable(fxSettings, {}),
@@ -19909,14 +19922,14 @@ function renderFullScreenPlaylist(projects = karaokePlaylistSnapshot) {
       }
 
       // =====================================================================
-      // [5.4.9][СЦЕНАРИЙ 2 — PLAYLIST]
+      // [5.4.10][СЦЕНАРИЙ 2 — PLAYLIST]
       // Пользователь вручную выбрал Track в PlayList.
       // Здесь PlayList выполняет ТОЛЬКО свою задачу: определяет ID выбранного Project.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.4.9][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
-      await reportProjectLoadTrace("[5.4.9][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.10][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
+      await reportProjectLoadTrace("[5.4.10][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(track.id)",
         function: "loadProjectById",
         parameters: { id: track.id },
@@ -20164,14 +20177,14 @@ async function runKaraokeFinishAction(action, { autoplay = false } = {}) {
       closeKaraokeFinishedDialog();
 
       // =====================================================================
-      // [5.4.9][СЦЕНАРИЙ 3 — OPEN NEXT]
+      // [5.4.10][СЦЕНАРИЙ 3 — OPEN NEXT]
       // Команда Open next берёт первый ожидающий Track из очереди и получает его Project ID.
       // На этом сценарий выбора заканчивается.
       // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
       // Дальше выполняется прямой переход в ТУ ЖЕ ЕДИНУЮ функцию loadProjectById(ID).
       // =====================================================================
-      beginProjectLoadTrace("[5.4.9][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
-      await reportProjectLoadTrace("[5.4.9][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
+      beginProjectLoadTrace("[5.4.10][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
+      await reportProjectLoadTrace("[5.4.10][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
         command: "await loadProjectById(nextProject.id)",
         function: "loadProjectById",
         parameters: { id: nextProject.id },
@@ -20264,12 +20277,8 @@ function restoreProjectSequencerState(saved) {
 
   fragmentStart = Number.isFinite(Number(saved.fragmentStart)) ? Number(saved.fragmentStart) : null;
   fragmentEnd = Number.isFinite(Number(saved.fragmentEnd)) ? Number(saved.fragmentEnd) : null;
-  projectTrimStart = saved.trimStart !== null && saved.trimStart !== undefined && Number.isFinite(Number(saved.trimStart))
-    ? Math.max(0, Number(saved.trimStart))
-    : 0;
-  projectTrimEnd = saved.trimEnd !== null && saved.trimEnd !== undefined && Number.isFinite(Number(saved.trimEnd))
-    ? Math.max(projectTrimStart, Number(saved.trimEnd))
-    : null;
+  projectTrimStart = Number.isFinite(Number(saved.trimStart)) ? Math.max(0, Number(saved.trimStart)) : 0;
+  projectTrimEnd = Number.isFinite(Number(saved.trimEnd)) ? Math.max(projectTrimStart, Number(saved.trimEnd)) : null;
   if (["original", "mix", "master"].includes(saved.mode)) mode = saved.mode;
 }
 
@@ -20298,9 +20307,9 @@ const projectLoaderFill = document.getElementById("projectLoaderFill");
 const projectLoaderPercent = document.getElementById("projectLoaderPercent");
 let projectLoading = false;
 
-// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.9.
+// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.10.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "5.4.9";
+const MYNUS_CLIENT_VERSION = "5.4.10";
 const MYNUS_CLIENT_CHANGE = "Sequencer: global non-destructive Trim Start/Trim End on Master Timeline; centered Master Timeline title; pink M:SS timecodes above and draggable handles below; trim masks/markers across all tracks; Play/Karaoke/Postplay respect Trim; Trim persisted in Project Sequencer state; server unchanged";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -20548,7 +20557,7 @@ function clearProjectState() {
 }
 
 // =====================================================================
-// [5.4.9][ЕДИНАЯ LOAD-ФУНКЦИЯ]
+// [5.4.10][ЕДИНАЯ LOAD-ФУНКЦИЯ]
 // Это ЕДИНСТВЕННАЯ функция загрузки сохранённого Project.
 // Она получает РОВНО ОДИН входной параметр: id.
 // Функция НЕ знает, кто выбрал этот ID: Open Project, PlayList или Open next.
@@ -20557,12 +20566,12 @@ function clearProjectState() {
 // =====================================================================
 async function loadProjectById(id) {
   if (!projectLoadTraceId || projectLoadTraceProject !== (id || null)) {
-    beginProjectLoadTrace("[5.4.9][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
+    beginProjectLoadTrace("[5.4.10][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
   } else {
     projectLoadTraceProject = id || projectLoadTraceProject;
   }
 
-  await reportProjectLoadTrace("[5.4.9][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
+  await reportProjectLoadTrace("[5.4.10][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
     command: "LOAD Project",
     function: "loadProjectById",
     parameters: { id },
@@ -20792,14 +20801,14 @@ async function openLoadProjectDialog() {
       button.addEventListener("click", async () => {
         try {
           // =====================================================================
-          // [5.4.9][СЦЕНАРИЙ 1 — OPEN PROJECT]
+          // [5.4.10][СЦЕНАРИЙ 1 — OPEN PROJECT]
           // Пользователь выбрал Project в обычном окне Open Project.
           // Этот сценарий выполняет только выбор Project и получает его ID.
           // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
           // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
           // =====================================================================
-          beginProjectLoadTrace("[5.4.9][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
-          await reportProjectLoadTrace("[5.4.9][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+          beginProjectLoadTrace("[5.4.10][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
+          await reportProjectLoadTrace("[5.4.10][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
             command: "await loadProjectById(project.id)",
             function: "loadProjectById",
             parameters: { id: project.id, name: project.name },
@@ -21097,8 +21106,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.4.9 | Sequencer global Trim: pink M:SS timecodes above Master Timeline, draggable handles below, masks/markers across all tracks; Play/Karaoke/Postplay respect Trim; Project save/load persists Trim; server unchanged.");
-console.log("[SERVICE CONSOLE] MyNus 5.4.9 | trim=global-start+end+pink-timecodes+handles+masks | playback=trim-aware | project=trim-persisted | server=unchanged");
+console.log("MyNus 5.4.10 | Full Screen Structure: same Structure view, read-only; no segment selection/rename/context menu/boundary drag in Karaoke. Trim and existing Full Screen playback behavior preserved. Server unchanged.");
+console.log("[SERVICE CONSOLE] MyNus 5.4.10 | structure=lyrics-editor-editable+fullscreen-readonly | trim=global-nondestructive | server=unchanged");
 </script>
 
 <div class="row" id="build-down">
