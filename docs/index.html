@@ -1,4 +1,4 @@
-<!-- MyNus 5.4.18 | New Project; tracks color&heihgt; Master track; Clear Select&Loop -->
+<!-- MyNus 5.5.0 | New Project + Save Rec fixes -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.4.18</title>
+  <title>MyNus 5.5.0</title>
 
 
  <style>
@@ -11234,10 +11234,11 @@ async function finishMasterRecording() {
     );
 
 
-    updateMasterHistoryButtons();
-
-
     await rebuildMasterTrack();
+
+
+    // 5.5.0 | Новый masterBlob уже создан — теперь Save Rec должен стать активным.
+    updateMasterHistoryButtons();
 
 
     drawMasterCompositeWaveform();
@@ -12187,13 +12188,17 @@ clearMasterRecBtn?.addEventListener("click", async () => {
   if (saveMasterRecBtn) saveMasterRecBtn.disabled = !masterBlob;
 });
 
-// 5.4.18 | Save Rec фиксирует текущее состояние Master-дорожки для следующего Save Project.
-// Это НЕ Export: файл наружу не создаётся.
+// 5.5.0 | Save Rec фиксирует текущее состояние Master-дорожки для следующего Save Project.
+// Это НЕ Export: состояние сохраняется внутри Project.
 saveMasterRecBtn?.addEventListener("click", () => {
   if (!masterBlob) return;
+
   savedMasterBlob = masterBlob;
-  masterState.textContent = "Recording saved in project state";
-  saveMasterRecBtn.disabled = true;
+
+  masterState.textContent = "Saved successfully";
+  status.textContent = "Master Rec saved successfully";
+
+  updateMasterHistoryButtons();
 });
 
 
@@ -20415,7 +20420,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "5.4.18",
+    version: "5.5.0",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -21053,7 +21058,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "5.4.18";
+const MYNUS_CLIENT_VERSION = "5.5.0";
 const MYNUS_CLIENT_CHANGE = "Karaoke non-Full-Screen minimum 620x900; separate session-only Sequencer History with Undo/Redo; Lyrics History, Trim, startup Select File/Open Project, and server unchanged";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -21452,6 +21457,43 @@ async function loadProjectById(id) {
     await loadWaveforms(originalFile, currentStemURLs);
     await reportProjectLoadTrace("WAVEFORMS READY", { command: "load waveform data", function: "loadWaveforms", parameters: {}, result: "done" });
 
+    // 5.5.0 | Восстанавливаем Save Rec из Project как полноценную Master-дорожку.
+    if (tracks.master) {
+      const masterUrl = withLoadTraceUrl(tracks.master, "master");
+      const masterResponse = await fetch(masterUrl, { headers: loadTraceHeaders() });
+      if (!masterResponse.ok) throw new Error("Project Master track not found");
+
+      const loadedMasterBlob = await masterResponse.blob();
+      const masterContext = new (window.AudioContext || window.webkitAudioContext)();
+
+      try {
+        const masterBuffer = await masterContext.decodeAudioData(
+          (await loadedMasterBlob.arrayBuffer()).slice(0)
+        );
+
+        masterBlob = loadedMasterBlob;
+        savedMasterBlob = loadedMasterBlob;
+        waveformData.master = masterBuffer;
+        masterSegments = [{ start: 0, buffer: masterBuffer }];
+        masterDuration = masterBuffer.duration;
+
+        if (masterObjectURL) {
+          try { URL.revokeObjectURL(masterObjectURL); } catch (_) {}
+        }
+
+        masterObjectURL = URL.createObjectURL(loadedMasterBlob);
+        masterAudio.src = masterObjectURL;
+        await waitForMetadata(masterAudio);
+
+        masterState.textContent = "Saved successfully";
+        saveAsMasterBtn.disabled = false;
+        saveMasterSelectionBtn.disabled = !hasSelection();
+        updateMasterHistoryButtons();
+      } finally {
+        await masterContext.close();
+      }
+    }
+
     const savedZoom = Number(project.sequencer?.pixelsPerSecond);
     const fitWidth = Math.max(1, masterTimeline.clientWidth);
     pixelsPerSecond = Number.isFinite(savedZoom) && savedZoom > 0
@@ -21628,7 +21670,10 @@ cancelSaveProjectBtn?.addEventListener("click", () => {
 });
 
 saveProjectDialog?.addEventListener("click", event => {
-  if (event.target === saveProjectDialog) saveProjectDialog.classList.remove("open");
+  if (event.target === saveProjectDialog) {
+    newProjectAfterSavePending = false;
+    saveProjectDialog.classList.remove("open");
+  }
 });
 
 confirmSaveProjectBtn?.addEventListener("click", async () => {
@@ -21645,13 +21690,15 @@ confirmSaveProjectBtn?.addEventListener("click", async () => {
   confirmSaveProjectBtn.disabled = true;
   if (saveProjectMessage) saveProjectMessage.textContent = "Saving…";
   try {
-    await saveCurrentProject(name, savePath, "", { activateProject: projectCreationPending });
+    await saveCurrentProject(name, savePath, "", {
+      activateProject: projectCreationPending,
+      silent: newProjectAfterSavePending
+    });
     projectCreationPending = false;
     saveProjectDialog.classList.remove("open");
 
     if (newProjectAfterSavePending) {
-      newProjectAfterSavePending = false;
-      window.location.reload();
+      startBlankNewProject();
       return;
     }
   } catch (error) {
@@ -21674,18 +21721,34 @@ saveProjectNameInput?.addEventListener("keydown", event => {
     event.preventDefault();
     confirmSaveProjectBtn.click();
   } else if (event.key === "Escape") {
+    newProjectAfterSavePending = false;
     saveProjectDialog.classList.remove("open");
   }
 });
 
+// 5.5.0 | NEW PROJECT — после успешного Save очистить текущую сессию
+// штатной clearProjectState(), оставить Sequencer и разрешить сразу выбрать новый файл.
+function startBlankNewProject() {
+  newProjectAfterSavePending = false;
+
+  clearProjectState();
+
+  if (audioFile) audioFile.value = "";
+  recentSelectedAudioFile = null;
+
+  if (fileName) fileName.textContent = "No file selected";
+
+  setUiMode(UI_MODE.SEQUENCER);
+  if (studio) studio.style.display = "block";
+
+  status.textContent = "New Project — select any audio file";
+}
+
+
 // Сохранение текущего Project и связанных данных.
 function openNewProjectSaveDialog() {
-  // 5.4.18 | New Project сначала предлагает Save Project текущего состояния.
-  // После успешного Save страница перезапускается в чистое пустое рабочее пространство.
-  if (!currentOriginalFile) {
-    window.location.reload();
-    return;
-  }
+  // 5.5.0 | New Project ВСЕГДА сначала открывает Save Project текущего состояния.
+  // Не проверяем currentOriginalFile: после LOAD он штатно равен null.
   newProjectAfterSavePending = true;
   projectCreationPending = false;
   saveProjectNameInput.value = projectSafeName();
@@ -21726,14 +21789,16 @@ overwriteProjectBtn?.addEventListener("click", async () => {
   const pending = pendingProjectConflict;
   overwriteProjectBtn.disabled = true;
   try {
-    await saveCurrentProject(pending.name, pending.savePath, "overwrite", { activateProject: projectCreationPending });
+    await saveCurrentProject(pending.name, pending.savePath, "overwrite", {
+      activateProject: projectCreationPending,
+      silent: newProjectAfterSavePending
+    });
     projectCreationPending = false;
     projectConflictDialog.classList.remove("open");
     saveProjectDialog.classList.remove("open");
     pendingProjectConflict = null;
     if (newProjectAfterSavePending) {
-      newProjectAfterSavePending = false;
-      window.location.reload();
+      startBlankNewProject();
       return;
     }
   } catch (error) {
@@ -21748,14 +21813,16 @@ saveProjectCopyBtn?.addEventListener("click", async () => {
   const pending = pendingProjectConflict;
   saveProjectCopyBtn.disabled = true;
   try {
-    await saveCurrentProject(pending.name, pending.savePath, "copy", { activateProject: projectCreationPending });
+    await saveCurrentProject(pending.name, pending.savePath, "copy", {
+      activateProject: projectCreationPending,
+      silent: newProjectAfterSavePending
+    });
     projectCreationPending = false;
     projectConflictDialog.classList.remove("open");
     saveProjectDialog.classList.remove("open");
     pendingProjectConflict = null;
     if (newProjectAfterSavePending) {
-      newProjectAfterSavePending = false;
-      window.location.reload();
+      startBlankNewProject();
       return;
     }
   } catch (error) {
@@ -21784,6 +21851,7 @@ projectConflictDialog?.addEventListener("click", event => {
   if (event.target === projectConflictDialog) {
     projectConflictDialog.classList.remove("open");
     pendingProjectConflict = null;
+    newProjectAfterSavePending = false;
   }
 });
 
@@ -21872,8 +21940,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.4.18 | New Project; tracks color&heihgt; Master track; Clear Select&Loop");
-console.log("[SERVICE CONSOLE] MyNus 5.4.18 | New Project; tracks color&heihgt; Master track; Clear Select&Loop");
+console.log("MyNus 5.5.0 | New Project + Save Rec fixes");
+console.log("[SERVICE CONSOLE] MyNus 5.5.0 | New Project + Save Rec fixes");
 </script>
 
 <div class="row" id="build-down">
