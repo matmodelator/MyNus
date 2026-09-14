@@ -1,9 +1,9 @@
 # ========================================
-# MyNus Server 5.4.0 | Чистая логика плей листа
+# TRACE | 5.5.0 New Project & Save rec
 # ========================================
 
 # ========================================
-# ИМПОРТЫ
+# IMPORTS
 # ========================================
 
 import sys
@@ -29,7 +29,7 @@ import language_tool_python
 
 
 # ========================================
-# ПРИЛОЖЕНИЕ
+# APPLICATION
 # ========================================
 
 app = Flask(__name__)
@@ -49,34 +49,21 @@ os.makedirs(PROJECTS_DIR, exist_ok=True)
 
 
 # ========================================
-# СОСТОЯНИЕ ЗАДАЧ
+# JOB STATE
 # ========================================
 
 jobs = {}
 
 
 
-# Произвольные папки Project, выбранные через диалог Windows, становятся доступны
-# через краткоживущие токены в памяти, чтобы браузер мог получить их дорожки.
+# Arbitrary project folders selected via the Windows folder picker are exposed
+# through short-lived in-memory tokens so the browser can fetch their tracks.
 opened_project_folders = {}
 
 
 # ========================================
-# TRACE ЗАГРУЗКИ PROJECT (5.4.0)
-#
-# ВАЖНО: сервер НЕ выполняет JavaScript-комментарии как код — это технически невозможно.
-# Вместо этого index отправляет в /debug/load-trace ТОЧНО ТУ ЖЕ русскую строку-маркер,
-# которая стоит рядом с выполняемым участком кода. Сервер печатает её в CMD.
-# Поэтому текст в исходнике и текст в фактическом runtime-логе совпадают буквально.
-#
-# СИНХРОНИЗИРОВАННЫЕ МАРКЕРЫ, которые также стоят комментариями в index:
-# [5.4.0][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию
-# [5.4.0][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию
-# [5.4.0][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию
-# [5.4.0][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID
-#
-# Этот endpoint только показывает выполнение шагов. Он НЕ выбирает ветку загрузки,
-# НЕ меняет параметры LOAD и НЕ управляет PlayList.
+# PROJECT LOAD TRACE (5.5.0)
+# Diagnostic-only endpoint. It does not write, delete, move or replace files.
 # ========================================
 
 @app.route("/debug/load-trace", methods=["POST"])
@@ -98,9 +85,6 @@ def debug_load_trace():
 
     print("\n" + "-" * 72, flush=True)
     print(f"[LOAD TRACE][{trace_id}] {stage}", flush=True)
-    # Строка ниже печатает тот же русский маркер, который находится комментарием в index.
-    # По ней в CMD видно, какой именно отмеченный участок index реально выполняется.
-    print(f"  КОММЕНТАРИЙ     = {stage}", flush=True)
     print(f"  project_id      = {project_id}", flush=True)
     print(f"  source          = {source}", flush=True)
     print(f"  ui_mode         = {ui_mode}", flush=True)
@@ -118,17 +102,17 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "5.4.0", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "5.5.0", "trace_id": trace_id})
 
 # ========================================
-# ГЛАВНАЯ СТРАНИЦА INDEX
+# INDEX
 # ========================================
 
 @app.route("/")
 # HTTP-обработчик этого маршрута.
 def index():
-    # History PlayList относится только к текущей сессии index.
-    # Перезагрузка index очищает history -N, но сохраняет current и queue.
+    # Play List history belongs to the current index session only.
+    # Reloading index clears -N history but preserves current and queue.
     state = _read_playlist_state()
     if state.get("history"):
         state["history"] = []
@@ -142,7 +126,7 @@ def index():
 
 
 # ========================================
-# ЗАПУСК РАЗДЕЛЕНИЯ
+# START SEPARATION
 # ========================================
 
 @app.route("/separate", methods=["POST"])
@@ -241,7 +225,7 @@ def separate():
 
 
 # ========================================
-# ОПРЕДЕЛЕНИЕ НАЧАЛА/КОНЦА ВОКАЛА
+# VOCAL START\END DETECTION
 # ========================================
 
 # Локальная серверная операция этого блока.
@@ -319,7 +303,7 @@ def detect_vocal_range(
     )
 
 # ========================================
-# LYRICS ЧЕРЕЗ WHISPERX
+# WHISPERX LYRICS
 # ========================================
 
 # Локальная серверная операция этого блока.
@@ -451,7 +435,7 @@ def detect_lyrics(vocal_path):
     }
 
 # ========================================
-# ПРОЦЕСС DEMUCS
+# DEMUCS PROCESS
 # ========================================
 
 # Локальная серверная операция этого блока.
@@ -495,7 +479,7 @@ def run_demucs(
 
 
         # ========================================
-        # ЧТЕНИЕ ВЫВОДА DEMUCS
+        # READ DEMUCS OUTPUT
         # ========================================
 
         for line in process.stdout:
@@ -543,7 +527,7 @@ def run_demucs(
 
 
         # ========================================
-        # ПОИСК РЕЗУЛЬТАТА DEMUCS
+        # FIND DEMUCS OUTPUT
         # ========================================
 
         model_dir = os.path.join(
@@ -625,7 +609,7 @@ def run_demucs(
             ] = target_path
 
         # ========================================
-        # ОПРЕДЕЛЕНИЕ НАЧАЛА / КОНЦА ВОКАЛА
+        # DETECT VOCAL START / END
         # ========================================
 
         (
@@ -637,7 +621,7 @@ def run_demucs(
 
 
         # ========================================
-        # ОПРЕДЕЛЕНИЕ LYRICS
+        # DETECT LYRICS
         # ========================================
 
         lyrics = detect_lyrics(
@@ -646,7 +630,7 @@ def run_demucs(
 
 
         # ========================================
-        # ЗАВЕРШЕНИЕ ЗАДАЧИ
+        # JOB COMPLETE
         # ========================================
       
         jobs[job_id]["progress"] = 100
@@ -706,7 +690,7 @@ def run_demucs(
 
 
 # ========================================
-# ПРОГРЕСС ПРОЦЕССА
+# PROCESS PROGRESS
 # ========================================
 
 @app.route("/progress/<job_id>")
@@ -726,7 +710,7 @@ def progress(job_id):
 
 
 # ========================================
-# ФАЙЛЫ РЕЗУЛЬТАТА
+# RESULT FILES
 # ========================================
 
 @app.route(
@@ -751,7 +735,7 @@ def result_file(
 
 
 # ========================================
-# ЭКСПОРТ АУДИО
+# AUDIO EXPORT
 # ========================================
 
 # Локальная серверная операция этого блока.
@@ -1139,7 +1123,7 @@ def export_audio():
 
 
 # ========================================
-# АВТОИСПРАВЛЕНИЕ LYRICS
+# LYRICS AUTOFIX
 # ========================================
 
 _language_tools = {}
@@ -1242,7 +1226,7 @@ def spellcheck():
 
 
 # ========================================
-# ЯЗЫК LYRICS + РУССКАЯ ТРАНСКРИПЦИЯ
+# LYRICS LANGUAGE + RU TRANSCRIPTION
 # ========================================
 
 SUPPORTED_LYRICS_LANGUAGES = {"ru","en","es","it","fr","uk"}
@@ -1390,13 +1374,13 @@ def transcribe_to_ru():
 
 
 # ========================================
-# ЗАПУСК СЕРВЕРА
+# SERVER START
 # ========================================
 
 
 
 # ========================================
-# MYNUS: состояние PlayList JSON + самостоятельные Projects | 5.4.0
+# MYNUS PlayList JSON state + standalone Projects | 5.5.0
 # ========================================
 def _project_id(value):
     value = secure_filename(str(value or "Project")) or "Project"
@@ -1469,78 +1453,57 @@ def _require_saved_project(project_id):
 
 
 # Работа с сохранённым Project.
-def _renumber_playlist_after_selection(project_id, selected_position):
-    """Единая операция смены Track 0 и перенумерации PlayList по исходному номеру n."""
+def _set_current_project(project_id, source="projects", mode=None):
     project_id, _ = _require_saved_project(project_id)
+    source = str(source or "projects").lower()
+    mode = str(mode or "").lower()
     state = _read_playlist_state()
+
     old_current = state.get("current")
 
-    # n = +бесконечность: Track пришёл через PostPlay -> Load another.
-    # Положительная очередь остаётся без изменений, а прежний Track 0 становится -1.
-    if selected_position == float("inf"):
-        if old_current and old_current != project_id:
-            state["history"].append(old_current)
-        state["current"] = project_id
-        _write_playlist_state(state)
-        print(f"[PLAYLIST] ПЕРЕНУМЕРАЦИЯ | n=+∞ | current={project_id!r}", flush=True)
-        return project_id
-
-    try:
-        n = int(selected_position)
-    except (TypeError, ValueError):
-        raise ValueError("Не указан корректный номер n для перенумерации PlayList")
-
-    # Основной рабочий случай: выбор Track с положительным номером +n.
-    # Старый 0 уходит в history (-1), выбранный +n становится 0, элементы
-    # +1..+(n-1) сохраняют номера, а элементы после +n автоматически сдвигаются на -1.
-    if n > 0:
-        queue = state["queue"]
-        queue_index = n - 1
-        if not 0 <= queue_index < len(queue):
-            raise ValueError("Номер n находится вне очереди PlayList")
-        if queue[queue_index] != project_id:
-            raise ValueError("Track по номеру n не совпадает с выбранным Project")
-
-        queue.pop(queue_index)
-        if old_current and old_current != project_id:
-            state["history"].append(old_current)
-        state["current"] = project_id
-        _write_playlist_state(state)
-        print(f"[PLAYLIST] ПЕРЕНУМЕРАЦИЯ | n=+{n} | current={project_id!r}", flush=True)
-        return project_id
-
-    # Для уже исполненного Track сохраняем прежнюю возможность выбрать его из history.
-    # Это также выполняется внутри одной функции состояния PlayList.
-    history = state["history"]
-    history_index = len(history) + n
-    if n >= 0 or not 0 <= history_index < len(history):
-        raise ValueError("Номер n находится вне history PlayList")
-    if history[history_index] != project_id:
-        raise ValueError("Track по номеру n не совпадает с выбранным Project")
-
-    history.pop(history_index)
-    if old_current and old_current != project_id:
-        history.append(old_current)
-    state["current"] = project_id
-    _write_playlist_state(state)
-    print(f"[PLAYLIST] ПЕРЕНУМЕРАЦИЯ | n={n} | current={project_id!r}", flush=True)
-    return project_id
-
-
-def _set_current_project(project_id, selected_position=None, mode=None):
-    project_id, _ = _require_saved_project(project_id)
-    mode = str(mode or "").lower()
-
-    # Обычный Open Project по прежним правилам начинает новый контекст PlayList.
-    # Это не переход по номеру n и не является частью единой функции перенумерации.
     if mode == "open":
+        # Open Project starts a fresh Play List context:
+        # only the opened Project is current (0); queue/history are empty.
         state = _empty_playlist_state()
         state["current"] = project_id
         _write_playlist_state(state)
-        print(f"[PLAYLIST] OPEN PROJECT | current={project_id!r} | очередь/history сброшены", flush=True)
+        print(
+            f"[PLAYLIST] OPEN PROJECT | current={project_id!r} | queue/history reset",
+            flush=True
+        )
         return project_id
 
-    return _renumber_playlist_after_selection(project_id, selected_position)
+    if mode == "takeover":
+        # Emergency manual takeover from the visible Play List.
+        # The interrupted current Track is not completed: it becomes +1.
+        if source == "playlist":
+            try:
+                state["queue"].remove(project_id)
+            except ValueError:
+                pass
+
+        if old_current and old_current != project_id:
+            # Keep one immediate continuation copy at +1.
+            state["queue"] = [item for item in state["queue"] if item != old_current]
+            state["queue"].insert(0, old_current)
+    else:
+        # Normal LOAD / Karaoke Next: previous current becomes history.
+        if old_current and old_current != project_id:
+            state["history"].append(old_current)
+
+        if source == "playlist":
+            try:
+                state["queue"].remove(project_id)
+            except ValueError:
+                pass
+
+    state["current"] = project_id
+    _write_playlist_state(state)
+    print(
+        f"[PLAYLIST] LOAD | current={project_id!r} | source={source} | mode={mode or 'normal'}",
+        flush=True
+    )
+    return project_id
 
 
 # Работа с состоянием Play List.
@@ -1590,25 +1553,20 @@ def list_projects():
 
 
 @app.route("/projects/use", methods=["POST"])
-# =====================================================================
-# [5.4.0][PLAYLIST — ТОЛЬКО НУМЕРАЦИЯ]
-# Этот маршрут НЕ загружает Project и не вмешивается в процесс LOAD.
-# После уже завершившегося LOAD он получает ID и исходный номер n выбранного Track
-# и вызывает одну функцию смены current/queue/history в playlist.json.
-# Значение n=+бесконечность передаётся строкой "inf" для PostPlay -> Load another.
-# =====================================================================
+# Работа с сохранённым Project.
 def use_project():
     data = request.get_json(silent=True) or {}
+    source = str(data.get("source") or "projects").lower()
     mode = str(data.get("mode") or "").lower()
     project_id = data.get("id")
-    raw_position = data.get("position")
-    selected_position = float("inf") if raw_position == "inf" else raw_position
+    if source == "history":
+        # History is a chronological log of completed/previous currents.
+        # Loading an old item does not erase the historical occurrence.
+        source = "history"
     try:
-        current_id = _set_current_project(project_id, selected_position, mode)
+        current_id = _set_current_project(project_id, source, mode)
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc)}), 404
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
     return jsonify({"ok": True, "current": current_id, **_playlist_projects_payload()})
 
 
@@ -1711,7 +1669,7 @@ def _project_payload_from_folder(folder, track_url_builder):
 @app.route("/projects/open-folder", methods=["POST"])
 # Работа с сохранённым Project.
 def open_project_folder():
-    """Диалог Windows для выбора папки Project из Karaoke -> Load another project."""
+    """Windows folder picker used by Karaoke -> Load another project."""
     try:
         import tkinter as tk
         from tkinter import filedialog
@@ -1837,7 +1795,7 @@ def save_project():
 
         track_ids = [
             "original", "vocals", "pitchCorrection", "harmonizer",
-            "drums", "bass", "guitar", "piano", "other",
+            "drums", "bass", "guitar", "piano", "other", "master",
             "reserve1", "reserve2", "reserve3"
         ]
         track_files = {}
@@ -1862,7 +1820,7 @@ def save_project():
         if not track_files.get("original"):
             raise ValueError("Original track not received")
 
-        project_json["version"] = "5.4.0"
+        project_json["version"] = "5.5.0"
         project_json["id"] = project_id
         project_json["name"] = project_name
         project_json["tracks"] = track_files
@@ -1956,18 +1914,9 @@ def list_saved_projects():
 
 
 @app.route("/saved-projects/<project_id>", methods=["GET"])
-# =====================================================================
-# [5.4.0][ЕДИНАЯ LOAD-ФУНКЦИЯ] Сервер отдаёт Project по одному ID.
-# Этот маршрут одинаков для всех трёх сценариев index.
-# Сервер НЕ получает параметры нумерации и НЕ знает, откуда пришёл ID:
-# Open Project, PlayList или Open next.
-# =====================================================================
+# Работа с сохранённым Project.
 def get_saved_project(project_id):
     project_id = _project_id(project_id)
-    print(
-        f"[5.4.0][ЕДИНАЯ LOAD-ФУНКЦИЯ] Сервер получил GET Project по ID: {project_id}",
-        flush=True
-    )
     folder = os.path.join(PROJECTS_DIR, project_id)
     project_path = os.path.join(folder, "Project.json")
     lyrics_path = os.path.join(folder, "Lyrics.json")
@@ -2012,8 +1961,8 @@ def print_restart_command():
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("MyNus Server 5.4.0")
-    print(r"5.4.0: единая нумерация PlayList по n; процесс LOAD не изменён; комментарии на русском.")
+    print("MyNus Server 5.5.0")
+    print(r"5.5.0: New Project + Save Rec; Project SAVE/LOAD supports Master Rec track.")
     print("=" * 72 + "\n")
 
     try:
