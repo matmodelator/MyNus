@@ -1,4 +1,4 @@
-<!-- MyNus 5.5.0 | New Project + Save Rec fixes -->
+<!-- MyNus 5.5.3 | New Project  NEW-->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.5.0</title>
+  <title>MyNus 5.5.3</title>
 
 
  <style>
@@ -20420,7 +20420,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "5.5.0",
+    version: "5.5.2",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -20510,10 +20510,8 @@ async function saveCurrentProject(projectName, savePath, conflictAction = "", op
 
   const savedPath = data.path || targetPath || "C:\\MyNus\\Projects";
   status.textContent = "Project saved: " + (data.name || name);
-  if (!options.silent) {
-    if (saveProjectMessage) saveProjectMessage.textContent = "Saved successfully: " + savedPath;
-    window.alert("Project saved successfully:\n" + savedPath);
-  }
+  if (saveProjectMessage) saveProjectMessage.textContent = "Saved successfully: " + savedPath;
+  window.alert("Project saved successfully:\n" + savedPath);
   return data;
 }
 
@@ -21058,7 +21056,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "5.5.0";
+const MYNUS_CLIENT_VERSION = "5.5.2";
 const MYNUS_CLIENT_CHANGE = "Karaoke non-Full-Screen minimum 620x900; separate session-only Sequencer History with Undo/Redo; Lyrics History, Trim, startup Select File/Open Project, and server unchanged";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -21300,6 +21298,57 @@ function clearProjectState() {
   updateMasterCursor();
   updateCropButtons();
   updateMixButtons();
+  syncScrollTo(0);
+}
+
+function clearProjectImage() {
+  // 5.5.2 | Только визуальная очистка после clearProjectState().
+  // Данные Project здесь НЕ меняются.
+
+  // Полностью очищаем waveform всех дорожек, включая Original и Master.
+  Object.values(canvases).forEach(canvas => {
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  });
+
+  // Очищаем шкалу Master Timeline.
+  if (masterRuler) {
+    masterRuler.innerHTML = "";
+  }
+
+  // Убираем Selection.
+  if (selectionRange) {
+    selectionRange.style.display = "none";
+  }
+
+  // Курсор Master возвращаем в начало.
+  if (masterCursor) {
+    masterCursor.style.left = "0px";
+  }
+
+  // Lyrics: штатно рисуем пустое состояние.
+  renderLyrics();
+
+  // Lyrics Editor: штатно очищает строки,
+  // потому что clearProjectState() уже обнулил lyricsEditorDraft.
+  renderLyricsEditor();
+
+  // Structure: штатно рисуем пустую структуру.
+  // ВАЖНО: именно renderLyricsStructure(), а не
+  // renderLyricsStructureTimeline(0).
+  renderLyricsStructure();
+
+  // Сбрасываем визуальный Selection на дорожках.
+  updateTrackSelectionOverlays();
+
+  // Синхронизируем нулевое положение интерфейса.
+  updateTimeDisplay();
+  updatePlayheads();
+  updateMasterCursor();
+
+  // Возвращаем общий горизонтальный скролл в начало.
   syncScrollTo(0);
 }
 
@@ -21636,11 +21685,39 @@ async function openLoadProjectDialog() {
   loadProjectDialog.classList.add("open");
 }
 
+// ============================================================================
+// 5.5.3 | SAVE PROJECT
+// ============================================================================
+
+// Если SAVE был вызван из NEW PROJECT,
+// здесь хранится функция завершения ожидания SAVE.
+// null = обычный SAVE, который никто не ожидает.
+let saveProjectResolve = null;
+
+
+// ============================================================================
+// SAVE PROJECT — ОТКРЫТИЕ ДИАЛОГА
+// ============================================================================
+
 saveProjectBtn?.addEventListener("click", () => {
+
+  // Подставляем имя текущего проекта.
   saveProjectNameInput.value = projectSafeName();
-  if (saveProjectPathInput && !saveProjectPathInput.value.trim()) saveProjectPathInput.value = "C:\\MyNus\\Projects";
-  if (saveProjectMessage) saveProjectMessage.textContent = "";
+
+  // Если путь ещё не задан — используем стандартную папку Projects.
+  if (saveProjectPathInput && !saveProjectPathInput.value.trim()) {
+    saveProjectPathInput.value = "C:\\MyNus\\Projects";
+  }
+
+  // Очищаем сообщение предыдущего SAVE.
+  if (saveProjectMessage) {
+    saveProjectMessage.textContent = "";
+  }
+
+  // Открываем штатный диалог Save Project.
   saveProjectDialog.classList.add("open");
+
+  // После открытия ставим курсор в поле имени проекта.
   requestAnimationFrame(() => {
     saveProjectNameInput.focus();
     saveProjectNameInput.select();
@@ -21648,224 +21725,590 @@ saveProjectBtn?.addEventListener("click", () => {
 });
 
 
+// ============================================================================
+// SAVE PROJECT — ВЫБОР ПАПКИ
+// ============================================================================
+
 browseSaveProjectPathBtn?.addEventListener("click", async () => {
+
   browseSaveProjectPathBtn.disabled = true;
+
   try {
-    const response = await fetch("/projects/select-folder", { method: "POST" });
+
+    const response = await fetch("/projects/select-folder", {
+      method: "POST"
+    });
+
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "Folder selection failed");
-    if (data.path) saveProjectPathInput.value = data.path;
+
+    if (!response.ok) {
+      throw new Error(data.error || "Folder selection failed");
+    }
+
+    // Сервер вернул выбранную папку — записываем её в поле.
+    if (data.path) {
+      saveProjectPathInput.value = data.path;
+    }
+
   } catch (error) {
+
     console.error(error);
-    if (saveProjectMessage) saveProjectMessage.textContent = error.message;
+
+    if (saveProjectMessage) {
+      saveProjectMessage.textContent = error.message;
+    }
+
   } finally {
+
     browseSaveProjectPathBtn.disabled = false;
   }
 });
 
-cancelSaveProjectBtn?.addEventListener("click", () => {
-  projectCreationPending = false;
-  newProjectAfterSavePending = false;
-  saveProjectDialog.classList.remove("open");
-});
 
-saveProjectDialog?.addEventListener("click", event => {
-  if (event.target === saveProjectDialog) {
-    newProjectAfterSavePending = false;
-    saveProjectDialog.classList.remove("open");
+// ============================================================================
+// SAVE PROJECT — ОЖИДАНИЕ РЕЗУЛЬТАТА
+// ============================================================================
+
+// Используется NEW PROJECT.
+//
+// Функция открывает ОБЫЧНЫЙ штатный Save Project,
+// но возвращается из await только тогда, когда:
+//
+// true  = SAVE действительно успешно завершён;
+// false = пользователь отменил SAVE.
+//
+// Обычная кнопка Save Project этой функцией пользоваться не обязана.
+function waitForSaveProject() {
+
+  return new Promise(resolve => {
+
+    // Запоминаем, кому сообщить результат SAVE.
+    saveProjectResolve = resolve;
+
+    // Открываем тот же самый штатный Save Project.
+    saveProjectBtn.click();
+  });
+}
+
+
+// ============================================================================
+// SAVE PROJECT — CANCEL
+// ============================================================================
+
+cancelSaveProjectBtn?.addEventListener("click", () => {
+
+  // Закрываем диалог.
+  saveProjectDialog.classList.remove("open");
+
+  // Если SAVE ожидался функцией NEW PROJECT —
+  // сообщаем ей, что сохранение отменено.
+  if (saveProjectResolve) {
+    saveProjectResolve(false);
+    saveProjectResolve = null;
   }
 });
 
+
+// ============================================================================
+// SAVE PROJECT — ЗАКРЫТИЕ КЛИКОМ ВНЕ ДИАЛОГА
+// ============================================================================
+
+saveProjectDialog?.addEventListener("click", event => {
+
+  if (event.target === saveProjectDialog) {
+
+    saveProjectDialog.classList.remove("open");
+
+    // Для NEW PROJECT это считается отменой SAVE.
+    if (saveProjectResolve) {
+      saveProjectResolve(false);
+      saveProjectResolve = null;
+    }
+  }
+});
+
+
+// ============================================================================
+// SAVE PROJECT — КНОПКА SAVE В ДИАЛОГЕ
+// ============================================================================
+
 confirmSaveProjectBtn?.addEventListener("click", async () => {
+
+  // Получаем имя проекта и путь сохранения.
   const name = String(saveProjectNameInput.value || "").trim();
   const savePath = String(saveProjectPathInput?.value || "").trim();
+
+
+  // Без имени не сохраняем.
   if (!name) {
     saveProjectNameInput.focus();
     return;
   }
+
+
+  // Без пути не сохраняем.
   if (!savePath) {
     saveProjectPathInput?.focus();
     return;
   }
+
+
+  // Защита от повторного нажатия SAVE во время сохранения.
   confirmSaveProjectBtn.disabled = true;
-  if (saveProjectMessage) saveProjectMessage.textContent = "Saving…";
+
+  if (saveProjectMessage) {
+    saveProjectMessage.textContent = "Saving…";
+  }
+
+
   try {
-    await saveCurrentProject(name, savePath, "", {
-      activateProject: projectCreationPending,
-      silent: newProjectAfterSavePending
-    });
-    projectCreationPending = false;
+
+    // ------------------------------------------------------------------------
+    // РЕАЛЬНОЕ СОХРАНЕНИЕ PROJECT
+    // ------------------------------------------------------------------------
+
+    await saveCurrentProject(name, savePath, "");
+
+
+    // SAVE успешно завершён.
+    // Закрываем Save Project.
     saveProjectDialog.classList.remove("open");
 
-    if (newProjectAfterSavePending) {
-      startBlankNewProject();
-      return;
+
+    // Если этот SAVE был запущен через NEW PROJECT,
+    // разрешаем newProject() продолжить выполнение.
+    if (saveProjectResolve) {
+      saveProjectResolve(true);
+      saveProjectResolve = null;
     }
+
+
   } catch (error) {
+
     console.error(error);
+
+
+    // ------------------------------------------------------------------------
+    // PROJECT С ТАКИМ ИМЕНЕМ УЖЕ СУЩЕСТВУЕТ
+    // ------------------------------------------------------------------------
+
     if (error.projectConflict) {
-      pendingProjectConflict = { name, savePath };
-      if (projectConflictMessage) projectConflictMessage.textContent = "Project “" + name + "” already exists.";
+
+      // Сохраняем имя и путь для дальнейшего
+      // Overwrite / Save Copy / Rename.
+      pendingProjectConflict = {
+        name,
+        savePath
+      };
+
+      if (projectConflictMessage) {
+        projectConflictMessage.textContent =
+          "Project “" + name + "” already exists.";
+      }
+
+      // Открываем штатный диалог конфликта.
       projectConflictDialog?.classList.add("open");
+
+
     } else {
+
+      // ----------------------------------------------------------------------
+      // ОБЫЧНАЯ ОШИБКА SAVE
+      // ----------------------------------------------------------------------
+
       status.textContent = error.message;
-      if (saveProjectMessage) saveProjectMessage.textContent = error.message;
+
+      if (saveProjectMessage) {
+        saveProjectMessage.textContent = error.message;
+      }
     }
+
+
   } finally {
+
+    // Снова разрешаем кнопку SAVE.
     confirmSaveProjectBtn.disabled = false;
   }
 });
 
+
+// ============================================================================
+// SAVE PROJECT — ENTER / ESCAPE
+// ============================================================================
+
 saveProjectNameInput?.addEventListener("keydown", event => {
+
+  // ENTER = нажать SAVE.
   if (event.key === "Enter") {
+
     event.preventDefault();
     confirmSaveProjectBtn.click();
+
+
+  // ESCAPE = отменить SAVE.
   } else if (event.key === "Escape") {
-    newProjectAfterSavePending = false;
+
     saveProjectDialog.classList.remove("open");
+
+    // Если SAVE ожидался NEW PROJECT —
+    // возвращаем ему отмену.
+    if (saveProjectResolve) {
+      saveProjectResolve(false);
+      saveProjectResolve = null;
+    }
   }
 });
 
-// 5.5.0 | NEW PROJECT — после успешного Save очистить текущую сессию
-// штатной clearProjectState(), оставить Sequencer и разрешить сразу выбрать новый файл.
-function startBlankNewProject() {
-  newProjectAfterSavePending = false;
+
+// ============================================================================
+// 5.5.3 | NEW PROJECT
+// ============================================================================
+
+// Кнопка New Project запускает ТОЛЬКО функцию newProject().
+loadProjectBtn?.addEventListener("click", newProject);
+
+
+async function newProject() {
+
+  // --------------------------------------------------------------------------
+  // 1. ОТКРЫВАЕМ ШТАТНЫЙ SAVE PROJECT
+  // --------------------------------------------------------------------------
+  //
+  // Здесь открывается обычный Save Project.
+  // newProject() останавливается на await и ждёт результата.
+
+  const saved = await waitForSaveProject();
+
+
+  // --------------------------------------------------------------------------
+  // 2. SAVE НЕ СОСТОЯЛСЯ
+  // --------------------------------------------------------------------------
+  //
+  // Пользователь нажал Cancel / Escape / закрыл диалог.
+  // НИЧЕГО не очищаем.
+
+  if (!saved) {
+    return;
+  }
+
+
+  // --------------------------------------------------------------------------
+  // 3. SAVE УСПЕШНО ЗАВЕРШЁН
+  // --------------------------------------------------------------------------
+  //
+  // Только теперь очищаем текущий проект.
 
   clearProjectState();
+  clearProjectImage();
 
-  if (audioFile) audioFile.value = "";
+
+  // Очищаем выбранный исходный аудиофайл.
+  if (audioFile) {
+    audioFile.value = "";
+  }
+
   recentSelectedAudioFile = null;
 
-  if (fileName) fileName.textContent = "No file selected";
 
+  // Возвращаем исходную надпись выбора файла.
+  if (fileName) {
+    fileName.textContent = "No file selected";
+  }
+
+
+  // Возвращаем интерфейс в Sequencer.
   setUiMode(UI_MODE.SEQUENCER);
-  if (studio) studio.style.display = "block";
 
+  if (studio) {
+    studio.style.display = "block";
+  }
+
+
+  // NEW PROJECT полностью готов.
   status.textContent = "New Project — select any audio file";
 }
 
 
-// Сохранение текущего Project и связанных данных.
-function openNewProjectSaveDialog() {
-  // 5.5.0 | New Project ВСЕГДА сначала открывает Save Project текущего состояния.
-  // Не проверяем currentOriginalFile: после LOAD он штатно равен null.
-  newProjectAfterSavePending = true;
-  projectCreationPending = false;
-  saveProjectNameInput.value = projectSafeName();
-  if (saveProjectPathInput && !saveProjectPathInput.value.trim()) saveProjectPathInput.value = "C:\\MyNus\\Projects";
-  if (saveProjectMessage) saveProjectMessage.textContent = "";
-  saveProjectDialog.classList.add("open");
-  requestAnimationFrame(() => {
-    saveProjectNameInput.focus();
-    saveProjectNameInput.select();
-  });
-}
-
-loadProjectBtn?.addEventListener("click", openNewProjectSaveDialog);
+// ============================================================================
+// CREATE PROJECT ПОСЛЕ SPLIT
+// ============================================================================
+//
+// ВАЖНО:
+// Create Project — это НЕ New Project.
+//
+// После Split материал уже загружен:
+// audio / stems / lyrics / structure / waveforms.
+//
+// Поэтому Create Project только открывает сохранение проекта.
+// Никакой очистки после SAVE здесь нет.
 
 createNewProjectBtn?.addEventListener("click", () => {
+
+  // Закрываем вопрос Create Project / Continue Without Project.
   newProjectPromptDialog?.classList.remove("open");
+
+  // Открываем штатный сценарий создания/сохранения
+  // проекта из уже загруженного материала.
   openNewProjectSaveDialog();
 });
 
+
+// ============================================================================
+// CONTINUE WITHOUT PROJECT
+// ============================================================================
+
 continueWithoutProjectBtn?.addEventListener("click", () => {
+
+  // Закрываем диалог после Split.
   newProjectPromptDialog?.classList.remove("open");
+
+  // Работа продолжается без активного Project.
   projectCreationPending = false;
   setProjectActive(null);
+
   status.textContent = "Ready — audio tracks only";
 });
 
+
+// ============================================================================
+// OPEN PROJECT
+// ============================================================================
+
 openProjectStartBtn?.addEventListener("click", () => {
-  beginProjectLoadTrace("Open Project button", null, "projects");
-  void reportProjectLoadTrace("OPEN PROJECT BUTTON CLICK");
+
+  // Запускаем диагностический trace загрузки Project.
+  beginProjectLoadTrace(
+    "Open Project button",
+    null,
+    "projects"
+  );
+
+  void reportProjectLoadTrace(
+    "OPEN PROJECT BUTTON CLICK"
+  );
+
+
+  // Открываем штатный Load Project.
   openLoadProjectDialog().catch(error => {
+
     console.error(error);
     status.textContent = error.message;
   });
 });
 
+
+// ============================================================================
+// PROJECT CONFLICT — OVERWRITE
+// ============================================================================
+
 overwriteProjectBtn?.addEventListener("click", async () => {
-  if (!pendingProjectConflict) return;
+
+  // Без сохранённого конфликта делать нечего.
+  if (!pendingProjectConflict) {
+    return;
+  }
+
+
   const pending = pendingProjectConflict;
+
   overwriteProjectBtn.disabled = true;
+
+
   try {
-    await saveCurrentProject(pending.name, pending.savePath, "overwrite", {
-      activateProject: projectCreationPending,
-      silent: newProjectAfterSavePending
-    });
-    projectCreationPending = false;
+
+    // Перезаписываем существующий Project.
+    await saveCurrentProject(
+      pending.name,
+      pending.savePath,
+      "overwrite"
+    );
+
+
+    // SAVE успешно завершён.
     projectConflictDialog.classList.remove("open");
     saveProjectDialog.classList.remove("open");
+
     pendingProjectConflict = null;
-    if (newProjectAfterSavePending) {
-      startBlankNewProject();
-      return;
+
+
+    // Если исходный SAVE был вызван NEW PROJECT,
+    // сообщаем newProject(), что SAVE завершился успешно.
+    //
+    // После этого newProject() продолжит работу
+    // и очистит текущий проект.
+    if (saveProjectResolve) {
+      saveProjectResolve(true);
+      saveProjectResolve = null;
     }
+
+
   } catch (error) {
+
     status.textContent = error.message;
+
+
   } finally {
+
     overwriteProjectBtn.disabled = false;
   }
 });
 
+
+// ============================================================================
+// PROJECT CONFLICT — SAVE COPY
+// ============================================================================
+
 saveProjectCopyBtn?.addEventListener("click", async () => {
-  if (!pendingProjectConflict) return;
+
+  if (!pendingProjectConflict) {
+    return;
+  }
+
+
   const pending = pendingProjectConflict;
+
   saveProjectCopyBtn.disabled = true;
+
+
   try {
-    await saveCurrentProject(pending.name, pending.savePath, "copy", {
-      activateProject: projectCreationPending,
-      silent: newProjectAfterSavePending
-    });
-    projectCreationPending = false;
+
+    // Сохраняем Project как копию.
+    await saveCurrentProject(
+      pending.name,
+      pending.savePath,
+      "copy"
+    );
+
+
+    // SAVE успешно завершён.
     projectConflictDialog.classList.remove("open");
     saveProjectDialog.classList.remove("open");
+
     pendingProjectConflict = null;
-    if (newProjectAfterSavePending) {
-      startBlankNewProject();
-      return;
+
+
+    // Если SAVE ожидался NEW PROJECT —
+    // разрешаем newProject() продолжить.
+    if (saveProjectResolve) {
+      saveProjectResolve(true);
+      saveProjectResolve = null;
     }
+
+
   } catch (error) {
+
     status.textContent = error.message;
+
+
   } finally {
+
     saveProjectCopyBtn.disabled = false;
   }
 });
 
+
+// ============================================================================
+// PROJECT CONFLICT — RENAME
+// ============================================================================
+
 renameProjectBtn?.addEventListener("click", () => {
+
+  // Закрываем Conflict.
   projectConflictDialog.classList.remove("open");
+
   pendingProjectConflict = null;
+
+
+  // Возвращаем пользователя в Save Project.
   saveProjectDialog.classList.add("open");
-  if (saveProjectMessage) saveProjectMessage.textContent = "Enter a new project name.";
+
+
+  if (saveProjectMessage) {
+    saveProjectMessage.textContent =
+      "Enter a new project name.";
+  }
+
+
+  // Выделяем текущее имя для замены.
   saveProjectNameInput.focus();
   saveProjectNameInput.select();
 });
 
-cancelProjectConflictBtn?.addEventListener("click", () => {
-  projectConflictDialog.classList.remove("open");
-  pendingProjectConflict = null;
-  newProjectAfterSavePending = false;
-});
 
-projectConflictDialog?.addEventListener("click", event => {
-  if (event.target === projectConflictDialog) {
-    projectConflictDialog.classList.remove("open");
-    pendingProjectConflict = null;
-    newProjectAfterSavePending = false;
+// ============================================================================
+// PROJECT CONFLICT — CANCEL
+// ============================================================================
+
+cancelProjectConflictBtn?.addEventListener("click", () => {
+
+  // Закрываем Conflict.
+  projectConflictDialog.classList.remove("open");
+
+  pendingProjectConflict = null;
+
+
+  // Если конфликт возник во время NEW PROJECT,
+  // отменяем весь сценарий New Project.
+  if (saveProjectResolve) {
+    saveProjectResolve(false);
+    saveProjectResolve = null;
   }
 });
 
+
+// ============================================================================
+// PROJECT CONFLICT — КЛИК ВНЕ ДИАЛОГА
+// ============================================================================
+
+projectConflictDialog?.addEventListener("click", event => {
+
+  if (event.target === projectConflictDialog) {
+
+    projectConflictDialog.classList.remove("open");
+
+    pendingProjectConflict = null;
+
+
+    // Для NEW PROJECT закрытие Conflict
+    // считается отменой SAVE.
+    if (saveProjectResolve) {
+      saveProjectResolve(false);
+      saveProjectResolve = null;
+    }
+  }
+});
+
+
+// ============================================================================
+// LOAD PROJECT — CANCEL
+// ============================================================================
+
 cancelLoadProjectBtn?.addEventListener("click", () => {
+
   loadProjectDialog.classList.remove("open");
+
+  // Сбрасываем ожидание Load Another из POSTPLAY.
   postPlayLoadAnotherPending = false;
 });
 
+
+// ============================================================================
+// LOAD PROJECT — КЛИК ВНЕ ДИАЛОГА
+// ============================================================================
+
 loadProjectDialog?.addEventListener("click", event => {
+
   if (event.target === loadProjectDialog) {
+
     loadProjectDialog.classList.remove("open");
+
+    // Сбрасываем ожидание Load Another из POSTPLAY.
     postPlayLoadAnotherPending = false;
   }
 });
+
+
+
 
 lyricsFullScreenPlaylistBtn?.addEventListener("click", event => {
   event.stopPropagation();
@@ -21940,8 +22383,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.5.0 | New Project + Save Rec fixes");
-console.log("[SERVICE CONSOLE] MyNus 5.5.0 | New Project + Save Rec fixes");
+console.log("MyNus 5.5.3 | New Project NEW");
+console.log("[SERVICE CONSOLE] MyNus 5.5.3 | New Project NEW");
 </script>
 
 <div class="row" id="build-down">
