@@ -1,4 +1,4 @@
-<!-- MyNus 5.5.3 | New Project  NEW-->
+<!-- MyNus 5.5.3,5 | fix create project-->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -132,11 +132,23 @@
        STATUS AND PROCESS
     ======================================== */
 
-    #status {
-      margin-top: 15px;
-      min-height: 20px;
+       .progress-status {
+      position: absolute;
+      left: 10px;
+      top: 0;
+      bottom: 0;
 
-      text-align: center;
+      display: flex;
+      align-items: center;
+
+      font-family: monospace;
+      font-size: 13px;
+      font-weight: bold;
+
+      color: #111;
+      z-index: 2;
+
+      pointer-events: none;
     }
 
     .progress-wrap {
@@ -3171,7 +3183,6 @@ position: relative;
     <input
       type="file"
       id="audioFile"
-      accept="audio/*"
     >
 
     <button
@@ -3216,9 +3227,7 @@ position: relative;
        PROCESS
   ======================================== -->
 
-  <div id="status"></div>
-
-  <div
+    <div
     id="progressWrap"
     class="progress-wrap"
   >
@@ -3226,6 +3235,11 @@ position: relative;
     <div
       id="progressBar"
       class="progress-bar"
+    ></div>
+
+    <div
+      id="status"
+      class="progress-status"
     ></div>
 
     <div
@@ -7096,7 +7110,7 @@ function resetMaster() {
 
 
   masterState.textContent =
-    "Empty";
+    "No Records";
 
 
   recordMasterBtn.disabled =
@@ -11254,10 +11268,6 @@ async function finishMasterRecording() {
     );
 
 
-    masterState.textContent =
-      "Master recording error";
-
-
     status.textContent =
       "Master recording error";
 
@@ -11265,10 +11275,6 @@ async function finishMasterRecording() {
     return;
 
   }
-
-
-  masterState.textContent =
-    "Recorded — not saved";
 
 
   saveAsMasterBtn.disabled =
@@ -12251,7 +12257,7 @@ async function restoreMasterFromSegments() {
 
 
     masterState.textContent =
-      "Empty";
+      "No Records";
 
 
     saveAsMasterBtn.disabled =
@@ -12274,7 +12280,7 @@ async function restoreMasterFromSegments() {
 
 
   masterState.textContent =
-    "Recorded";
+    "Restored from History";
 
 
   saveAsMasterBtn.disabled =
@@ -19688,7 +19694,7 @@ function resetToInitialSplit() {
 
 
   masterState.textContent =
-    "Empty";
+    "No Records";
 
 
   status.textContent =
@@ -22044,12 +22050,10 @@ async function newProject() {
 
 createNewProjectBtn?.addEventListener("click", () => {
 
-  // Закрываем вопрос Create Project / Continue Without Project.
   newProjectPromptDialog?.classList.remove("open");
 
-  // Открываем штатный сценарий создания/сохранения
-  // проекта из уже загруженного материала.
-  openNewProjectSaveDialog();
+  projectCreationPending = true;
+  saveProjectBtn.click();
 });
 
 
@@ -22383,8 +22387,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.5.3 | New Project NEW");
-console.log("[SERVICE CONSOLE] MyNus 5.5.3 | New Project NEW");
+console.log("MyNus 5.5.3 | New Project NEW\audio files");
+console.log("[SERVICE CONSOLE] MyNus 5.5.3 | New Project NEW\audio files");
 </script>
 
 <div class="row" id="build-down">
