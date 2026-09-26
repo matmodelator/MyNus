@@ -1,4 +1,4 @@
-<!-- MyNus 5.5.5 | Processing fix-->
+<!-- MyNus 5.6.0 | Перехват всех логов CLIENT CONSOLE -> SERVER CMD-->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.5.5</title>
+  <title>MyNus 5.6.0</title>
 
 
  <style>
@@ -1145,7 +1145,7 @@ position: relative;
     .master-state {
       margin-top: 8px;
       font-size: 12px;
-      color: #fff;
+      color: #666;
     }
 
     .export-dialog {
@@ -3188,8 +3188,7 @@ position: relative;
     <input
       type="file"
       id="audioFile"
-      accept="audio/*"
-    >
+          >
 
     <button
       type="button"
@@ -4995,6 +4994,78 @@ position: relative;
 
 
 // ========================================
+// Перехват всех логов CLIENT CONSOLE -> SERVER CMD
+// ========================================
+
+(function () {
+  const methods = ["log", "info", "warn", "error", "debug"];
+  const originals = {};
+
+  function serialize(value) {
+    if (value instanceof Error) {
+      return value.stack || value.message || String(value);
+    }
+
+    if (typeof value === "string") {
+      return value;
+    }
+
+    try {
+      return JSON.stringify(value);
+    } catch (_) {
+      return String(value);
+    }
+  }
+
+  methods.forEach(level => {
+    originals[level] = console[level].bind(console);
+
+    console[level] = (...args) => {
+      // Обычная browser console остаётся работать.
+      originals[level](...args);
+
+      const message = args.map(serialize).join(" ");
+
+      fetch("/debug/client-console", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          level,
+          message,
+          client_time: new Date().toISOString(),
+          page: location.href,
+          user_agent: navigator.userAgent
+        }),
+        keepalive: true
+      }).catch(() => {
+        // ВАЖНО: здесь нельзя console.error(),
+        // иначе получится рекурсивная отправка ошибки.
+      });
+    };
+  });
+
+  window.addEventListener("error", event => {
+    console.error(
+      "UNCAUGHT ERROR:",
+      event.message,
+      event.filename + ":" + event.lineno + ":" + event.colno,
+      event.error || ""
+    );
+  });
+
+  window.addEventListener("unhandledrejection", event => {
+    console.error(
+      "UNHANDLED PROMISE REJECTION:",
+      event.reason
+    );
+  });
+})();
+
+
+
+// ========================================
 // ЭЛЕМЕНТЫ СТРАНИЦЫ
 // ========================================
 
@@ -6298,11 +6369,11 @@ selectFileBtn.addEventListener(
       try {
         const [handle] = await window.showOpenFilePicker({
           multiple: false,
-          types: [{
-            description: "Audio",
-            accept: { "audio/*": [".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg"] }
-          }]
-        });
+  types: [{
+    description: "Audio",
+    accept: { "audio/*": [".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg"] }
+  }]
+               });
         if (!handle) return;
         const file = await handle.getFile();
         clearProjectState();
@@ -6624,14 +6695,7 @@ splitBtn.addEventListener(
 
       buildKaraokeLines();
 
-      // Structure создаётся автоматически только один раз — при первичной обработке нового трека.
-      const detectedInitialStructure = detectLyricsStructure(karaokeLines);
-      lyricsStructureDraft = normalizeStructureCoverage(
-        detectedInitialStructure,
-        structureSongEnd(detectedInitialStructure)
-      ).map(item => ({ ...item }));
-      lyricsStructureSelectedIndex = -1;
-      lyricsStructureSelectedIndices = new Set();
+      
 
       originalWhisperLyrics =
         JSON.parse(JSON.stringify(lyricsData));
@@ -6683,6 +6747,18 @@ splitBtn.addEventListener(
 
       duration =
         originalAudio.duration;
+
+
+// Structure создаётся автоматически только один раз — при первичной обработке нового трека.
+      const detectedInitialStructure = detectLyricsStructure(karaokeLines);
+      lyricsStructureDraft = normalizeStructureCoverage(
+        detectedInitialStructure,
+        structureSongEnd(detectedInitialStructure)
+      ).map(item => ({ ...item }));
+      lyricsStructureSelectedIndex = -1;
+      lyricsStructureSelectedIndices = new Set();
+
+
 
 studio.style.display =
   "block";
@@ -7122,7 +7198,7 @@ function resetMaster() {
 
 
   masterState.textContent =
-    "Empty";
+    "No Records";
 
 
   recordMasterBtn.disabled =
@@ -12283,7 +12359,7 @@ async function restoreMasterFromSegments() {
 
 
     masterState.textContent =
-      "Empty";
+      "No Records";
 
 
     saveAsMasterBtn.disabled =
@@ -12306,7 +12382,7 @@ async function restoreMasterFromSegments() {
 
 
   masterState.textContent =
-    "Recorded";
+    "Recover by History";
 
 
   saveAsMasterBtn.disabled =
@@ -19695,7 +19771,7 @@ function resetToInitialSplit() {
 
 
   masterState.textContent =
-    "Empty";
+    "No Records";
 
 
   status.textContent =
@@ -19907,19 +19983,27 @@ window.addEventListener(
       event.target;
 
 
-    const isTextEditing =
-      target
-      &&
-      (
-        target.tagName === "TEXTAREA"
-        ||
-        target.tagName === "INPUT"
-        ||
-        target.isContentEditable
-      );
+   const isTextEditing =
+  target
+  &&
+  (
+    target.tagName === "TEXTAREA"
+    ||
+    target.tagName === "INPUT"
+    ||
+    target.isContentEditable
+  );
 
 
-    // Песня закончилась: Space = Play again.
+// Любой обычный INPUT/TEXTAREA получает клавиши сам.
+// Исключение — специальное редактирование строки Lyrics,
+// которое обрабатывается ниже своей логикой.
+if (isTextEditing && lyricsEditorEditLineIndex < 0) {
+  return;
+}
+
+
+// Песня закончилась: Space = Play again.
     if (karaokeFinishedDialog?.classList.contains("open") && event.code === "Space") {
       event.preventDefault();
       event.stopPropagation();
@@ -21619,6 +21703,18 @@ progressPercent.textContent = "100%";
 
     await reportProjectLoadTrace("PROJECT ACTIVATE", { command: "set active Project", function: "setProjectActive", parameters: { id: data.id || id }, result: "calling" });
     setProjectActive(data.id || id);
+
+await reportProjectLoadTrace("PROJECT UI STATE", {
+  command: "check Karaoke/Lyrics buttons",
+  function: "setProjectActive",
+  parameters: {
+    activeProjectId,
+    editLyricsBtn_disabled: editLyricsBtn?.disabled,
+    openLyricsFullScreenBtn_disabled: openLyricsFullScreenBtn?.disabled
+  },
+  result: "state captured"
+});
+
     status.textContent = "Project loaded: " + (data.name || id);
     status.className = "progress-status success";
     await reportProjectLoadTrace("PROJECT ACTIVE", { command: "set active Project", function: "setProjectActive", parameters: { active_id: data.id || id, name: data.name || id }, result: "done" });
@@ -22411,8 +22507,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.5.5 | Processing fix");
-console.log("[SERVICE CONSOLE] MyNus 5.5.5 | Processing fix");
+console.log("MyNus 5.6.0 | Перехват всех логов CLIENT CONSOLE -> SERVER CMD");
+console.log("[SERVICE CONSOLE] MyNus 5.6.0 | Перехват всех логов CLIENT CONSOLE -> SERVER CMD");
 </script>
 
 <div class="row" id="build-down">
