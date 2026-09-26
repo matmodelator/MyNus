@@ -1,4 +1,4 @@
-<!-- MyNus 5.5.3,5 | fix create project-->
+<!-- MyNus 5.5.4 | Create Project fix-->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.5.3</title>
+  <title>MyNus 5.5.4</title>
 
 
  <style>
@@ -132,7 +132,7 @@
        STATUS AND PROCESS
     ======================================== */
 
-       .progress-status {
+        .progress-status {
       position: absolute;
       left: 10px;
       top: 0;
@@ -1140,7 +1140,7 @@ position: relative;
     .master-state {
       margin-top: 8px;
       font-size: 12px;
-      color: #666;
+      color: #fff;
     }
 
     .export-dialog {
@@ -3183,6 +3183,7 @@ position: relative;
     <input
       type="file"
       id="audioFile"
+      accept="audio/*"
     >
 
     <button
@@ -7110,7 +7111,7 @@ function resetMaster() {
 
 
   masterState.textContent =
-    "No Records";
+    "Empty";
 
 
   recordMasterBtn.disabled =
@@ -11268,6 +11269,10 @@ async function finishMasterRecording() {
     );
 
 
+    masterState.textContent =
+      "Master recording error";
+
+
     status.textContent =
       "Master recording error";
 
@@ -11275,6 +11280,10 @@ async function finishMasterRecording() {
     return;
 
   }
+
+
+  masterState.textContent =
+    "Recorded — not saved";
 
 
   saveAsMasterBtn.disabled =
@@ -12257,7 +12266,7 @@ async function restoreMasterFromSegments() {
 
 
     masterState.textContent =
-      "No Records";
+      "Empty";
 
 
     saveAsMasterBtn.disabled =
@@ -12280,7 +12289,7 @@ async function restoreMasterFromSegments() {
 
 
   masterState.textContent =
-    "Restored from History";
+    "Recorded";
 
 
   saveAsMasterBtn.disabled =
@@ -13510,12 +13519,12 @@ function updateSelectionDisplay() {
   if (fragmentEnd !== null) fragmentEnd = clampSelectionTimeToTrim(fragmentEnd);
 
   if (!hasSelection()) {
-    selectionRange.style.display = "none";
-    selectionInfo.textContent = "Selection: none";
-    updateSelectionButtons();
-    updateTrackSelectionOverlays();
-    return;
-  }
+  selectionRange.style.display = "none";
+  selectionInfo.textContent = "";
+  updateSelectionButtons();
+  updateTrackSelectionOverlays();
+  return;
+}
 
   const startX = fragmentStart * pixelsPerSecond; // пикселей в секунду
   const endX = fragmentEnd * pixelsPerSecond;     // пикселей в секунду
@@ -13545,12 +13554,11 @@ function clearSelection() {
   fragmentEnd = null;
 
   selectionRange.style.display = "none";
-  selectionInfo.textContent = "Selection: none";
+  selectionInfo.textContent = "";
 
   updateSelectionButtons();
   updateTrackSelectionOverlays();
 }
-
 
 // Selection существует только при корректной паре IN < OUT.
 function hasSelection() {
@@ -19694,7 +19702,7 @@ function resetToInitialSplit() {
 
 
   masterState.textContent =
-    "No Records";
+    "Empty";
 
 
   status.textContent =
@@ -22387,8 +22395,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.5.3 | New Project NEW\audio files");
-console.log("[SERVICE CONSOLE] MyNus 5.5.3 | New Project NEW\audio files");
+console.log("MyNus 5.5.4 | Create Project fix");
+console.log("[SERVICE CONSOLE] MyNus 5.5.4 | Create Project fix");
 </script>
 
 <div class="row" id="build-down">
