@@ -1,5 +1,5 @@
 # ========================================
-# TRACE | 5.5.0 New Project & Save rec
+# Cloudflare SERVER host="0.0.0.0" | 5.5.1 
 # ========================================
 
 # ========================================
@@ -1967,12 +1967,12 @@ if __name__ == "__main__":
 
     try:
         app.run(
-            host="127.0.0.1",
-            port=5000,
-            debug=True,
-            threaded=True,
-            use_reloader=False
-        )
+    host="0.0.0.0",
+    port=5000,
+    debug=True,
+    threaded=True,
+    use_reloader=False
+)
     except KeyboardInterrupt:
         pass
     except BaseException as error:
