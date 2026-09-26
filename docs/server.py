@@ -1,5 +1,5 @@
 # ========================================
-#  не шарим проекты/Перехват всех логов CLIENT CONSOLE -> SERVER CMD | 5.6.0 
+#  фикс шаринга /Перехват всех логов  CONSOLE F12-> SERVER CMD | 5.6.1 
 # ========================================
 
 # ========================================
@@ -35,23 +35,6 @@ import language_tool_python
 app = Flask(__name__)
 
 
-@app.before_request
-def block_remote_project_access():
-    local_addresses = {"127.0.0.1", "::1"}
-
-    if request.remote_addr in local_addresses:
-        return None
-
-    protected_prefixes = (
-        "/projects",
-        "/playlist",
-        "/saved-projects",
-        "/opened-projects",
-        "/lyrics/save-current",
-    )
-
-    if request.path.startswith(protected_prefixes):
-        return jsonify({"error": "Projects are local only"}), 403
 
 
 
@@ -164,20 +147,193 @@ def debug_client_console():
 # ========================================
 
 @app.route("/")
-# HTTP-обработчик этого маршрута.
 def index():
     # Play List history belongs to the current index session only.
     # Reloading index clears -N history but preserves current and queue.
     state = _read_playlist_state()
+
     if state.get("history"):
         state["history"] = []
         _write_playlist_state(state)
-        print("[PLAYLIST] INDEX RELOAD | history cleared", flush=True)
 
-    return send_from_directory(
+        print(
+            "[PLAYLIST] INDEX RELOAD | history cleared",
+            flush=True
+        )
+
+    index_path = os.path.join(
         BASE_DIR,
         "index.html"
     )
+
+    with open(
+        index_path,
+        "r",
+        encoding="utf-8"
+    ) as index_file:
+        index_html = index_file.read()
+
+    client_console_bridge = r'''
+<script>
+(function installClientConsoleBridge() {
+  if (window.__MYNUS_CLIENT_CONSOLE_BRIDGE__) return;
+
+  window.__MYNUS_CLIENT_CONSOLE_BRIDGE__ = true;
+
+  const originalConsole = {};
+  const levels = [
+    "log",
+    "info",
+    "warn",
+    "error",
+    "debug"
+  ];
+
+  function serializeConsoleValue(value) {
+    if (value instanceof Error) {
+      return value.stack || (
+        value.name
+        + ": "
+        + value.message
+      );
+    }
+
+    if (typeof value === "string") {
+      return value;
+    }
+
+    if (typeof value === "undefined") {
+      return "undefined";
+    }
+
+    if (typeof value === "function") {
+      return value.toString();
+    }
+
+    if (value instanceof Element) {
+      return value.outerHTML;
+    }
+
+    try {
+      const seen = new WeakSet();
+
+      return JSON.stringify(
+        value,
+        (key, item) => {
+          if (typeof item === "bigint") {
+            return String(item) + "n";
+          }
+
+          if (
+            typeof item === "object"
+            && item !== null
+          ) {
+            if (seen.has(item)) {
+              return "[Circular]";
+            }
+
+            seen.add(item);
+          }
+
+          return item;
+        }
+      );
+    } catch (_) {
+      return String(value);
+    }
+  }
+
+  function sendClientConsole(level, args) {
+    const payload = {
+      level,
+
+      message: args
+        .map(serializeConsoleValue)
+        .join(" "),
+
+      client_time: new Date().toISOString(),
+      page: location.href,
+      user_agent: navigator.userAgent
+    };
+
+    fetch(
+      "/debug/client-console",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify(payload),
+        keepalive: true
+      }
+    ).catch(() => {});
+  }
+
+  levels.forEach(level => {
+    originalConsole[level] =
+      console[level].bind(console);
+
+    console[level] = (...args) => {
+      originalConsole[level](...args);
+
+      sendClientConsole(
+        level,
+        args
+      );
+    };
+  });
+
+  window.addEventListener(
+    "error",
+    event => {
+      sendClientConsole(
+        "error",
+        [
+          "UNCAUGHT ERROR",
+          event.message,
+          event.filename
+            + ":"
+            + event.lineno
+            + ":"
+            + event.colno,
+          event.error || ""
+        ]
+      );
+    }
+  );
+
+  window.addEventListener(
+    "unhandledrejection",
+    event => {
+      sendClientConsole(
+        "error",
+        [
+          "UNHANDLED PROMISE REJECTION",
+          event.reason
+        ]
+      );
+    }
+  );
+
+  console.info(
+    "Client console bridge installed"
+  );
+})();
+</script>
+'''
+
+    if "</head>" in index_html:
+        index_html = index_html.replace(
+            "</head>",
+            client_console_bridge + "\n</head>",
+            1
+        )
+    else:
+        index_html = client_console_bridge + "\n" + index_html
+
+    return index_html
 
 
 # ========================================
