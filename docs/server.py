@@ -1,5 +1,5 @@
 # ========================================
-# Cloudflare SERVER host="0.0.0.0" | 5.5.1 
+#  не шарим проекты/Перехват всех логов CLIENT CONSOLE -> SERVER CMD | 5.6.0 
 # ========================================
 
 # ========================================
@@ -34,6 +34,27 @@ import language_tool_python
 
 app = Flask(__name__)
 
+
+@app.before_request
+def block_remote_project_access():
+    local_addresses = {"127.0.0.1", "::1"}
+
+    if request.remote_addr in local_addresses:
+        return None
+
+    protected_prefixes = (
+        "/projects",
+        "/playlist",
+        "/saved-projects",
+        "/opened-projects",
+        "/lyrics/save-current",
+    )
+
+    if request.path.startswith(protected_prefixes):
+        return jsonify({"error": "Projects are local only"}), 403
+
+
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
@@ -62,7 +83,7 @@ opened_project_folders = {}
 
 
 # ========================================
-# PROJECT LOAD TRACE (5.5.0)
+# PROJECT LOAD TRACE (5.6.0)
 # Diagnostic-only endpoint. It does not write, delete, move or replace files.
 # ========================================
 
@@ -102,7 +123,41 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "5.5.0", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "5.6.0", "trace_id": trace_id})
+
+
+# ========================================
+# CLIENT CONSOLE -> SERVER CMD
+# ========================================
+
+@app.route("/debug/client-console", methods=["POST"])
+def debug_client_console():
+    data = request.get_json(silent=True) or {}
+
+    level = str(data.get("level") or "log").upper()
+    message = str(data.get("message") or "")
+    client_time = str(data.get("client_time") or "")
+    page = str(data.get("page") or "")
+    user_agent = str(data.get("user_agent") or "")
+    remote_ip = request.remote_addr or ""
+
+    print(
+        f"[CLIENT {level}]"
+        f" [{remote_ip}]"
+        f" {message}",
+        flush=True
+    )
+
+    if client_time:
+        print(f"  time       = {client_time}", flush=True)
+
+    if page:
+        print(f"  page       = {page}", flush=True)
+
+    if user_agent:
+        print(f"  user_agent = {user_agent}", flush=True)
+
+    return jsonify({"ok": True})
 
 # ========================================
 # INDEX
@@ -1380,7 +1435,7 @@ def transcribe_to_ru():
 
 
 # ========================================
-# MYNUS PlayList JSON state + standalone Projects | 5.5.0
+# MYNUS PlayList JSON state + standalone Projects | 5.6.0
 # ========================================
 def _project_id(value):
     value = secure_filename(str(value or "Project")) or "Project"
@@ -1820,7 +1875,7 @@ def save_project():
         if not track_files.get("original"):
             raise ValueError("Original track not received")
 
-        project_json["version"] = "5.5.0"
+        project_json["version"] = "5.6.0"
         project_json["id"] = project_id
         project_json["name"] = project_name
         project_json["tracks"] = track_files
@@ -1961,8 +2016,8 @@ def print_restart_command():
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("MyNus Server 5.5.0")
-    print(r"5.5.0: New Project + Save Rec; Project SAVE/LOAD supports Master Rec track.")
+    print("MyNus Server 5.6.0")
+    print(r"5.6.0: New Project + Save Rec; Project SAVE/LOAD supports Master Rec track.")
     print("=" * 72 + "\n")
 
     try:
