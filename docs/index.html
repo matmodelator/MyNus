@@ -1,4 +1,4 @@
-<!-- MyNus 5.5.4 | Create Project fix-->
+<!-- MyNus 5.5.5 | Processing fix-->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.5.4</title>
+  <title>MyNus 5.5.5</title>
 
 
  <style>
@@ -150,6 +150,11 @@
 
       pointer-events: none;
     }
+
+    .progress-status.process { color: #66ccff; }
+    .progress-status.success { color: #7CFC00; }
+    .progress-status.error { color: #ff69b4; }
+    .progress-status.info { color: #ffd700; }
 
     .progress-wrap {
       display: none;
@@ -6343,6 +6348,7 @@ splitBtn.addEventListener(
 
       status.textContent =
         "Select an audio file";
+      status.className = "progress-status info";
 
       return;
 
@@ -6389,6 +6395,7 @@ splitBtn.addEventListener(
 
     status.textContent =
       "Separating...";
+    status.className = "progress-status process";
 
 
     try {
@@ -6644,6 +6651,7 @@ splitBtn.addEventListener(
 
       status.textContent =
         "Loading tracks...";
+      status.className = "progress-status process";
 
 
       await Promise.all([
@@ -6731,6 +6739,7 @@ studio.style.display =
 
       status.textContent =
         "Ready";
+      status.className = "progress-status success";
 
       // Разделение завершено. Предлагаем создать Project для полной работы Karaoke.
       newProjectPromptDialog?.classList.add("open");
@@ -6748,6 +6757,7 @@ studio.style.display =
       status.textContent =
         "Processing error: "
         + error.message;
+      status.className = "progress-status error";
 
     }
 
@@ -6812,6 +6822,7 @@ async function waitForSeparation(
 
     status.textContent =
       "Separating...";
+    status.className = "progress-status process";
 
 
     if (
@@ -8455,6 +8466,7 @@ masterModeBtn.addEventListener(
 
       status.textContent =
         "Master is empty";
+      status.className = "progress-status info";
 
       return;
 
@@ -8545,11 +8557,13 @@ function switchMode(
 
   updatePlayheads();
 
-  updateMasterCursor();
+updateMasterCursor();
 
-  updateTimeDisplay();
+updateTimeDisplay();
 
-  syncTransportMirrors();
+updateStemPlaybackVisuals();
+
+syncTransportMirrors();
 
 }
 
@@ -11275,6 +11289,7 @@ async function finishMasterRecording() {
 
     status.textContent =
       "Master recording error";
+    status.className = "progress-status error";
 
 
     return;
@@ -11296,6 +11311,7 @@ async function finishMasterRecording() {
 
   status.textContent =
     "Master recording complete";
+  status.className = "progress-status success";
 
 }
 
@@ -12212,6 +12228,7 @@ saveMasterRecBtn?.addEventListener("click", () => {
 
   masterState.textContent = "Saved successfully";
   status.textContent = "Master Rec saved successfully";
+  status.className = "progress-status success";
 
   updateMasterHistoryButtons();
 });
@@ -12314,6 +12331,7 @@ saveAsMasterBtn.addEventListener(
 
       status.textContent =
         "No Master recording";
+      status.className = "progress-status info";
 
       return;
 
@@ -12349,6 +12367,7 @@ saveMasterSelectionBtn.addEventListener(
 
       status.textContent =
         "Select a Master fragment first";
+      status.className = "progress-status info";
 
       return;
 
@@ -12402,6 +12421,7 @@ document
 
             status.textContent =
               "Select a fragment first";
+            status.className = "progress-status info";
 
             return;
 
@@ -12533,6 +12553,7 @@ async function exportTrack(
 
     status.textContent =
       "Track is not available";
+    status.className = "progress-status info";
 
     return;
 
@@ -12590,6 +12611,7 @@ async function exportTrack(
     + " as "
     + format.toUpperCase()
     + "...";
+  status.className = "progress-status process";
 
 
   try {
@@ -12688,6 +12710,7 @@ async function exportTrack(
 
     status.textContent =
       "Export complete";
+    status.className = "progress-status success";
 
   }
 
@@ -12701,6 +12724,7 @@ async function exportTrack(
     status.textContent =
       "Export error: "
       + error.message;
+    status.className = "progress-status error";
 
   }
 
@@ -12925,6 +12949,7 @@ createPitchCorrectionBtn.addEventListener("click", async () => {
     const corrected = await makeShiftedBuffer(source, Math.max(-0.5, Math.min(0.5, correction)));
     await installGeneratedTrack("pitchCorrection", corrected);
     status.textContent = "Pitch Correction track created";
+    status.className = "progress-status success";
   } catch (error) { console.error(error); status.textContent = "Pitch Correction error: " + error.message; }
   finally { createPitchCorrectionBtn.disabled = false; }
 });
@@ -12936,6 +12961,7 @@ createHarmonizerBtn.addEventListener("click", async () => {
     const harmony = await makeHarmonizerBuffer(source);
     await installGeneratedTrack("harmonizer", harmony);
     status.textContent = "Vocal Harmonizer track created";
+    status.className = "progress-status success";
   } catch (error) { console.error(error); status.textContent = "Vocal Harmonizer error: " + error.message; }
   finally { createHarmonizerBtn.disabled = false; }
 });
@@ -18976,63 +19002,30 @@ function startAnimation() {
 
 
       if (
-        lyricsStructureTransportMode !== "loop"
-        &&
-        fragmentEnd !== null
-        &&
-        fragmentStart !== null
-        &&
-        fragmentEnd > fragmentStart
-        &&
-        getCurrentTime() >= fragmentEnd
-      ) {
+  lyricsStructureTransportMode !== "loop"
+  &&
+  loopEnabled
+  &&
+  fragmentEnd !== null
+  &&
+  fragmentStart !== null
+  &&
+  fragmentEnd > fragmentStart
+  &&
+  getCurrentTime() >= fragmentEnd
+) {
 
-        if (
-          masterRecording
-        ) {
+  syncAllTo(
+    fragmentStart
+  );
 
-          stopMasterRecording();
+  updatePlayheads();
 
-        }
+  updateMasterCursor();
 
+  updateTimeDisplay();
 
-        if (
-          loopEnabled
-        ) {
-
-          syncAllTo(
-            fragmentStart
-          );
-
-
-          updatePlayheads();
-
-          updateMasterCursor();
-
-          updateTimeDisplay();
-
-        }
-
-        else {
-
-          pauseAll();
-
-          syncAllTo(
-            fragmentEnd
-          );
-
-
-          updatePlayheads();
-
-          updateMasterCursor();
-
-          updateTimeDisplay();
-
-          return;
-
-        }
-
-      }
+}
 
 
       if (getCurrentTime() >= getProjectPlaybackEnd()) {
@@ -19707,6 +19700,7 @@ function resetToInitialSplit() {
 
   status.textContent =
     "Reset to initial split";
+  status.className = "progress-status info";
 
 }
 
@@ -20507,6 +20501,7 @@ async function saveCurrentProject(projectName, savePath, conflictAction = "", op
   }
 
   status.textContent = "Saving project...";
+  status.className = "progress-status process";
   const response = await fetch("/projects/save", { method: "POST", body: fd });
   const data = await response.json().catch(() => ({}));
   if (response.status === 409 && data.conflict) {
@@ -20524,6 +20519,7 @@ async function saveCurrentProject(projectName, savePath, conflictAction = "", op
 
   const savedPath = data.path || targetPath || "C:\\MyNus\\Projects";
   status.textContent = "Project saved: " + (data.name || name);
+  status.className = "progress-status success";
   if (saveProjectMessage) saveProjectMessage.textContent = "Saved successfully: " + savedPath;
   window.alert("Project saved successfully:\n" + savedPath);
   return data;
@@ -20742,6 +20738,7 @@ function renderFullScreenPlaylist(projects = karaokePlaylistSnapshot) {
     const savedTracks = await fetchSavedProjects();
     if (!savedTracks.length) {
       status.textContent = "Tracks list is empty";
+      status.className = "progress-status info";
       playlistEditMode = null;
       addButton.classList.remove("active");
       return;
@@ -20832,6 +20829,7 @@ async function showFullScreenPlaylistWithPostPlay() {
   } catch (error) {
     console.error(error);
     status.textContent = error.message;
+    status.className = "progress-status error";
   }
 }
 
@@ -21390,7 +21388,15 @@ async function loadProjectById(id) {
   await reportProjectLoadTrace("COMMAND", { command: "pause current playback", function: "pauseAll", parameters: {}, result: "calling" });
   pauseAll();
   await reportProjectLoadTrace("COMMAND RESULT", { command: "pause current playback", function: "pauseAll", parameters: {}, result: "done" });
+
+progressWrap.style.display = "block";
+
   status.textContent = "Loading project...";
+  status.className = "progress-status process";
+
+progressBar.style.width = "100%";
+progressPercent.textContent = "100%";
+
   await reportProjectLoadTrace("COMMAND", { command: "show Project loader", function: "showProjectLoader", parameters: {}, result: "calling" });
   await showProjectLoader(id);
 
@@ -21410,6 +21416,7 @@ async function loadProjectById(id) {
     if (projectLoaderProject) projectLoaderProject.textContent = String(data.name || id || "").trim();
     if (data.cancelled) {
       status.textContent = "Project loading cancelled";
+      status.className = "progress-status info";
       projectLoader?.classList.remove("open");
       projectLoader?.setAttribute("aria-hidden", "true");
       projectLoading = false;
@@ -21613,6 +21620,7 @@ async function loadProjectById(id) {
     await reportProjectLoadTrace("PROJECT ACTIVATE", { command: "set active Project", function: "setProjectActive", parameters: { id: data.id || id }, result: "calling" });
     setProjectActive(data.id || id);
     status.textContent = "Project loaded: " + (data.name || id);
+    status.className = "progress-status success";
     await reportProjectLoadTrace("PROJECT ACTIVE", { command: "set active Project", function: "setProjectActive", parameters: { active_id: data.id || id, name: data.name || id }, result: "done" });
 
     await reportProjectLoadTrace("COMMAND", { command: "finish Project loader", function: "finishProjectLoader", parameters: {}, result: "calling" });
@@ -21690,6 +21698,7 @@ async function openLoadProjectDialog() {
           }
           console.error(error);
           status.textContent = error.message;
+          status.className = "progress-status error";
         }
       });
       loadProjectList.appendChild(button);
@@ -21931,6 +21940,7 @@ confirmSaveProjectBtn?.addEventListener("click", async () => {
       // ----------------------------------------------------------------------
 
       status.textContent = error.message;
+      status.className = "progress-status error";
 
       if (saveProjectMessage) {
         saveProjectMessage.textContent = error.message;
@@ -22040,6 +22050,7 @@ async function newProject() {
 
   // NEW PROJECT полностью готов.
   status.textContent = "New Project — select any audio file";
+  status.className = "progress-status info";
 }
 
 
@@ -22079,6 +22090,7 @@ continueWithoutProjectBtn?.addEventListener("click", () => {
   setProjectActive(null);
 
   status.textContent = "Ready — audio tracks only";
+  status.className = "progress-status success";
 });
 
 
@@ -22105,6 +22117,7 @@ openProjectStartBtn?.addEventListener("click", () => {
 
     console.error(error);
     status.textContent = error.message;
+    status.className = "progress-status error";
   });
 });
 
@@ -22157,6 +22170,7 @@ overwriteProjectBtn?.addEventListener("click", async () => {
   } catch (error) {
 
     status.textContent = error.message;
+    status.className = "progress-status error";
 
 
   } finally {
@@ -22210,6 +22224,7 @@ saveProjectCopyBtn?.addEventListener("click", async () => {
   } catch (error) {
 
     status.textContent = error.message;
+    status.className = "progress-status error";
 
 
   } finally {
@@ -22334,6 +22349,7 @@ lyricsFullScreenPlaylistBtn?.addEventListener("click", event => {
   refreshFullScreenPlaylist().catch(error => {
     console.error(error);
     status.textContent = error.message;
+    status.className = "progress-status error";
   });
 });
 
@@ -22395,8 +22411,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.5.4 | Create Project fix");
-console.log("[SERVICE CONSOLE] MyNus 5.5.4 | Create Project fix");
+console.log("MyNus 5.5.5 | Processing fix");
+console.log("[SERVICE CONSOLE] MyNus 5.5.5 | Processing fix");
 </script>
 
 <div class="row" id="build-down">
