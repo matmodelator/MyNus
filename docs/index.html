@@ -1,4 +1,4 @@
-<!-- MyNus 5.6.0 | Перехват всех логов CLIENT CONSOLE -> SERVER CMD-->
+<!-- MyNus 5.6.1 | Ipad & Bad Block STRUCTURE | ПОСЛЕДОВАТЕЛЬНЫЙ ЛОГ-->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.6.0</title>
+  <title>MyNus 5.6.1</title>
 
 
  <style>
@@ -6749,14 +6749,153 @@ splitBtn.addEventListener(
         originalAudio.duration;
 
 
-// Structure создаётся автоматически только один раз — при первичной обработке нового трека.
-      const detectedInitialStructure = detectLyricsStructure(karaokeLines);
-      lyricsStructureDraft = normalizeStructureCoverage(
-        detectedInitialStructure,
-        structureSongEnd(detectedInitialStructure)
-      ).map(item => ({ ...item }));
-      lyricsStructureSelectedIndex = -1;
-      lyricsStructureSelectedIndices = new Set();
+// Structure создаётся автоматически только один раз —
+// при первичной обработке нового трека.
+
+const detectedInitialStructure =
+  detectLyricsStructure(
+    karaokeLines
+  );
+
+const detectedStructureSongEnd =
+  structureSongEnd(
+    detectedInitialStructure
+  );
+
+const normalizedInitialStructure =
+  normalizeStructureCoverage(
+    detectedInitialStructure,
+    detectedStructureSongEnd
+  );
+
+lyricsStructureDraft =
+  normalizedInitialStructure.map(
+    item => ({
+      ...item
+    })
+  );
+
+lyricsStructureSelectedIndex =
+  -1;
+
+lyricsStructureSelectedIndices =
+  new Set();
+
+
+// ========================================
+// STRUCTURE | ПОСЛЕДОВАТЕЛЬНЫЙ ЛОГ
+// ========================================
+
+console.log(
+  "[STRUCTURE] START"
+  + " | blocks="
+  + lyricsStructureDraft.length
+  + " | songEnd="
+  + detectedStructureSongEnd
+);
+
+lyricsStructureDraft.forEach(
+  (item, index) => {
+
+    const blockNumber =
+      index + 1;
+
+    const previous =
+      index > 0
+        ? lyricsStructureDraft[index - 1]
+        : null;
+
+    const name =
+      String(
+        item.label
+        || item.type
+        || ""
+      );
+
+    const type =
+      String(
+        item.type
+        || ""
+      );
+
+    const start =
+      Number(
+        item.start
+      );
+
+    const end =
+      Number(
+        item.end
+      );
+
+    const duration =
+      end - start;
+
+    const status =
+      Number.isFinite(start)
+      &&
+      Number.isFinite(end)
+      &&
+      end > start
+        ? "VALID"
+        : "INVALID";
+
+    const boundaryStatus =
+      !previous
+        ? "FIRST"
+        : Number(previous.end) === start
+          ? "CONTINUOUS"
+          : "GAP_OR_OVERLAP";
+
+    console.log(
+      "[STRUCTURE] ACTION "
+      + blockNumber
+      + "/"
+      + lyricsStructureDraft.length
+      + " | ASSIGN BLOCK"
+    );
+
+    console.log(
+      "[STRUCTURE] BLOCK "
+      + blockNumber
+      + " | name="
+      + JSON.stringify(name)
+      + " | type="
+      + JSON.stringify(type)
+      + " | start="
+      + start
+      + " | end="
+      + end
+      + " | duration="
+      + duration
+      + " | firstLine="
+      + (
+          item.firstLine
+          ?? null
+        )
+      + " | lastLine="
+      + (
+          item.lastLine
+          ?? null
+        )
+      + " | status="
+      + status
+      + " | boundary="
+      + boundaryStatus
+    );
+
+    console.log(
+      "[STRUCTURE] BLOCK "
+      + blockNumber
+      + " | ALL FIELDS="
+      + JSON.stringify(item)
+    );
+  }
+);
+
+console.log(
+  "[STRUCTURE] END"
+);
 
 
 
@@ -15944,10 +16083,66 @@ function detectLyricsStructure(lines) {
     });
   }
 
-  const lastLyricEnd = cleanLines[cleanLines.length - 1].end;
-  if (songEnd - lastLyricEnd >= MIN_INSTRUMENTAL_GAP) {
-    classified.push({ type: "Coda", start: lastLyricEnd, end: songEnd });
+  // ========================================
+// OUTRO
+//
+// Если после Coda остаётся любое место
+// до конца песни, всё это место является
+// одним-единственным Outro.
+//
+// Любые другие блоки после Coda
+// не сохраняются отдельно, а поглощаются Outro.
+// ========================================
+
+let lastCodaIndex =
+  -1;
+
+for (
+  let index = 0;
+  index < classified.length;
+  index++
+) {
+  if (
+    classified[index].type
+    === "Coda"
+  ) {
+    lastCodaIndex =
+      index;
   }
+}
+
+
+if (
+  lastCodaIndex >= 0
+) {
+  const codaEnd =
+    Number(
+      classified[
+        lastCodaIndex
+      ].end
+    );
+
+  if (
+    Number.isFinite(codaEnd)
+    &&
+    codaEnd < songEnd
+  ) {
+    // Удаляем абсолютно всё,
+    // что система создала после Coda.
+    classified.splice(
+      lastCodaIndex + 1
+    );
+
+    // Всё оставшееся пространство
+    // до конца песни — один Outro.
+    classified.push({
+      type: "Outro",
+      label: "Outro",
+      start: codaEnd,
+      end: songEnd
+    });
+  }
+}
 
   return normalizeStructureCoverage(
     classified
@@ -16521,6 +16716,115 @@ function renderLyricsStructure() {
         renderLyricsStructure();
       });
 
+// ========================================
+// MOBILE ONLY | STRUCTURE BLOCK LONG PRESS
+// Long press on the center of a Structure block
+// opens the same section-name menu as right-click on desktop.
+// Desktop mouse/right-click behavior remains unchanged.
+// ========================================
+
+let structureBlockLongPressTimer = null;
+let structureBlockLongPressStartX = 0;
+let structureBlockLongPressStartY = 0;
+
+block.addEventListener("pointerdown", event => {
+
+  if (event.pointerType !== "touch") {
+    return;
+  }
+
+  structureBlockLongPressStartX = event.clientX;
+  structureBlockLongPressStartY = event.clientY;
+
+  clearTimeout(
+    structureBlockLongPressTimer
+  );
+
+  structureBlockLongPressTimer =
+    setTimeout(
+      () => {
+
+        structureBlockLongPressTimer =
+          null;
+
+        openLyricsStructureNameMenu(
+          event,
+          index
+        );
+
+        renderLyricsStructure();
+
+      },
+      500
+    );
+});
+
+block.addEventListener("pointermove", event => {
+
+  if (
+    event.pointerType !== "touch"
+    ||
+    !structureBlockLongPressTimer
+  ) {
+    return;
+  }
+
+  const dx =
+    Math.abs(
+      event.clientX
+      - structureBlockLongPressStartX
+    );
+
+  const dy =
+    Math.abs(
+      event.clientY
+      - structureBlockLongPressStartY
+    );
+
+  if (
+    dx > 10
+    ||
+    dy > 10
+  ) {
+
+    clearTimeout(
+      structureBlockLongPressTimer
+    );
+
+    structureBlockLongPressTimer =
+      null;
+  }
+});
+
+block.addEventListener("pointerup", event => {
+
+  if (event.pointerType !== "touch") {
+    return;
+  }
+
+  clearTimeout(
+    structureBlockLongPressTimer
+  );
+
+  structureBlockLongPressTimer =
+    null;
+});
+
+block.addEventListener("pointercancel", event => {
+
+  if (event.pointerType !== "touch") {
+    return;
+  }
+
+  clearTimeout(
+    structureBlockLongPressTimer
+  );
+
+  structureBlockLongPressTimer =
+    null;
+});
+
+
     }
 
     lyricsStructureTrack.appendChild(block);
@@ -16536,42 +16840,282 @@ function renderLyricsStructure() {
       handle.title = "Drag section boundary";
       handle.style.left = (segment.end / songEnd * 100) + "%";
 
-      handle.addEventListener("pointerdown", event => {
-        event.preventDefault();
-        event.stopPropagation();
+      // ========================================
+// MOBILE ONLY | STRUCTURE BOUNDARY LONG PRESS
+// Desktop: Structure boundary dragging starts immediately.
+// Touch/mobile: boundary dragging starts only after long press.
+// Desktop mouse behavior remains unchanged.
+// ========================================
 
-        pushLyricsHistory();
+let structureBoundaryTouchTimer = null;
+let structureBoundaryTouchReady = false;
+let structureBoundaryTouchPointerId = null;
+let structureBoundaryStartX = 0;
+let structureBoundaryStartY = 0;
 
-        const rect = lyricsStructureTrack.getBoundingClientRect();
-        const min = Number(segment.start);
-        const max = Number(next.end);
+const rect =
+  lyricsStructureTrack.getBoundingClientRect();
 
-        handle.setPointerCapture?.(event.pointerId);
+const min =
+  Number(segment.start);
 
-        const move = moveEvent => {
-          const ratio = Math.max(
-            0,
-            Math.min(1, (moveEvent.clientX - rect.left) / rect.width)
+const max =
+  Number(next.end);
+
+const moveBoundary = moveEvent => {
+
+  const ratio =
+    Math.max(
+      0,
+      Math.min(
+        1,
+        (
+          moveEvent.clientX
+          - rect.left
+        )
+        / rect.width
+      )
+    );
+
+  const boundary =
+    Math.max(
+      min,
+      Math.min(
+        max,
+        ratio * songEnd
+      )
+    );
+
+  segment.end =
+    boundary;
+
+  next.start =
+    boundary;
+
+  renderLyricsStructure();
+};
+
+
+// DESKTOP:
+// Mouse drag starts immediately.
+
+handle.addEventListener(
+  "pointerdown",
+  event => {
+
+    if (
+      event.pointerType === "touch"
+    ) {
+
+      // MOBILE ONLY:
+      // Touch must remain pressed before
+      // this Structure boundary can move.
+
+      structureBoundaryTouchReady =
+        false;
+
+      structureBoundaryTouchPointerId =
+        event.pointerId;
+
+      structureBoundaryStartX =
+        event.clientX;
+
+      structureBoundaryStartY =
+        event.clientY;
+
+      clearTimeout(
+        structureBoundaryTouchTimer
+      );
+
+      structureBoundaryTouchTimer =
+        setTimeout(
+          () => {
+
+            structureBoundaryTouchTimer =
+              null;
+
+            structureBoundaryTouchReady =
+              true;
+
+            pushLyricsHistory();
+
+            handle.setPointerCapture?.(
+              structureBoundaryTouchPointerId
+            );
+
+          },
+          500
+        );
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      return;
+    }
+
+
+    // DESKTOP ONLY:
+    // Preserve existing immediate mouse drag.
+
+    pushLyricsHistory();
+
+    handle.setPointerCapture?.(
+      event.pointerId
+    );
+
+    event.preventDefault();
+    event.stopPropagation();
+  }
+);
+
+
+handle.addEventListener(
+  "pointermove",
+  event => {
+
+    if (
+      event.pointerType === "touch"
+    ) {
+
+      if (
+        event.pointerId
+        !== structureBoundaryTouchPointerId
+      ) {
+        return;
+      }
+
+
+      // Before long press is activated,
+      // movement means normal finger movement,
+      // not Structure boundary dragging.
+
+      if (
+        !structureBoundaryTouchReady
+      ) {
+
+        const dx =
+          Math.abs(
+            event.clientX
+            - structureBoundaryStartX
           );
 
-          const boundary = Math.max(
-            min,
-            Math.min(max, ratio * songEnd)
+        const dy =
+          Math.abs(
+            event.clientY
+            - structureBoundaryStartY
           );
 
-          segment.end = boundary;
-          next.start = boundary;
-          renderLyricsStructure();
-        };
+        if (
+          dx > 10
+          ||
+          dy > 10
+        ) {
 
-        const up = () => {
-          window.removeEventListener("pointermove", move);
-          window.removeEventListener("pointerup", up);
-        };
+          clearTimeout(
+            structureBoundaryTouchTimer
+          );
 
-        window.addEventListener("pointermove", move);
-        window.addEventListener("pointerup", up);
-      });
+          structureBoundaryTouchTimer =
+            null;
+
+          structureBoundaryTouchPointerId =
+            null;
+        }
+
+        return;
+      }
+    }
+
+
+    moveBoundary(
+      event
+    );
+
+    event.preventDefault();
+    event.stopPropagation();
+  }
+);
+
+
+handle.addEventListener(
+  "pointerup",
+  event => {
+
+    if (
+      event.pointerType === "touch"
+    ) {
+
+      clearTimeout(
+        structureBoundaryTouchTimer
+      );
+
+      structureBoundaryTouchTimer =
+        null;
+
+
+      if (
+        structureBoundaryTouchReady
+        &&
+        event.pointerId
+          === structureBoundaryTouchPointerId
+      ) {
+
+        moveBoundary(
+          event
+        );
+      }
+
+
+      structureBoundaryTouchReady =
+        false;
+
+      structureBoundaryTouchPointerId =
+        null;
+    }
+
+
+    if (
+      handle.hasPointerCapture?.(
+        event.pointerId
+      )
+    ) {
+
+      handle.releasePointerCapture(
+        event.pointerId
+      );
+    }
+
+
+    event.preventDefault();
+    event.stopPropagation();
+  }
+);
+
+
+handle.addEventListener(
+  "pointercancel",
+  event => {
+
+    if (
+      event.pointerType !== "touch"
+    ) {
+      return;
+    }
+
+    clearTimeout(
+      structureBoundaryTouchTimer
+    );
+
+    structureBoundaryTouchTimer =
+      null;
+
+    structureBoundaryTouchReady =
+      false;
+
+    structureBoundaryTouchPointerId =
+      null;
+  }
+);
 
       lyricsStructureTrack.appendChild(handle);
     });
@@ -22507,8 +23051,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.6.0 | Перехват всех логов CLIENT CONSOLE -> SERVER CMD");
-console.log("[SERVICE CONSOLE] MyNus 5.6.0 | Перехват всех логов CLIENT CONSOLE -> SERVER CMD");
+console.log("MyNus 5.6.1 | Ipad & Bad Block fix");
+console.log("[SERVICE CONSOLE] MyNus 5.6.1 | Ipad & Bad Block fix");
 </script>
 
 <div class="row" id="build-down">
