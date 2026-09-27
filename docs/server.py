@@ -1,4 +1,4 @@
-<!-- MyNus 5.6.2 | Ipad & Bad Block STRUCTURE | ПОСЛЕДОВАТЕЛЬНЫЙ ЛОГ| fix Save | Trim fix -->
+<!-- MyNus 6.0.0 | ВХОД И ЗАГРУЗКИ В СЕРВЕРНОЙ ЛОГИКЕ -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 5.6.2</title>
+  <title>MyNus 6.0.0</title>
 
 
  <style>
@@ -3206,6 +3206,18 @@ position: relative;
       color: #555;
       opacity: 1;
     }
+
+/* Разрешить выделение и копирование текста загрузки */
+#status,
+#progressPercent,
+#projectLoaderProject,
+#projectLoaderPhase,
+#projectLoaderPercent {
+  pointer-events: auto;
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
 
 </style>
 
@@ -22929,6 +22941,352 @@ document.addEventListener("click", event => {
 
 
 
+// ============================================================================
+// SIGN — ДИАЛОГОВОЕ ОКНО ВХОДА
+// ============================================================================
+
+
+<style>
+  #mnLoginButton {
+    position: fixed;
+    top: 8px;
+    right: 12px;
+    z-index: 5000;
+  }
+
+  #mnLoginDialog {
+    width: min(340px, calc(100vw - 40px));
+    padding: 24px;
+    border: 1px solid #666;
+    border-radius: 10px;
+    background: #222;
+    color: #fff;
+  }
+
+  #mnLoginDialog::backdrop {
+    background: rgba(0, 0, 0, .8);
+  }
+
+  #mnLoginForm {
+    display: grid;
+    gap: 12px;
+  }
+
+  #mnLoginForm input {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 10px;
+    font-size: 16px;
+  }
+
+  #mnLoginError {
+    min-height: 20px;
+    color: #ff9999;
+    white-space: pre-wrap;
+    user-select: text;
+  }
+
+#mnLoginMethods {
+  display: flex;
+  gap: 8px;
+}
+
+#mnLoginMethods button {
+  flex: 1;
+  padding: 8px;
+}
+
+#mnLoginMethods .selected {
+  background: #555;
+  color: #fff;
+  border: 1px solid #fff;
+}
+
+#mnLoginMethods button:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+</style>
+
+<button id="mnLoginButton" type="button">Вход</button>
+
+<dialog id="mnLoginDialog">
+  <form id="mnLoginForm">
+    <strong>Вход в MyNus</strong>
+
+<div id="mnLoginMethods" role="group" aria-label="Способ входа">
+  <button type="button" class="selected" aria-pressed="true">
+    По ID
+  </button>
+
+  <button type="button" disabled title="Пока недоступно">
+    По имени
+  </button>
+
+  <button type="button" disabled title="Пока недоступно">
+    По email
+  </button>
+</div>
+
+    <label for="mnLoginId">User ID</label>
+    <input
+      id="mnLoginId"
+      type="text"
+      inputmode="numeric"
+      pattern="[0-9]+"
+      autocomplete="username"
+      placeholder="Например: 0"
+      required
+    >
+
+    <label for="mnLoginPassword">Пароль</label>
+    <input
+      id="mnLoginPassword"
+      type="password"
+      autocomplete="current-password"
+      placeholder="Пока не используется"
+      disabled
+    >
+
+    <div id="mnLoginError" role="alert"></div>
+    <button id="mnLoginSubmit" type="submit">Войти</button>
+  </form>
+</dialog>
+
+<script>
+(() => {
+  const dialog = document.getElementById("mnLoginDialog");
+  const form = document.getElementById("mnLoginForm");
+  const idInput = document.getElementById("mnLoginId");
+  const message = document.getElementById("mnLoginError");
+  const submit = document.getElementById("mnLoginSubmit");
+  const openButton = document.getElementById("mnLoginButton");
+
+  function openLogin() {
+    message.textContent = "";
+    if (!dialog.open) dialog.showModal();
+    idInput.focus();
+  }
+
+  openButton.addEventListener("click", openLogin);
+
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!form.reportValidity()) return;
+
+    submit.disabled = true;
+    idInput.readOnly = true;
+    message.textContent = "";
+
+    try {
+      // Получаем защитный код существующей формы сервера.
+      const page = await fetch("/test-users", {
+        credentials: "same-origin",
+        cache: "no-store"
+      });
+
+      if (!page.ok) {
+        throw new Error("Не удалось получить форму входа.");
+      }
+
+      const documentCopy = new DOMParser().parseFromString(
+        await page.text(),
+        "text/html"
+      );
+
+      const csrf = documentCopy.querySelector(
+        'input[name="csrf"]'
+      )?.value;
+
+      if (!csrf) {
+        throw new Error("Сервер не вернул защитный код формы.");
+      }
+
+      // Используем существующий вход по ID.
+      const response = await fetch("/test-users", {
+        method: "POST",
+        credentials: "same-origin",
+        body: new URLSearchParams({
+          user_id: idInput.value,
+          csrf
+        })
+      });
+
+      if (response.status === 404) {
+        throw new Error("Пользователь не найден.");
+      }
+
+      if (!response.ok) {
+        throw new Error("Вход не выполнен. Код: " + response.status);
+      }
+
+      window.location.reload();
+    } catch (error) {
+      message.textContent = error.message || "Ошибка соединения.";
+    } finally {
+      submit.disabled = false;
+      idInput.readOnly = false;
+    }
+  });
+
+  fetch("/api/current-user", {
+    credentials: "same-origin",
+    cache: "no-store"
+  })
+    .then(async response => {
+      if (response.status === 401) {
+        openLogin();
+        return;
+      }
+
+      if (!response.ok) return;
+
+      const user = await response.json();
+      idInput.value = String(user.user_id);
+      openButton.textContent = "User ID: " + user.user_id;
+    })
+    .catch(() => {});
+})();
+</script>
+
+
+// ============================================================================
+// LOAD\OPEN\SEP — ДИАЛОГОВОЕ ОКНО ЗАГРУЗОК
+// ============================================================================
+
+
+<style>
+  #mnStartDialog {
+    width: min(380px, calc(100vw - 40px));
+    padding: 24px;
+    border: 1px solid #666;
+    border-radius: 10px;
+    background: #222;
+    color: #fff;
+  }
+
+  #mnStartDialog::backdrop {
+    background: rgba(0, 0, 0, .8);
+  }
+
+  #mnStartActions {
+    display: grid;
+    gap: 14px;
+  }
+
+  #mnStartActions button {
+    width: 100%;
+    padding: 14px;
+    font-size: 16px;
+  }
+
+  #mnStartActions button:disabled {
+    opacity: .4;
+    cursor: not-allowed;
+  }
+
+  #mnStartUser {
+    margin-bottom: 18px;
+    text-align: center;
+  }
+</style>
+
+<dialog id="mnStartDialog">
+  <div id="mnStartUser"></div>
+
+  <div id="mnStartActions">
+    <button id="mnStartSeparate" type="button">
+      Separate audio track
+    </button>
+
+    <button type="button" disabled title="Пока недоступно">
+      Load file MyNus
+    </button>
+
+    <button id="mnStartOpenProject" type="button">
+      Open project MyNus
+    </button>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  const dialog = document.getElementById("mnStartDialog");
+  const userLabel = document.getElementById("mnStartUser");
+  const audioInput = document.getElementById("audioFile");
+  const splitButton = document.getElementById("splitBtn");
+  const openProjectButton = document.getElementById("openProjectStartBtn");
+
+  function showStart() {
+    if (!dialog.open) dialog.showModal();
+  }
+
+  document.getElementById("mnStartSeparate")
+    .addEventListener("click", () => {
+      if (!audioInput || !splitButton || splitButton.disabled) return;
+
+      function cleanup() {
+        audioInput.removeEventListener("change", selected);
+        audioInput.removeEventListener("cancel", cancelled);
+      }
+
+      function selected() {
+        cleanup();
+
+        if (!audioInput.files?.length) {
+          showStart();
+          return;
+        }
+
+        // Штатный обработчик выбора файла уже выполнился.
+        // Запускаем существующую сепарацию.
+        splitButton.click();
+      }
+
+      function cancelled() {
+        cleanup();
+        showStart();
+      }
+
+      audioInput.addEventListener("change", selected);
+      audioInput.addEventListener("cancel", cancelled);
+
+      // Позволяет повторно выбрать тот же файл.
+      audioInput.value = "";
+      dialog.close();
+      audioInput.click();
+    });
+
+  document.getElementById("mnStartOpenProject")
+    .addEventListener("click", () => {
+      if (!openProjectButton || openProjectButton.disabled) return;
+
+      dialog.close();
+      openProjectButton.click();
+    });
+
+  // После входа предыдущий блок перезагружает страницу.
+  // Здесь показываем выбор действий уже вошедшему пользователю.
+  fetch("/api/current-user", {
+    credentials: "same-origin",
+    cache: "no-store"
+  })
+    .then(async response => {
+      if (!response.ok) return;
+
+      const user = await response.json();
+      userLabel.textContent =
+        "User ID: " + user.user_id +
+        (user.name ? " — " + user.name : "");
+
+      const loginDialog = document.getElementById("mnLoginDialog");
+      if (!loginDialog?.open) showStart();
+    })
+    .catch(error => {
+      console.error("Не удалось открыть стартовое меню:", error);
+    });
+})();
+</script>
 
 <!-- ========================================
      SERVICE CONSOLE
@@ -22972,8 +23330,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 5.6.2 | Ipad & Bad Block STRUCTURE | ПОСЛЕДОВАТЕЛЬНЫЙ ЛОГ| fix Save | Trim fix");
-console.log("[SERVICE CONSOLE] MyNus 5.6.2 | Ipad & Bad Block STRUCTURE | ПОСЛЕДОВАТЕЛЬНЫЙ ЛОГ| fix Save | Trim fix");
+console.log("MyNus 6.0.0 | ВХОД И ЗАГРУЗКИ В СЕРВЕРНОЙ ЛОГИКЕ");
+console.log("[SERVICE CONSOLE] MyNus 6.0.0 | ВХОД И ЗАГРУЗКИ В СЕРВЕРНОЙ ЛОГИКЕ");
 </script>
 
 <div class="row" id="build-down">
@@ -23008,6 +23366,7 @@ deploy: --
       + time;
 })();
 </script>
+
 
 
 </body>
