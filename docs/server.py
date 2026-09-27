@@ -1,2193 +1,23015 @@
-# ========================================
-#  фикс шаринга /Перехват всех логов  CONSOLE F12-> SERVER CMD | 5.6.1 
-# ========================================
+<!-- MyNus 5.6.2 | Ipad & Bad Block STRUCTURE | ПОСЛЕДОВАТЕЛЬНЫЙ ЛОГ| fix Save | Trim fix -->
+<!DOCTYPE html>
+<html lang="en">
 
-# ========================================
-# IMPORTS
-# ========================================
+<head>
 
-import sys
-import os
-import json
-import re
-import unicodedata
-import glob
-import shutil
-import subprocess
-import threading
-import uuid
+  <!-- ========================================
+       BASIC SETTINGS
+  ======================================== -->
 
-from flask import (
-    Flask,
-    request,
-    jsonify,
-    send_from_directory,
-    send_file
-)
-from werkzeug.utils import secure_filename
-import language_tool_python
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>MyNus 5.6.2</title>
 
 
-# ========================================
-# APPLICATION
-# ========================================
+ <style>
+/* ========================================
+       PAGE
+    ======================================== */
 
-app = Flask(__name__)
+    * {
+      box-sizing: border-box;
+    }
 
+    body {
+      margin: 0;
+      min-height: 100vh;
 
+      font-family: Arial, sans-serif;
 
-
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
-RESULT_DIR = os.path.join(BASE_DIR, "results")
-EXPORT_DIR = os.path.join(BASE_DIR, "exports")
-PROJECTS_DIR = os.path.join(BASE_DIR, "Projects")
-PLAYLIST_STATE_PATH = os.path.join(BASE_DIR, "playlist.json")
-
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(RESULT_DIR, exist_ok=True)
-os.makedirs(EXPORT_DIR, exist_ok=True)
-os.makedirs(PROJECTS_DIR, exist_ok=True)
+      background: #f3f3f3;
+      color: #222;
+    }
 
 
-# ========================================
-# JOB STATE
-# ========================================
+    /* ========================================
+       APPLICATION
+    ======================================== */
 
-jobs = {}
+    .app {
+      width: min(1200px, calc(100% - 30px));
 
+      margin: 30px auto;
+      padding: 25px;
 
+      background: white;
 
-# Arbitrary project folders selected via the Windows folder picker are exposed
-# through short-lived in-memory tokens so the browser can fetch their tracks.
-opened_project_folders = {}
+      border-radius: 12px;
 
+      box-shadow:
+        0 4px 20px rgba(0, 0, 0, .08);
+    }
 
-# ========================================
-# PROJECT LOAD TRACE (5.6.0)
-# Diagnostic-only endpoint. It does not write, delete, move or replace files.
-# ========================================
+    h1 {
+      margin: 0 0 25px;
 
-@app.route("/debug/load-trace", methods=["POST"])
-def debug_load_trace():
-    data = request.get_json(silent=True) or {}
-
-    trace_id = str(data.get("trace_id") or "no-trace")
-    stage = str(data.get("stage") or data.get("event") or "UNKNOWN")
-    project_id = data.get("project_id")
-    source = data.get("source")
-    ui_mode = data.get("ui_mode")
-    project_loading = data.get("project_loading")
-    elapsed_ms = data.get("elapsed_ms")
-    command = data.get("command")
-    function = data.get("function")
-    parameters = data.get("parameters")
-    result = data.get("result")
-    details = data.get("details")
-
-    print("\n" + "-" * 72, flush=True)
-    print(f"[LOAD TRACE][{trace_id}] {stage}", flush=True)
-    print(f"  project_id      = {project_id}", flush=True)
-    print(f"  source          = {source}", flush=True)
-    print(f"  ui_mode         = {ui_mode}", flush=True)
-    print(f"  project_loading = {project_loading}", flush=True)
-    print(f"  elapsed_ms      = {elapsed_ms}", flush=True)
-    if command is not None:
-        print(f"  command         = {command}", flush=True)
-    if function is not None:
-        print(f"  function        = {function}", flush=True)
-    if parameters is not None:
-        print(f"  parameters      = {parameters}", flush=True)
-    if result is not None:
-        print(f"  result          = {result}", flush=True)
-    if details is not None:
-        print(f"  details         = {details}", flush=True)
-    print("-" * 72, flush=True)
-
-    return jsonify({"ok": True, "version": "5.6.0", "trace_id": trace_id})
+      text-align: center;
+      font-size: 26px;
+    }
 
 
-# ========================================
-# CLIENT CONSOLE -> SERVER CMD
-# ========================================
+    /* ========================================
+       FILE LOAD
+    ======================================== */
 
-@app.route("/debug/client-console", methods=["POST"])
-def debug_client_console():
-    data = request.get_json(silent=True) or {}
+    .load-row {
+      display: flex;
+      align-items: center;
 
-    level = str(data.get("level") or "log").upper()
-    message = str(data.get("message") or "")
-    client_time = str(data.get("client_time") or "")
-    page = str(data.get("page") or "")
-    user_agent = str(data.get("user_agent") or "")
-    remote_ip = request.remote_addr or ""
+      gap: 5px;
+    }
 
-    print(
-        f"[CLIENT {level}]"
-        f" [{remote_ip}]"
-        f" {message}",
-        flush=True
-    )
+    #audioFile {
+      display: none;
+    }
 
-    if client_time:
-        print(f"  time       = {client_time}", flush=True)
+    #selectFileBtn {
+      min-width: 110px;
+    }
 
-    if page:
-        print(f"  page       = {page}", flush=True)
+    #fileName {
+      flex: 1;
 
-    if user_agent:
-        print(f"  user_agent = {user_agent}", flush=True)
+      padding: 9px 10px;
 
-    return jsonify({"ok": True})
+      overflow: hidden;
 
-# ========================================
-# INDEX
-# ========================================
+      background: #f5f5f5;
 
-@app.route("/")
-def index():
-    # Play List history belongs to the current index session only.
-    # Reloading index clears -N history but preserves current and queue.
-    state = _read_playlist_state()
+      border-radius: 7px;
 
-    if state.get("history"):
-        state["history"] = []
-        _write_playlist_state(state)
+      white-space: nowrap;
+      text-overflow: ellipsis;
 
-        print(
-            "[PLAYLIST] INDEX RELOAD | history cleared",
-            flush=True
-        )
+      font-size: 14px;
+    }
 
-    index_path = os.path.join(
-        BASE_DIR,
-        "index.html"
-    )
 
-    with open(
-        index_path,
-        "r",
-        encoding="utf-8"
-    ) as index_file:
-        index_html = index_file.read()
+    /* ========================================
+       BUTTONS
+    ======================================== */
 
-    client_console_bridge = r'''
+    button {
+      padding: 10px 16px;
+
+      border: 0;
+      border-radius: 7px;
+
+      background: #222;
+      color: white;
+
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: .5;
+
+      cursor: default;
+    }
+
+    button.active {
+      background: #777;
+    }
+
+
+    /* ========================================
+       STATUS AND PROCESS
+    ======================================== */
+
+        .progress-status {
+      position: absolute;
+      left: 10px;
+      top: 0;
+      bottom: 0;
+
+      display: flex;
+      align-items: center;
+
+      font-family: monospace;
+      font-size: 13px;
+      font-weight: bold;
+
+      color: #111;
+      z-index: 2;
+
+      pointer-events: none;
+    }
+
+    .progress-status.process { color: #66ccff; }
+    .progress-status.success { color: #7CFC00; }
+    .progress-status.error { color: #ff69b4; }
+    .progress-status.info { color: #ffd700; }
+
+    .progress-wrap {
+      display: none;
+      position: relative;
+
+      width: 100%;
+      height: 24px;
+
+      margin-top: 12px;
+
+      background: #e5e5e5;
+
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      width: 0%;
+      height: 100%;
+
+      background: #222;
+
+      transition:
+        width .2s linear;
+    }
+
+    .progress-percent {
+      position: absolute;
+
+      inset: 0;
+
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 8px;
+
+      color: white;
+
+      font-family: monospace;
+      font-size: 13px;
+      font-weight: bold;
+
+      mix-blend-mode: difference;
+
+      pointer-events: none;
+    }
+
+
+    /* ========================================
+       STUDIO
+    ======================================== */
+
+    #studio {
+      display: none;
+
+      margin-top: 25px;
+    }
+
+    .studio-layout {
+      display: grid;
+      grid-template-columns:
+        minmax(0, 1fr)
+        clamp(190px, 18vw, 280px);
+      gap: 12px;
+      align-items: start;
+      width: 100%;
+    }
+
+    .studio-main {
+      min-width: 0;
+      width: 100%;
+    }
+
+    /* 5.4.13 | Separate Sequencer History block. */
+    .sequencer-history-block {
+      width: 190px;
+      margin: 0 0 6px 0;
+      padding: 5px 6px;
+      box-sizing: border-box;
+      background: #f5f5f5;
+      border-radius: 8px;
+    }
+
+    .sequencer-history-title {
+      margin-bottom: 4px;
+      text-align: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .sequencer-history-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+    }
+
+    .sequencer-history-buttons button {
+      min-width: 0;
+      padding: 4px 6px;
+      font-size: 10px;
+    }
+
+    .fx-panel {
+      position: static;
+      width: 100%;
+      min-width: 0;
+      max-width: 280px;
+      margin: 0;
+      padding: 6px;
+      align-self: start;
+      overflow: hidden;
+      background: #f5f5f5;
+      border-radius: 10px;
+      box-sizing: border-box;
+    }
+
+    .fx-panel-title {
+      margin-bottom: 6px;
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    .fx-target-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 4px;
+      margin-bottom: 4px;
+    }
+
+    .fx-target-grid button {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 3px;
+      font-size: 10px;
+    }
+
+    .fx-target-master-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      margin-bottom: 6px;
+    }
+
+    .fx-target-master-row button {
+      width: 100%;
+      min-width: 0;
+      padding: 5px 3px;
+      font-size: 10px;
+    }
+
+    .fx-section {
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid #ddd;
+    }
+
+    .fx-section-title {
+      margin-bottom: 4px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    .eq-row,
+    .fx-control-row {
+      display: grid;
+      grid-template-columns: 60px minmax(0, 1fr) 42px;
+      gap: 5px;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .eq-row label,
+    .fx-control-row label {
+      font-size: 12px;
+    }
+
+    .eq-row input,
+    .fx-control-row input {
+      width: 100%;
+      margin: 0;
+    }
+
+    .fx-value {
+      text-align: right;
+      font-family: monospace;
+      font-size: 11px;
+    }
+
+    .fx-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+
+    .fx-toggle-row button {
+      padding: 4px 7px;
+      font-size: 10px;
+    }
+
+
+    /* ========================================
+       TRANSPORT
+    ======================================== */
+
+    .transport {
+      display: flex;
+      flex-wrap: wrap;
+
+      justify-content: center;
+      align-items: center;
+
+      gap: 8px;
+
+      margin-top: 12px;
+      margin-bottom: 0;
+    }
+
+    .transport button {
+      min-width: 72px;
+    }
+
+    #loopBtn.active {
+      font-weight: bold;
+      outline: 2px solid currentColor;
+    }
+
+    #playBtn {
+      min-width: 58px;
+    }
+
+    .track-duration-info {
+      width: 190px;
+      padding: 6px 8px;
+      font-family: monospace;
+      font-size: 12px;
+      text-align: right;
+      box-sizing: border-box;
+    }
+
+    .transport-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .transport-row {
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 4px;
+      width: 100%;
+    }
+
+    .transport-row button {
+      min-width: 46px;
+      padding: 5px 6px;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .transport-counters {
+      display: grid;
+      grid-template-columns: 190px 1fr;
+      gap: 12px;
+      align-items: center;
+      width: 100%;
+    }
+
+    .time-display {
+      flex: 1;
+      min-width: 0;
+
+      padding: 8px 10px;
+
+      background: #f3f3f3;
+
+      border-radius: 6px;
+
+      text-align: center;
+
+      font-family: monospace;
+      font-size: 14px;
+    }
+
+
+    /* ========================================
+       ZOOM
+    ======================================== */
+
+    .zoom-row {
+      display: flex;
+
+      justify-content: flex-end;
+      align-items: center;
+
+      gap: 8px;
+
+      margin-bottom: 10px;
+    }
+
+    .zoom-row button {
+      width: 38px;
+      min-width: 38px;
+
+      padding: 7px;
+    }
+
+    #zoomValue {
+      min-width: 70px;
+
+      text-align: center;
+
+      font-size: 13px;
+    }
+
+
+    /* ========================================
+       TRACKS
+    ======================================== */
+
+    .track {
+      display: grid;
+
+      grid-template-columns:
+        190px 1fr;
+
+      gap: 12px;
+
+      margin-bottom: 4px;
+      min-height: 62px;
+    }
+
+    /* 5.4.18 | Состояние дорожек: active = обычная чёрная волна на белом;
+       passive = обелённая/серая волна; muted = розовый фон + серая волна. */
+    .track.track-active .track-controls,
+    .track.track-active .timeline-scroll {
+      background: #fff;
+      border-color: #ddd;
+      box-shadow: none;
+    }
+
+    .track.track-active canvas {
+      opacity: 1;
+      filter: none;
+    }
+
+    .track.track-passive .track-controls,
+    .track.track-passive .timeline-scroll {
+      background: #fff;
+      border-color: #eee;
+      box-shadow: none;
+    }
+
+    .track.track-passive canvas {
+      opacity: .28;
+      filter: grayscale(1);
+    }
+
+    .track.track-muted .track-controls,
+    .track.track-muted .timeline-scroll {
+      background: #ffd9e6;
+      border-color: #ef9ab8;
+      box-shadow: none;
+    }
+
+    .track.track-muted canvas {
+      opacity: .28;
+      filter: grayscale(1);
+    }
+
+    /* 5.4.18 | Selection проходит зелёной зоной через все активные аудиодорожки. */
+    .track-selection-overlay {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      display: none;
+      background: rgba(0, 200, 83, .16);
+      border-left: 2px solid #00c853;
+      border-right: 2px solid #00c853;
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    /* 5.4.18 | Высота waveform соответствует высоте левого основания строки. */
+    .track:has(.timeline-scroll) {
+      align-items: stretch;
+    }
+
+    .track:has(.timeline-scroll) .timeline-scroll,
+    .track:has(.timeline-scroll) .timeline-inner,
+    .track:has(.timeline-scroll) canvas {
+      height: 100%;
+      min-height: 0;
+    }
+
+    /* Original ниже обычных дорожек, Master выше обычных. */
+    .track:has(.timeline-scroll[data-track="original"]) {
+      min-height: 54px;
+    }
+
+    .track:has(.timeline-scroll[data-track="master"]) {
+      min-height: 96px;
+    }
+
+   
+    .track-controls {
+      display: grid;
+      grid-template-columns: 52px 1fr;
+      grid-template-areas:
+        "title buttons"
+        "volume volume"
+        "save save"
+        "crop crop";
+      gap: 2px 4px;
+
+      padding: 4px 6px;
+
+      background: #f5f5f5;
+
+      border-radius: 8px;
+    }
+
+    .track-title {
+      grid-area: title;
+
+      margin: 0;
+
+      align-self: center;
+
+      font-size: 11px;
+      font-weight: bold;
+    }
+
+    /* 5.4.18 | Master получает отдельную верхнюю строку Clear Rec / Save Rec.
+       Rec On / Rec Off / Export Track / Export Selection остаются на прежних местах. */
+    .master-controls {
+      grid-template-areas:
+        "title title"
+        "buttons buttons"
+        "volume volume"
+        "save save"
+        "crop crop";
+      padding-top: 6px;
+    }
+
+    .master-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      width: 100%;
+    }
+
+    .master-rec-commit-buttons {
+      display: flex;
+      gap: 4px;
+      margin-left: auto;
+    }
+
+    .master-rec-commit-buttons button {
+      padding: 2px 5px;
+      font-size: 10px;
+      line-height: 14px;
+      border-radius: 7px;
+    }
+
+    .track-buttons {
+      grid-area: buttons;
+
+      display: flex;
+
+      gap: 4px;
+
+      margin: 0;
+    }
+
+    .track-buttons button {
+      flex: 1;
+
+      padding: 2px 3px;
+
+      font-size: 10px;
+      line-height: 14px;
+    }
+
+    .volume-row {
+      grid-area: volume;
+
+      display: flex;
+
+      align-items: center;
+
+      gap: 5px;
+      min-height: 16px;
+    }
+
+    .volume-row input {
+      width: 100%;
+    }
+
+    .volume-value {
+      width: 40px;
+
+      text-align: right;
+
+      font-size: 12px;
+    }
+
+    /* ========================================
+       LYRICS
+    ======================================== */
+
+    .lyrics-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 46px;
+      padding: 4px 6px;
+      background: #f5f5f5;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: bold;
+    }
+
+    .lyrics-panel {
+      min-height: 46px;
+      max-height: 92px;
+      overflow-y: auto;
+      padding: 8px 10px;
+      background: #fafafa;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      line-height: 1.65;
+      font-size: 14px;
+    }
+
+    .lyrics-word {
+      display: inline;
+      padding: 1px 2px;
+      border-radius: 3px;
+      transition:
+        background .08s linear,
+        color .08s linear;
+    }
+
+    .lyrics-word.active {
+      background: #222;
+      color: white;
+    }
+
+    .lyrics-word.past {
+      color: #888;
+    }
+
+    .lyrics-empty {
+      color: #888;
+      font-style: italic;
+    }
+
+    .static-track-title {
+      display: flex;
+
+      align-items: center;
+      justify-content: center;
+
+      height: 100%;
+
+      padding: 4px 6px;
+
+      background: #ececec;
+
+      border-radius: 8px;
+
+      font-weight: bold;
+    }
+
+
+    /* ========================================
+       WAVEFORMS
+    ======================================== */
+
+    .timeline-scroll {
+      position: relative;
+
+      height: 46px;
+
+      overflow: hidden;
+
+      background: #fafafa;
+
+      border: 1px solid #ddd;
+      border-radius: 8px;
+
+      scrollbar-width: thin;
+    }
+
+    .timeline-inner {
+      position: relative;
+
+      height: 46px;
+
+      min-width: 100%;
+    }
+
+    canvas {
+      display: block;
+
+      width: 100%;
+      height: 46px;
+
+      cursor: pointer;
+    }
+
+    .playhead {
+      position: absolute;
+
+      top: 0;
+      bottom: 0;
+
+      width: 2px;
+
+      /* 5.4.18 | Playhead Sequencer всегда синий, как в Lyrics. */
+      background: #0066ff;
+
+      pointer-events: none;
+
+      z-index: 5;
+    }
+
+
+    /* ========================================
+       MASTER TIMELINE
+    ======================================== */
+
+    .master-timeline-title {
+      margin: 10px 0 4px 202px;
+      width: calc(100% - 202px);
+      text-align: center;
+
+      font-size: 13px;
+      font-weight: bold;
+    }
+
+    .master-timeline-row {
+position: relative;
+
+      display: grid;
+      grid-template-columns: 190px 1fr;
+      gap: 12px;
+      align-items: center;
+      width: 100%;
+    }
+
+    .master-timeline {
+      position: relative;
+
+      width: 100%;
+      margin-left: 0;
+
+      height: 84px;
+
+      overflow: hidden;
+
+      background: transparent;
+
+      border: 0;
+      border-radius: 0;
+
+      scrollbar-width: thin;
+    }
+
+    .master-timeline-inner {
+      position: relative;
+
+      height: 84px;
+
+      min-width: 100%;
+
+      cursor: pointer;
+    }
+
+    .shared-scroll-row {
+      display: grid;
+      grid-template-columns: 190px 1fr;
+      gap: 12px;
+      align-items: center;
+      width: 100%;
+      margin-top: 2px;
+    }
+
+    .shared-scroll-spacer {
+      width: 190px;
+      height: 1px;
+    }
+
+    .shared-scroll {
+      overflow-x: auto;
+      overflow-y: hidden;
+      height: 14px;
+      scrollbar-width: thin;
+    }
+
+    .shared-scroll-inner {
+      height: 1px;
+      min-width: 100%;
+    }
+
+    .transport-stack {
+      margin-left: 202px;
+      width: calc(100% - 202px);
+    }
+
+    .transport-counters {
+      display: block;
+      width: 100%;
+    }
+
+    .crop-mask {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      background: rgba(0,0,0,.28);
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    .master-ruler {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 22px;
+      height: 42px;
+      box-sizing: border-box;
+      overflow: hidden;
+      background: #ececec;
+      border: 1px solid #ccc;
+      border-radius: 7px;
+    }
+
+    .master-ruler-mark {
+      position: absolute;
+
+      top: 0;
+      bottom: 0;
+
+      width: 1px;
+
+      background: #bbb;
+    }
+
+    .master-ruler-label {
+      position: absolute;
+
+      /* 5.4.18 | Цифры делений прижаты изнутри к нижней границе Timeline. */
+      bottom: 3px;
+
+      transform: translateX(4px);
+
+      font-size: 10px;
+      color: #666;
+
+      pointer-events: none;
+    }
+
+    /* 5.4.18 | Как в Lyrics: цифра текущего деления подсвечивается синим. */
+    .master-ruler-label.active {
+      color: #0066ff;
+      font-weight: 700;
+    }
+
+    .master-cursor {
+      position: absolute;
+
+      top: 22px;
+      height: 42px;
+
+      width: 3px;
+
+      /* 5.4.18 | Master Playhead всегда синий. */
+      background: #0066ff;
+
+      cursor: ew-resize;
+
+      z-index: 10;
+
+      touch-action: none;
+    }
+
+    .master-cursor::before {
+      content: "";
+
+      position: absolute;
+
+      top: 0;
+      left: 50%;
+
+      width: 14px;
+      height: 14px;
+
+      transform:
+        translateX(-50%);
+
+      background: #111;
+
+      border-radius: 50%;
+    }
+
+
+    .selection-range {
+      position: absolute;
+      top: 22px;
+      height: 42px;
+      display: none;
+      /* 5.4.18 | Selection зелёный вместо жёлтого. */
+      background: rgba(0, 200, 83, .20);
+      border-left: 2px solid #00c853;
+      border-right: 2px solid #00c853;
+      pointer-events: none;
+      z-index: 8;
+      color: #00a844;
+      font-family: Consolas, monospace;
+      font-weight: 700;
+    }
+
+    /* 5.4.18 | По X подписи направлены внутрь Selection; по Y совпадают с уровнями Trim. */
+    .selection-edge-label {
+      position: absolute;
+      z-index: 16;
+      color: #00a844;
+      white-space: nowrap;
+      pointer-events: none;
+      line-height: 1;
+    }
+
+    .selection-edge-label.in { left: 4px; text-align: left; }
+    .selection-edge-label.out { right: 4px; text-align: right; }
+
+    /* selectionRange начинается на Y=22px. Trim-time стоит на Y=1px => -21px относительно Selection. */
+    .selection-edge-label.time { top: -21px; font-size: 12px; line-height: 18px; }
+
+    /* Trim-handle начинается на Y=66px => 44px относительно Selection. */
+    .selection-edge-label.name { top: 44px; font-size: 10px; line-height: 15px; }
+
+
+    /* 5.4.11 | Global Project Trim */
+    .project-trim-mask {
+      position: absolute;
+      top: 22px;
+      height: 42px;
+      background: rgba(0,0,0,.30);
+      pointer-events: none;
+      z-index: 6;
+    }
+
+    .project-trim-marker {
+      position: absolute;
+      top: 22px;
+      width: 2px;
+      height: 42px;
+      background: #e83e8c;
+      transform: translateX(-1px);
+      pointer-events: none;
+      z-index: 12;
+    }
+
+    .project-trim-time {
+      position: absolute;
+      top: 1px;
+      transform: translateX(-50%);
+      min-width: 42px;
+      text-align: center;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      line-height: 18px;
+      font-weight: 700;
+      color: #e83e8c;
+      pointer-events: none;
+      z-index: 14;
+    }
+
+    .project-trim-handle {
+      position: absolute;
+      top: 66px;
+      width: 18px;
+      height: 15px;
+      padding: 0;
+      border: 1px solid #b72468;
+      border-radius: 3px 3px 7px 7px;
+      background: #e83e8c;
+      transform: translateX(-50%);
+      cursor: ew-resize;
+      touch-action: none;
+      z-index: 15;
+    }
+
+    .project-trim-handle::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: -5px;
+      width: 0;
+      height: 0;
+      transform: translateX(-50%);
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-bottom: 5px solid #e83e8c;
+    }
+
+    .timeline-inner .project-trim-track-mask {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      background: rgba(0,0,0,.25);
+      pointer-events: none;
+      z-index: 6;
+    }
+
+    .timeline-inner .project-trim-track-marker {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: rgba(232,62,140,.95);
+      transform: translateX(-1px);
+      pointer-events: none;
+      z-index: 7;
+    }
+
+    .selection-info {
+      margin-left: 202px;
+      margin-top: 6px;
+      min-height: 16px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #666;
+    }
+
+    .track-save-row {
+      grid-area: save;
+
+      display: flex;
+      gap: 4px;
+      margin: 0;
+    }
+
+    .crop-row {
+      grid-area: crop;
+    }
+    .crop-row button.active {
+      font-weight: bold;
+      outline: 2px solid currentColor;
+    }
+
+
+    .track-save-row button {
+      flex: 1;
+      padding: 2px 3px;
+      font-size: 9px;
+      line-height: 14px;
+      white-space: nowrap;
+    }
+
+
+    .master-controls {
+      align-self: stretch;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .master-controls .track-buttons {
+      display: flex;
+      gap: 4px;
+      margin: 0;
+    }
+
+    .master-controls .track-buttons button {
+      flex: 1 1 0;
+      min-width: 0;
+      padding: 3px 4px;
+      font-size: 10px;
+    }
+
+    .master-state {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #666;
+    }
+
+    .export-dialog {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,.35);
+    }
+
+    .export-dialog.open {
+      display: flex;
+    }
+
+    /* SAVE Project из Lyrics Editor должен открываться поверх Lyrics Editor. */
+    #loadProjectDialog,
+    #saveProjectDialog,
+    #projectConflictDialog {
+      z-index: 3200;
+    }
+
+    .export-dialog-card {
+      width: min(360px, calc(100vw - 32px));
+      padding: 20px;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 10px 40px rgba(0,0,0,.2);
+    }
+
+    .export-dialog-title {
+      margin-bottom: 14px;
+      font-weight: bold;
+    }
+
+    .export-format-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    /* ========================================
+       RESPONSIVE — FX ALWAYS STAYS RIGHT
+    ======================================== */
+
+    @media (max-width: 1200px) {
+
+      .studio-layout {
+        grid-template-columns:
+          minmax(0, 1fr)
+          clamp(180px, 20vw, 230px);
+        gap: 8px;
+      }
+
+      .fx-panel {
+        max-width: 230px;
+        padding: 5px;
+      }
+
+      .eq-row,
+      .fx-control-row {
+        grid-template-columns: 54px minmax(0, 1fr) 38px;
+        gap: 4px;
+      }
+
+    }
+
+
+    @media (max-width: 900px) {
+
+      .studio-layout {
+        grid-template-columns:
+          minmax(0, 1fr)
+          175px;
+        gap: 6px;
+      }
+
+      .fx-panel {
+        width: 175px;
+        max-width: 175px;
+      }
+
+      .fx-target-grid {
+        gap: 2px;
+      }
+
+      .eq-row,
+      .fx-control-row {
+        grid-template-columns: 48px minmax(0, 1fr) 34px;
+        gap: 3px;
+      }
+
+      .fx-value,
+      .eq-row label,
+      .fx-control-row label {
+        font-size: 9px;
+      }
+
+    }
+
+    /* ========================================
+       DUAL TRANSPORT / PAN / RESET
+    ======================================== */
+
+    .transport-stack {
+      margin: 8px 0;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .transport-band,
+    .transport-counter-line {
+      display: grid;
+      grid-template-columns: 190px minmax(0, 1fr);
+      gap: 12px;
+      align-items: center;
+      width: 100%;
+    }
+
+    .shortcut-legend {
+      position: relative;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .project-side-btn {
+      flex: 0 0 auto;
+      padding: 5px 8px;
+      border: 1px solid #c7c7c7;
+      border-radius: 6px;
+      background: #f3f3f3;
+      color: #333;
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .project-side-btn:hover { background: #e7e7e7; }
+
+    .shortcut-help {
+      position: relative;
+      display: inline-block;
+    }
+
+    .shortcut-help-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 54px;
+      padding: 5px 7px;
+      border-radius: 6px;
+      background: #ececec;
+      color: #333;
+      font-size: 10px;
+      font-weight: bold;
+      cursor: help;
+      user-select: none;
+    }
+
+    .shortcut-popup {
+      position: absolute;
+      left: 0;
+      z-index: 2000;
+      display: none;
+      width: 300px;
+      padding: 10px 12px;
+      background: #222;
+      color: white;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.25);
+      font-family: monospace;
+      font-size: 11px;
+      line-height: 1.45;
+      text-align: left;
+      white-space: normal;
+      pointer-events: none;
+    }
+
+    .transport-top .shortcut-popup {
+      top: calc(100% + 6px);
+    }
+
+    .transport-bottom .shortcut-popup {
+      bottom: calc(100% + 6px);
+    }
+
+    .shortcut-help:hover .shortcut-popup,
+    .shortcut-help:focus-within .shortcut-popup {
+      display: block;
+    }
+
+    .shortcut-line {
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 8px;
+    }
+
+    .shortcut-key {
+      font-weight: bold;
+      white-space: nowrap;
+    }
+
+    .transport-row {
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 3px;
+      min-width: 0;
+      width: 100%;
+    }
+
+    .transport-row button {
+      min-width: 0;
+      flex: 0 1 auto;
+      padding: 5px 6px;
+      font-size: 10px;
+      white-space: nowrap;
+    }
+
+    .zoom-inline {
+      flex: 0 0 auto;
+      min-width: 58px;
+      padding: 4px 3px;
+      text-align: center;
+      font-size: 10px;
+      font-family: monospace;
+      background: #f3f3f3;
+      border-radius: 5px;
+    }
+
+    .transport-counter-spacer {
+      width: 190px;
+    }
+
+    .transport-counter-line .time-display {
+      width: 100%;
+    }
+
+    .track-info-left {
+      width: 190px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 5px;
+      align-items: center;
+    }
+
+    .track-info-left #resetBtn {
+      padding: 5px 7px;
+      font-size: 10px;
+    }
+
+    .track-info-left .track-duration-info {
+      width: auto;
+      padding: 4px 2px;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .pan-row {
+      display: grid;
+      grid-template-columns: 12px minmax(0, 1fr) 12px 34px;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .pan-row input {
+      width: 100%;
+      margin: 0;
+    }
+
+    .studio-layout {
+      grid-template-columns:
+        minmax(0, 1fr)
+        clamp(190px, 18vw, 280px);
+    }
+
+    .studio-main {
+      min-width: 0;
+    }
+
+    .fx-panel {
+      grid-column: 2;
+      grid-row: 1;
+      align-self: start;
+      position: static;
+      margin: 0;
+    }
+
+    @media (max-width: 900px) {
+      .transport-band,
+      .transport-counter-line {
+        grid-template-columns: 150px minmax(0, 1fr);
+        gap: 6px;
+      }
+
+      .transport-counter-spacer {
+        width: 150px;
+      }
+
+      .transport-row button {
+        padding: 4px 4px;
+        font-size: 9px;
+      }
+
+      .zoom-inline {
+        min-width: 48px;
+        font-size: 9px;
+      }
+    }
+
+
+    .karaoke-line {
+      min-height: 20px;
+      text-align: center;
+      white-space: normal;
+    }
+
+    .karaoke-current {
+      font-size: 16px;
+      font-weight: bold;
+    }
+
+    .karaoke-next {
+      margin-top: 2px;
+      color: #888;
+      font-size: 13px;
+    }
+
+    .karaoke-word {
+      display: inline;
+      padding: 1px 2px;
+      border-radius: 3px;
+    }
+
+    .karaoke-word.past {
+      color: #888;
+    }
+
+    .karaoke-word.active {
+      background: #222;
+      color: white;
+    }
+
+
+    /* ========================================
+       LYRICS EDITOR
+    ======================================== */
+
+    .lyrics-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .karaoke-controls-group {
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .karaoke-controls-title {
+      width: 100%;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 12px;
+    }
+
+    .karaoke-controls-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      width: 100%;
+    }
+
+    .karaoke-controls-buttons button {
+      width: 100%;
+      min-width: 0;
+      padding: 3px 7px;
+      font-size: 10px;
+    }
+
+    .lyrics-editor-dialog {
+      position: fixed;
+      inset: 0;
+      z-index: 3000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(0,0,0,.42);
+    }
+
+    .lyrics-editor-dialog.open { display: flex; }
+
+    .lyrics-editor-card {
+      width: min(980px, calc(100vw - 40px));
+      height: min(760px, calc(100vh - 40px));
+      max-width: calc(100vw - 16px);
+      max-height: calc(100vh - 16px);
+      min-width: 620px;
+      min-height: 420px;
+      display: flex;
+      flex-direction: column;
+      padding-top: 10px;
+      padding-bottom: 10px;
+      box-sizing: border-box;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 18px 50px rgba(0,0,0,.28);
+      overflow: hidden;
+      resize: both;
+      position: relative;
+    }
+
+    .lyrics-editor-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 16px 14px;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .lyrics-editor-title { font-size: 16px; font-weight: bold; }
+
+    .lyrics-editor-header { cursor: move; user-select: none; }
+
+    .lyrics-editor-header button,
+    .lyrics-editor-toolbar button,
+    .lyrics-editor-actions button {
+      padding: 6px 10px;
+      font-size: 11px;
+    }
+
+    .lyrics-editor-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 14px 14px;
+      border-bottom: 1px solid #ddd;
+      background: #f7f7f7;
+    }
+
+    .lyrics-editor-rows {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 14px 14px;
+    }
+
+    .lyrics-editor-row {
+      display: grid;
+      grid-template-columns: 74px 74px minmax(0, 1fr);
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 6px;
+      padding: 6px;
+      border: 1px solid #ddd;
+      border-radius: 7px;
+      background: #fafafa;
+      cursor: pointer;
+    }
+
+    .lyrics-editor-row.selected {
+      border-color: #222;
+      background: #f0f0f0;
+    }
+
+    .lyrics-editor-row input[type="text"] {
+      width: 100%;
+      padding: 5px 6px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-family: monospace;
+      font-size: 11px;
+    }
+
+    .lyrics-editor-row textarea {
+      width: 100%;
+      min-height: 46px;
+      resize: vertical;
+      padding: 6px 8px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-family: inherit;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .lyrics-editor-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 14px 14px;
+      border-top: 1px solid #ddd;
+      background: #f7f7f7;
+    }
+
+    .lyrics-editor-status { min-width: 0; color: #666; font-size: 11px; }
+    .lyrics-editor-actions { display: flex; align-items: center; gap: 6px; }
+    #saveLyricsEditBtn, #lyricsSaveAsBtn {
+      width: 96px;
+      height: 30px;
+      padding: 6px 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+
+    .lyrics-editor-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: nowrap;
+      gap: 10px;
+    }
+
+    .lyrics-editor-toolbar-left,
+    .lyrics-editor-toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .lyrics-editor-toolbar-left {
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+
+    .lyrics-editor-toolbar-right {
+      flex: 0 0 auto;
+      margin-left: auto;
+    }
+
+    .lyrics-saveas-dialog {
+      position: fixed;
+      inset: 0;
+      z-index: 3200;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,.42);
+    }
+
+    .lyrics-saveas-dialog.open { display: flex; }
+
+    .lyrics-saveas-card {
+      width: min(420px, calc(100vw - 32px));
+      padding: 18px;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 16px 46px rgba(0,0,0,.25);
+    }
+
+    .lyrics-saveas-card label {
+      display: block;
+      margin-top: 10px;
+      margin-bottom: 4px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    .lyrics-saveas-card input,
+    .lyrics-saveas-card select {
+      width: 100%;
+      padding: 7px 8px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    /* ========================================
+       LYRICS FULL SCREEN / KARAOKE MODE 5.1.4
+    ======================================== */
+
+    .lyrics-mode-switch,
+    .lyrics-fullscreen-back {
+      appearance: none;
+      padding: 7px 12px;
+      border: 1px solid #e58aa8;
+      border-radius: 6px;
+      background: rgba(229,138,168,.10);
+      color: #e58aa8;
+      font: inherit;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .lyrics-mode-switch:hover,
+    .lyrics-fullscreen-back:hover {
+      background: rgba(229,138,168,.20);
+      text-decoration: none;
+    }
+
+    .lyrics-mode-switch:active,
+    .lyrics-fullscreen-back:active {
+      transform: translateY(1px);
+    }
+
+    .lyrics-fullscreen-view {
+      display: none;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode {
+      position: fixed;
+      container-type: size;
+      left: 0;
+      top: 0;
+      right: auto;
+      bottom: auto;
+      width: 100vw;
+      height: 100vh;
+      max-width: 100vw;
+      max-height: 100vh;
+      min-width: 620px;
+      min-height: 420px;
+      padding: 0;
+      border-radius: 0;
+      resize: both;
+      overflow: hidden;
+      background: #000;
+      color: #fff;
+      box-shadow: 0 18px 50px rgba(0,0,0,.38);
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode[data-karaoke-maximized="0"] {
+      min-width: 620px;
+      min-height: 900px;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-fullscreen-topbar {
+      cursor: move;
+      user-select: none;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-fullscreen-topbar button,
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-fullscreen-topbar input {
+      cursor: pointer;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode > .lyrics-editor-header,
+    .lyrics-editor-card.karaoke-fullscreen-mode > .lyrics-editor-toolbar,
+    .lyrics-editor-card.karaoke-fullscreen-mode > .lyrics-editor-rows,
+    .lyrics-editor-card.karaoke-fullscreen-mode > .lyrics-editor-footer,
+    .lyrics-editor-card.karaoke-fullscreen-mode > #lyricsSpellPopup {
+      display: none !important;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-fullscreen-view {
+      position: absolute;
+      inset: 0;
+      display: block;
+      background: #000;
+      color: #fff;
+    }
+
+    .lyrics-fullscreen-topbar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 64px;
+      display: grid;
+      grid-template-columns: 1fr minmax(0, 2fr) 1fr;
+      align-items: center;
+      gap: 16px;
+      padding: 0 24px;
+      box-sizing: border-box;
+      z-index: 5;
+    }
+
+    .lyrics-fullscreen-title-stack {
+      justify-self: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .lyrics-fullscreen-track-name {
+      max-width: 52vw;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: center;
+      font-size: 20px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .lyrics-fullscreen-playlist-wrap {
+      position: relative;
+    }
+
+    .lyrics-fullscreen-playlist-btn {
+      border: 0;
+      background: transparent;
+      color: #55aaff;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 1px 8px;
+    }
+
+    .lyrics-fullscreen-playlist-menu {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 50;
+      min-width: 280px;
+      max-width: min(520px, 80vw);
+      max-height: 45vh;
+      overflow: auto;
+      padding: 6px;
+      border: 1px solid rgba(255,255,255,.28);
+      border-radius: 7px;
+      background: rgba(18,18,18,.97);
+      box-shadow: 0 10px 30px rgba(0,0,0,.45);
+    }
+
+    .lyrics-fullscreen-playlist-menu[hidden] { display: none !important; }
+
+    .lyrics-fullscreen-playlist-item {
+      display: block;
+      width: 100%;
+      border: 0;
+      border-radius: 5px;
+      padding: 7px 9px;
+      background: transparent;
+      color: #fff;
+      text-align: left;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .lyrics-fullscreen-playlist-item:hover { background: rgba(255,255,255,.12); }
+    .lyrics-fullscreen-playlist-item.current {
+      color: #7fd8ff;
+      cursor: default;
+      background: rgba(127,216,255,.08);
+    }
+    .lyrics-fullscreen-playlist-item.current:hover { background: rgba(127,216,255,.08); }
+    .lyrics-fullscreen-playlist-item.executed { color: #aaa; }
+    .lyrics-fullscreen-playlist-item.waiting { color: #fff; }
+
+    .playlist-action-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .playlist-action-btn {
+      border: 0;
+      border-radius: 5px;
+      padding: 7px 6px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      color: #111;
+    }
+
+    .playlist-action-btn.add { background: #59d66f; }
+    .playlist-action-btn.remove { background: #ff6a6a; }
+    .playlist-action-btn.reorder { background: #f0d85a; }
+    .playlist-action-btn.active { outline: 2px solid #fff; outline-offset: 1px; }
+
+    .playlist-track-picker,
+    .playlist-position-picker {
+      margin: 5px 0 2px;
+      padding: 5px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 5px;
+      background: rgba(255,255,255,.06);
+    }
+
+    .playlist-position-picker {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .playlist-position-picker button {
+      min-width: 42px;
+      border: 0;
+      border-radius: 4px;
+      padding: 5px 7px;
+      cursor: pointer;
+      background: rgba(255,255,255,.14);
+      color: #fff;
+    }
+
+    .playlist-track-picker .lyrics-fullscreen-playlist-item {
+      padding-left: 7px;
+    }
+
+    .lyrics-fullscreen-playlist-menu.playlist-transition-locked {
+      pointer-events: none;
+      opacity: .55;
+    }
+
+    .project-loader {
+      position: fixed;
+      inset: 0;
+      z-index: 3300;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,.90);
+      color: #fff;
+      pointer-events: all;
+    }
+    .project-loader.open { display: flex; }
+    .project-loader-card {
+      width: min(560px, 78vw);
+      transform: translateY(180px);
+      padding: 28px 32px;
+      box-sizing: border-box;
+      border: 1px solid rgba(255,255,255,.22);
+      border-radius: 12px;
+      background: rgba(18,18,18,.96);
+      box-shadow: 0 18px 60px rgba(0,0,0,.55);
+    }
+    .project-loader-title {
+      font-size: 24px;
+      font-weight: 800;
+      text-align: center;
+      margin-bottom: 18px;
+    }
+    .project-loader-phase {
+      min-height: 24px;
+      font-size: 16px;
+      text-align: center;
+      color: #ddd;
+      margin-bottom: 13px;
+    }
+    .project-loader-track {
+      width: 100%;
+      height: 14px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255,255,255,.12);
+    }
+    .project-loader-fill {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: currentColor;
+      transition: width .22s ease;
+    }
+    .project-loader-percent {
+      margin-top: 10px;
+      font-family: Consolas, monospace;
+      font-size: 22px;
+      font-weight: 800;
+      text-align: center;
+    }
+    .project-loader.failed .project-loader-phase { color: #ff8a8a; }
+
+    .lyrics-fullscreen-back {
+      justify-self: start;
+    }
+
+    .lyrics-fullscreen-window-controls {
+      justify-self: end;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .lyrics-fullscreen-window-btn {
+      width: 34px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid rgba(255,255,255,.32);
+      border-radius: 5px;
+      background: rgba(255,255,255,.06);
+      color: #fff;
+      font-size: 17px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .lyrics-fullscreen-window-btn:hover { background: rgba(255,255,255,.16); }
+
+    .lyrics-fullscreen-brand {
+      font-size: 20px;
+      font-weight: 800;
+      color: #f3df72;
+      white-space: nowrap;
+    }
+
+    .lyrics-fullscreen-counter {
+      position: absolute;
+      left: 50%;
+      bottom: 170px;
+      transform: translateX(-50%);
+      z-index: 6;
+      font-family: Consolas, monospace;
+      font-size: 36px;
+      line-height: 1;
+      font-weight: 700;
+      color: #7fd8ff;
+      white-space: nowrap;
+    }
+
+    .lyrics-fullscreen-counter.pre-vocal {
+      font-size: 72px;
+    }
+
+    .lyrics-fullscreen-counter.post-vocal {
+      color: #7fd8ff !important;
+      font-size: 36px;
+    }
+
+    .lyrics-fullscreen-counter.countdown-gray {
+      color: #777;
+    }
+
+    .lyrics-fullscreen-counter.countdown-3 {
+      color: #ff3b30;
+    }
+
+    .lyrics-fullscreen-counter.countdown-2 {
+      color: #ffd60a;
+    }
+
+    .lyrics-fullscreen-counter.countdown-1 {
+      color: #30d158;
+    }
+
+    /* 5.4.7 | Third reverse-countdown phase keeps Full Screen geometry and uses gray. */
+    .lyrics-fullscreen-counter.phase-final {
+      color: #777 !important;
+    }
+
+    .lyrics-fullscreen-structure-badge {
+      position: absolute;
+      left: 50%;
+      bottom: 240px;
+      transform: translateX(-50%);
+      z-index: 7;
+      max-width: calc(100% - 80px);
+      padding: 8px 18px;
+      border-radius: 12px;
+      background: rgba(248, 246, 255, .88);
+      color: #6b3fa0;
+      font-size: 48px;
+      line-height: 1.08;
+      font-weight: 800;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+    }
+
+    .lyrics-fullscreen-structure-badge[hidden] { display: none !important; }
+
+    .lyrics-fullscreen-popup {
+      position: fixed;
+      z-index: 30;
+      min-width: 190px;
+      min-height: 70px;
+      padding: 6px;
+      border: 1px solid rgba(255,255,255,.28);
+      border-radius: 8px;
+      background: rgba(18,18,18,.96);
+      box-shadow: 0 10px 30px rgba(0,0,0,.5);
+      color: #fff;
+      font-size: 15px;
+      resize: both;
+      overflow: auto;
+    }
+
+    .lyrics-fullscreen-popup[hidden] { display: none !important; }
+
+    .lyrics-fullscreen-popup-title {
+      padding: 5px 8px 7px;
+      color: #aaa;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    .lyrics-fullscreen-popup-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      cursor: move;
+      user-select: none;
+    }
+
+    .lyrics-fullscreen-popup-back {
+      width: 32px !important;
+      min-width: 32px !important;
+      padding: 2px 7px !important;
+      justify-content: center !important;
+      color: #ddd !important;
+      font-size: 20px !important;
+      line-height: 1 !important;
+    }
+
+    .lyrics-fullscreen-tracks-title {
+      padding: 2px 8px 8px;
+      text-align: center;
+      color: #aaa;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    .lyrics-fullscreen-popup-close {
+      width: auto !important;
+      padding: 2px 7px !important;
+      justify-content: center !important;
+      color: #aaa !important;
+      font-size: 20px !important;
+      line-height: 1 !important;
+    }
+
+    .lyrics-fullscreen-bottom-controls {
+      position: absolute;
+      left: 50%;
+      bottom: 118px;
+      transform: translateX(-50%);
+      z-index: 8;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .lyrics-fullscreen-mini-btn,
+    .lyrics-fullscreen-transport-icons button,
+    .lyrics-fullscreen-side-icon {
+      border: 1px solid rgba(255,255,255,.28);
+      border-radius: 6px;
+      background: rgba(255,255,255,.06);
+      color: #ddd;
+      cursor: pointer;
+    }
+
+    .lyrics-fullscreen-mini-btn { padding: 5px 9px; }
+    .lyrics-fullscreen-transport-icons { display: flex; align-items: center; gap: 5px; }
+    .lyrics-fullscreen-transport-icons button { width: 31px; height: 29px; padding: 0; font-size: 15px; }
+    .lyrics-fullscreen-transport-icons button:hover,
+    .lyrics-fullscreen-mini-btn:hover,
+    .lyrics-fullscreen-side-icon:hover { background: rgba(255,255,255,.14); }
+
+    .lyrics-fullscreen-keys-wrap { position: relative; }
+    .lyrics-fullscreen-keys-menu {
+      position: absolute;
+      left: 0;
+      bottom: calc(100% + 6px);
+      min-width: 235px;
+      padding: 7px 9px;
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 7px;
+      background: rgba(18,18,18,.97);
+      color: #ddd;
+      font-size: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.45);
+    }
+    .lyrics-fullscreen-keys-menu[hidden] { display:none !important; }
+    .lyrics-fullscreen-keys-menu > div { display:flex; justify-content:space-between; gap:18px; padding:4px 2px; }
+    .lyrics-fullscreen-keys-menu > div > span:first-child { color:#fff; font-weight:700; }
+
+    .lyrics-fullscreen-side-control {
+      position: absolute;
+      bottom: clamp(92px, 14.6cqh, 146px);
+      z-index: 9;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .lyrics-fullscreen-side-control.left { left: clamp(12px, 2.4cqw, 24px); }
+    .lyrics-fullscreen-side-control.right { right: clamp(12px, 2.4cqw, 24px); }
+    .lyrics-fullscreen-side-icon {
+      width: clamp(30px, 3.8cqh, 38px);
+      height: clamp(26px, 3.2cqh, 32px);
+      padding: 0;
+      font-size: clamp(14px, 1.8cqh, 18px);
+    }
+    .lyrics-fullscreen-vertical-scale {
+      position: absolute;
+      bottom: clamp(30px, 3.8cqh, 38px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: clamp(5px, .8cqh, 8px);
+      height: clamp(180px, calc(95cqh - 215px), 690px);
+      max-height: calc(100cqh - 180px);
+      min-height: 0;
+      padding: clamp(6px, 1cqh, 10px) clamp(5px, .7cqh, 7px);
+      border: 1px solid rgba(255,255,255,.26);
+      border-radius: clamp(6px, .8cqh, 8px);
+      background: rgba(18,18,18,.94);
+      box-sizing: border-box;
+    }
+    .lyrics-fullscreen-vertical-scale[hidden] { display:none !important; }
+    .lyrics-fullscreen-vertical-scale .scale-value {
+      font: 700 clamp(10px, 1.2cqh, 12px) Consolas, monospace;
+      color:#ddd;
+    }
+    .lyrics-fullscreen-vertical-scale input[type="range"] {
+      writing-mode: vertical-lr;
+      direction: rtl;
+      width: clamp(18px, 2.4cqh, 24px);
+      height: 100%;
+      min-height: 0;
+      cursor: pointer;
+    }
+
+    .lyrics-fullscreen-popup button {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 8px 10px;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      color: #fff;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .lyrics-fullscreen-popup button:hover { background: rgba(255,255,255,.12); }
+    .lyrics-fullscreen-popup button.active { color: #e58aa8; }
+    .lyrics-fullscreen-popup .popup-state { color: #999; font-size: 12px; }
+    .lyrics-fullscreen-popup button.active .popup-state { color: #e58aa8; }
+
+    #lyricsFullScreenTracksMenu {
+      min-width: min(820px, calc(100vw - 16px));
+    }
+
+    .lyrics-fullscreen-track-row {
+      display: grid;
+      grid-template-columns: 72px minmax(150px, 1fr) 72px;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 8px;
+      border-radius: 5px;
+    }
+
+    .lyrics-fullscreen-track-row:hover { background: rgba(255,255,255,.06); }
+
+    .lyrics-fullscreen-track-solo,
+    .lyrics-fullscreen-track-mute {
+      justify-content: center !important;
+      padding: 6px 8px !important;
+      font-size: 12px !important;
+    }
+
+    .lyrics-fullscreen-track-solo.active,
+    .lyrics-fullscreen-track-mute.active {
+      color: #e58aa8 !important;
+    }
+
+    .lyrics-fullscreen-track-name-open {
+      width: 100%;
+      justify-content: center !important;
+      gap: 8px !important;
+      padding: 7px 8px !important;
+      text-align: center !important;
+      white-space: nowrap;
+    }
+
+    .lyrics-fullscreen-track-secondary {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      padding: 0 6px 4px;
+    }
+
+    .lyrics-fullscreen-track-control {
+      display: grid;
+      grid-template-columns: auto auto minmax(90px, 1fr) auto;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      color: #aaa;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .lyrics-fullscreen-track-control input[type="range"] {
+      width: 100%;
+      min-width: 90px;
+      margin: 0;
+      cursor: pointer;
+    }
+
+    .lyrics-fullscreen-fx-window {
+      min-width: 360px;
+    }
+
+    .lyrics-fullscreen-fx-grid {
+      display: grid;
+      gap: 8px;
+      padding: 8px;
+    }
+
+    .lyrics-fullscreen-fx-row {
+      display: grid;
+      grid-template-columns: 92px minmax(130px,1fr) 52px;
+      gap: 8px;
+      align-items: center;
+      color: #bbb;
+      font-size: 12px;
+    }
+
+    .lyrics-fullscreen-fx-row input[type="range"] { width: 100%; }
+
+    @media (max-width: 760px) {
+      #lyricsFullScreenTracksMenu { min-width: calc(100vw - 16px); }
+      .lyrics-fullscreen-track-row {
+        grid-template-columns: 1fr;
+        gap: 5px;
+      }
+      .lyrics-fullscreen-track-name-open { grid-row: 1; }
+    }
+
+    .lyrics-fullscreen-lines {
+      position: absolute;
+      left: 5vw;
+      right: 5vw;
+      top: 44%;
+      transform: translateY(-50%);
+      text-align: center;
+      z-index: 2;
+    }
+
+    .lyrics-fullscreen-current {
+      min-height: 1.35em;
+      font-size: clamp(34px, 5.1vw, 76px);
+      line-height: 1.2;
+      font-weight: 700;
+      color: #c8ff70;
+      white-space: normal;
+    }
+
+    .lyrics-fullscreen-next {
+      margin-top: 28px;
+      min-height: 1.35em;
+      font-size: clamp(22px, 3vw, 44px);
+      line-height: 1.25;
+      font-weight: 500;
+      color: #8f8f8f;
+      white-space: normal;
+    }
+
+    .lyrics-fullscreen-word {
+      display: inline;
+      padding: 0 .05em;
+      border-radius: .12em;
+    }
+
+    .lyrics-fullscreen-word.past {
+      color: #92bd5b;
+    }
+
+    .lyrics-fullscreen-word.active {
+      color: #000;
+      background: #c8ff70;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode #lyricsStructureMasterCounter {
+      display: none !important;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode > .lyrics-structure-row {
+      position: absolute;
+      left: 24px;
+      right: 24px;
+      bottom: 18px;
+      display: flex;
+      min-height: 0;
+      padding: 4px 0 6px;
+      margin: 0;
+      border: 0;
+      z-index: 4;
+      color: #fff;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-endpoints {
+      height: 40px;
+      font-size: 18px;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-endpoint-value {
+      bottom: 5px;
+      color: #e58aa8;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-track {
+      height: 48px;
+      border-color: rgba(255,255,255,.55);
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-segment {
+      color: #fff;
+      border-right-color: rgba(255,255,255,.42);
+      font-size: 20px;
+      padding-left: 10px;
+      padding-right: 10px;
+      cursor: default;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-timeline {
+      height: 40px;
+      margin-top: 4px;
+      font-size: 18px;
+      color: #aaa;
+      background: rgba(255,255,255,.08);
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-playhead {
+      width: 3px;
+      transform: translateX(-1.5px);
+    }
+
+    .lyrics-saveas-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+      margin-top: 14px;
+    }
+
+
+    /* ========================================
+       LYRICS EDITOR 4.1.1
+    ======================================== */
+
+    .lyrics-editor-header {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .lyrics-editor-title {
+      justify-self: start;
+    }
+
+    .lyrics-editor-status-top {
+      justify-self: center;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .lyrics-editor-header #closeLyricsEditorBtn {
+      justify-self: end;
+    }
+
+    .lyrics-editor-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: nowrap;
+      gap: 10px;
+    }
+
+    .lyrics-editor-toolbar-left,
+    .lyrics-editor-toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .lyrics-editor-toolbar-right {
+      margin-left: auto;
+    }
+
+    .lyrics-editor-footer {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .lyrics-structure-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      min-height: 48px;
+      padding: 4px 10px 6px;
+      border-top: 1px solid rgba(255,255,255,.08);
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      overflow: visible;
+    }
+
+    .lyrics-structure-title {
+      flex: 0 0 auto;
+      padding-top: 5px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .lyrics-structure-body {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .lyrics-structure-track {
+      position: relative;
+      height: 24px;
+      overflow: visible;
+      border: 1px solid rgba(0,0,0,.30);
+      box-sizing: border-box;
+    }
+
+    .lyrics-structure-empty {
+      display: flex;
+      align-items: center;
+      height: 100%;
+      padding: 0 6px;
+      opacity: .65;
+      font-size: 12px;
+    }
+
+    .lyrics-structure-segment {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 2px;
+      padding: 0 6px;
+      border-right: 1px solid rgba(0,0,0,.30);
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-size: 11px;
+      font-weight: 700;
+      box-sizing: border-box;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .lyrics-structure-segment-label {
+      display: block;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      pointer-events: none;
+    }
+
+    .lyrics-structure-segment.selected {
+      outline: none;
+      box-shadow: none;
+      z-index: 2;
+    }
+
+    .lyrics-structure-segment.selected::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border: 2px solid currentColor;
+      box-sizing: border-box;
+      pointer-events: none;
+      z-index: 6;
+    }
+
+    .lyrics-structure-boundary {
+      position: absolute;
+      top: 0;
+      right: -4px;
+      width: 8px;
+      height: 100%;
+      cursor: ew-resize;
+      z-index: 4;
+    }
+
+/* ========================================
+   MOBILE ONLY | STRUCTURE BOUNDARY TOUCH
+   ======================================== */
+
+@media (pointer: coarse) {
+  .lyrics-structure-boundary-touch-zone {
+    position: absolute;
+    top: 0;
+    width: 50px;
+    height: 100%;
+    transform: translateX(-25px);
+    z-index: 5;
+    background: transparent;
+    touch-action: none;
+  }
+
+  .lyrics-structure-boundary-touch-indicator {
+    position: absolute;
+    left: 50%;
+    top: -22px;
+    transform: translateX(-50%);
+    color: #b8b8b8;
+    font-size: 18px;
+    font-weight: 700;
+    white-space: nowrap;
+    pointer-events: none;
+    display: none;
+  }
+
+  .lyrics-structure-boundary-touch-zone.grabbed
+  .lyrics-structure-boundary-touch-indicator {
+    display: block;
+  }
+
+  .lyrics-structure-boundary.touch-grabbed {
+    background: #b8b8b8;
+    box-shadow: 0 0 5px #b8b8b8;
+  }
+}
+
+    .lyrics-structure-segment:hover .lyrics-structure-boundary,
+    .lyrics-structure-segment.selected .lyrics-structure-boundary {
+      background: rgba(0,0,0,.08);
+    }
+
+    .lyrics-structure-track::before,
+    .lyrics-structure-track::after {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      background: rgba(0,0,0,.58);
+      pointer-events: none;
+      z-index: 8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      color: rgba(255,255,255,.78);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      white-space: nowrap;
+    }
+
+    .lyrics-structure-track::before {
+      content: "OUT OF TRACK";
+      left: 0;
+      width: var(--structure-trim-left-width, 0%);
+    }
+
+    .lyrics-structure-track::after {
+      content: "OUT OF TRACK";
+      left: var(--structure-trim-right-left, 100%);
+      width: var(--structure-trim-right-width, 0%);
+    }
+
+    .lyrics-structure-trim-marker {
+      position: absolute;
+      top: -1px;
+      bottom: -1px;
+      width: 1px;
+      background: #e58aa8;
+      pointer-events: none;
+      z-index: 12;
+    }
+
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-track::before,
+    .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-track::after {
+      font-size: 13px;
+    }
+
+    .lyrics-structure-playhead {
+      position: absolute;
+      top: -1px;
+      bottom: -1px;
+      width: 2px;
+      background: #0066ff;
+      pointer-events: none;
+      z-index: 20;
+      transform: translateX(-1px);
+    }
+
+    .lyrics-structure-timeline {
+      position: relative;
+      height: 20px;
+      margin-top: 2px;
+      font-size: 10px;
+      color: #666;
+      overflow: visible;
+      background: rgba(128,128,128,.12);
+    }
+
+    .lyrics-structure-tick {
+      position: absolute;
+      top: 0;
+      transform: translateX(-50%);
+      white-space: nowrap;
+    }
+
+    .lyrics-structure-tick.active {
+      color: #0066ff;
+      font-weight: 700;
+    }
+
+    /* Отдельная верхняя строка для реальных значений start/end. Она занимает собственную
+       высоту и не меняет ширину Structure/timeline или соответствие времени. */
+    .lyrics-structure-endpoints {
+      position: relative;
+      width: 100%;
+      height: 20px;
+      box-sizing: border-box;
+      font-size: 10px;
+      color: #e58aa8;
+      font-weight: 700;
+      pointer-events: none;
+    }
+
+    .lyrics-structure-endpoint-value {
+      position: absolute;
+      bottom: 2px;
+      white-space: nowrap;
+    }
+
+    .lyrics-structure-endpoint-value.start { left: 0; }
+    .lyrics-structure-endpoint-value.end { right: 0; }
+
+    /* Опорные точки конечных делений остаются точно на 0% / 100%; только их подписи
+       выводятся в отдельной верхней строке. */
+    .lyrics-structure-tick.endpoint {
+      width: 1px;
+      transform: none;
+    }
+
+    .lyrics-editor-karaoke-word.cursor-word {
+      position: relative;
+    }
+
+    .lyrics-editor-karaoke-word.cursor-word::before {
+      content: "";
+      position: absolute;
+      left: -1px;
+      top: -2px;
+      bottom: -2px;
+      width: 2px;
+      background: #0066ff;
+      pointer-events: none;
+    }
+
+    .lyrics-structure-track,
+    .lyrics-structure-timeline {
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+
+    .lyrics-structure-name-menu {
+      position: fixed;
+      z-index: 10020;
+      display: none;
+      min-width: 150px;
+      height: auto;
+      max-height: none;
+      overflow: visible;
+      padding: 5px;
+      background: #fff;
+      border: 1px solid #b9b9b9;
+      border-radius: 7px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.18);
+    }
+
+    .lyrics-structure-name-menu.open {
+      display: block;
+    }
+
+    .lyrics-structure-name-item {
+      display: block;
+      width: 100%;
+      padding: 7px 9px;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      color: #111;
+      text-align: left;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .lyrics-structure-name-item:hover {
+      background: #e8e8e8;
+    }
+
+    .lyrics-structure-tick::before {
+      content: "";
+      display: block;
+      width: 1px;
+      height: 4px;
+      margin: 0 auto 1px;
+      background: currentColor;
+      opacity: .5;
+    }
+
+    .lyrics-editor-transport {
+      justify-self: start;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .lyrics-master-counter {
+      justify-self: center;
+      min-width: 94px;
+      padding: 6px 10px;
+      background: #ececec;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .lyrics-editor-actions {
+      justify-self: end;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* 5.4.7 | Lyrics footer always fits inside the editor. */
+    .lyrics-editor-footer {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      min-width: 0;
+    }
+    .lyrics-editor-transport { min-width: 0; flex: 1 1 300px; flex-wrap: wrap; }
+    .lyrics-footer-counter-group { flex: 0 0 auto; margin: 0 auto; min-width: 0; }
+    .lyrics-editor-actions {
+      min-width: 0;
+      flex: 1 1 310px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    #lyricsSaveNotice { min-width: 0 !important; flex: 1 1 100%; }
+    #saveLyricsEditBtn, #lyricsSaveAsBtn { flex: 0 0 96px; }
+
+    .lyrics-structure-master-counter {
+      position: absolute;
+      left: 50%;
+      bottom: 2px;
+      transform: translateX(-50%);
+      color: #18a44a;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .lyrics-editor-row {
+      grid-template-columns: 74px 74px minmax(0, 1fr) 118px;
+    }
+    .lyrics-line-tools {
+      display: grid;
+      grid-template-columns: 28px 40px 44px;
+      gap: 3px;
+      align-items: center;
+      justify-content: end;
+    }
+    .lyrics-line-number {
+      font: 700 11px Consolas, monospace;
+      text-align: center;
+      color: #666;
+    }
+    .lyrics-line-tool-btn {
+      min-width: 0 !important;
+      height: 28px;
+      padding: 3px 4px !important;
+      font-size: 10px !important;
+      line-height: 1;
+    }
+
+
+    /* РЕДАКТОР LYRICS — СЛОВА KARAOKE | 4.4.0 */
+    .lyrics-editor-text-wrap { position: relative; min-width: 0; display: grid; }
+    .lyrics-editor-karaoke { grid-area: 1 / 1; min-height: 46px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 5px; background: white; font-size: 13px; line-height: 1.35; cursor: text; }
+    .lyrics-editor-karaoke-word { display: inline; padding: 1px 2px; border-radius: 3px; cursor: pointer; }
+    .lyrics-editor-karaoke-word.past { color: #888; }
+    .lyrics-editor-karaoke-word.active { background: #222; color: white; }
+    .lyrics-editor-row.karaoke-current-row { border-color: #222; }
+    .lyrics-editor-text-wrap textarea { grid-area: 1 / 1; display: none; position: relative; z-index: 2; }
+    .lyrics-editor-text-wrap.lyrics-edit-active textarea { display: block; }
+    .lyrics-editor-text-wrap.lyrics-edit-active .lyrics-editor-karaoke { visibility: hidden; }
+    .lyrics-editor-edit-marker { display: none; position: absolute; z-index: 3; pointer-events: none; border-radius: 3px; box-sizing: border-box; background: rgba(34,34,34,.18); }
+    .lyrics-editor-text-wrap.lyrics-edit-active .lyrics-editor-edit-marker { display: block; }
+
+
+    .lyrics-editor-toolbar-center {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      flex: 1 1 auto;
+    }
+
+    #lyricsLanguageInfo {
+      font-size: 11px;
+      color: #666;
+      white-space: nowrap;
+    }
+
+
+    .lyrics-editor-console-inline {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      width: min(520px, 48vw);
+      min-width: 220px;
+    }
+    .lyrics-editor-console-inline button {
+      flex: 0 0 auto;
+      padding: 3px 7px;
+      font-size: 10px;
+      line-height: 1.2;
+    }
+    #lyricsEditorErrorConsole {
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 24px;
+      min-height: 24px;
+      max-height: 24px;
+      resize: none;
+      overflow: auto;
+      box-sizing: border-box;
+      padding: 3px 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #fff;
+      color: #444;
+      font-family: Consolas, monospace;
+      font-size: 10px;
+      line-height: 16px;
+      white-space: pre;
+    }
+    .lyrics-footer-counter-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    #lyricsSetStartBtn,
+    #lyricsSetEndBtn {
+      min-width: 0;
+      padding: 6px 8px;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    /* 5.4.7 | Footer transport stays on one row; Play / Loop / Repeat are identical in size. */
+    .lyrics-editor-transport {
+      flex: 1 1 230px;
+      flex-wrap: nowrap;
+    }
+    #lyricsPlayMasterBtn,
+    #lyricsPlayLineBtn,
+    #lyricsRepeatBtn {
+      box-sizing: border-box;
+      width: 64px;
+      height: 30px;
+      min-width: 64px;
+      padding: 6px 4px;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    /* 5.4.7 | Center footer info panel: counter / Lines / language + transcription. */
+    .lyrics-footer-counter-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      white-space: nowrap;
+    }
+    .lyrics-footer-language-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 24px;
+    }
+    .lyrics-footer-language-row #lyricsTranscriptionBtn {
+      padding: 3px 7px;
+      font-size: 10px;
+      line-height: 1.2;
+    }
+
+    .lyrics-editor-karaoke-word.spell-error {
+      text-decoration-line: underline;
+      text-decoration-style: wavy;
+      text-decoration-color: #c00;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+      cursor: pointer;
+    }
+
+    .lyrics-spell-popup {
+      position: absolute;
+      z-index: 5000;
+      display: none;
+      min-width: 150px;
+      max-width: 280px;
+      padding: 6px;
+      background: #fff;
+      border: 1px solid #bbb;
+      border-radius: 7px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.18);
+    }
+
+    .lyrics-spell-popup.open { display: block; }
+
+    .lyrics-spell-popup button {
+      display: block;
+      width: 100%;
+      margin: 0 0 4px;
+      padding: 5px 7px;
+      text-align: left;
+      background: #f3f3f3;
+      color: #222;
+      font-size: 11px;
+    }
+
+
+    /* ========================================
+       GENERATED VOCAL TRACKS | 4.6.0
+    ======================================== */
+    .generated-track { display: none; }
+    .fx-create-button { width: 100%; margin-top: 4px; padding: 6px 7px; font-size: 10px; }
+
+
+/* ========================================
+   VOCALIST DIARIZATION
+======================================== */
+
+.vocals-singer-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.vocals-singer-segment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid currentColor;
+  border-right: 1px solid currentColor;
+  background: rgba(127,127,127,.06);
+  overflow: hidden;
+}
+
+.vocals-singer-label {
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0,0,0,.72);
+  color: white;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 700;
+  text-align: center;
+}
+
+
+
+    #fileName {
+      position: relative;
+      padding-right: 28px;
+      cursor: context-menu;
+    }
+
+    #fileName::after {
+      content: "▼";
+      position: absolute;
+      right: 9px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 10px;
+      opacity: .65;
+      pointer-events: none;
+    }
+
+    .recent-audio-menu {
+      position: fixed;
+      z-index: 10000;
+      display: none;
+      min-width: 280px;
+      max-width: 520px;
+      padding: 5px;
+      background: #fff;
+      border: 1px solid #b9b9b9;
+      border-radius: 7px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.18);
+    }
+    .recent-audio-menu.open { display: block; }
+    .recent-audio-menu-item,
+    .recent-audio-menu-empty {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 9px 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      text-align: left;
+      font: inherit;
+      font-size: 13px;
+    }
+
+    .recent-audio-menu-item {
+      cursor: pointer;
+      color: #111;
+      font-weight: 600;
+      opacity: 1;
+    }
+
+    .recent-audio-menu-item:hover {
+      background: #e8e8e8;
+      color: #000;
+    }
+
+    .recent-audio-menu-empty {
+      color: #555;
+      opacity: 1;
+    }
+
+</style>
+
+</head>
+
+
+<body>
+
+
+<div class="app">
+
+  <h1>MyNus</h1>
+
+
+  <!-- ========================================
+       FILE LOAD
+  ======================================== -->
+
+  <div class="load-row">
+
+    <input
+      type="file"
+      id="audioFile"
+          >
+
+    <button
+      type="button"
+      id="selectFileBtn"
+    >
+      Select File
+    </button>
+
+    <button
+      type="button"
+      id="openProjectStartBtn"
+    >
+      Open Project
+    </button>
+
+    <div id="fileName">
+      No file selected
+    </div>
+
+
+    <select id="lyricsLanguageSelect" title="Lyrics recognition language">
+      <option value="auto" selected>Language: Auto</option>
+      <option value="ru">Русский</option>
+      <option value="en">English</option>
+      <option value="it">Italiano</option>
+      <option value="es">Español</option>
+      <option value="fr">Français</option>
+      <option value="uk">Українська</option>
+    </select>
+
+    <button id="splitBtn">
+      Split
+    </button>
+
+  </div>
+
+
+  <div id="recentAudioMenu" class="recent-audio-menu"></div>
+
+  <!-- ========================================
+       PROCESS
+  ======================================== -->
+
+    <div
+    id="progressWrap"
+    class="progress-wrap"
+  >
+
+    <div
+      id="progressBar"
+      class="progress-bar"
+    ></div>
+
+    <div
+      id="status"
+      class="progress-status"
+    ></div>
+
+    <div
+      id="progressPercent"
+      class="progress-percent"
+    >
+      0%
+    </div>
+
+  </div>
+
+
+  <!-- ========================================
+       STUDIO
+  ======================================== -->
+
+  <div id="studio">
+
+    <div class="studio-layout">
+
+      <div class="studio-main">
+
+    <div class="sequencer-history-block" aria-label="Sequencer History">
+      <div class="sequencer-history-title">History</div>
+      <div class="sequencer-history-buttons">
+        <button type="button" id="sequencerUndoBtn" disabled>Undo</button>
+        <button type="button" id="sequencerRedoBtn" disabled>Redo</button>
+      </div>
+    </div>
+
+
+
+
+
+    <div class="transport-stack transport-top">
+
+      <div class="transport-counter-line">
+        <div class="transport-counter-spacer"></div>
+        <div id="timeDisplayTop" class="time-display">
+          00:00.00 / -00:00.00 / V:-00:00.00 / IN --:--.-- / OUT --:--.--
+        </div>
+      </div>
+
+      <div class="transport-band">
+        <div class="shortcut-legend">
+          <button type="button" id="loadProjectBtn" class="project-side-btn">New Project</button>
+          <div class="shortcut-help" tabindex="0">
+            <span class="shortcut-help-button">Keys ?</span>
+            <div class="shortcut-popup">
+              <div class="shortcut-line"><span class="shortcut-key">Space</span><span>Play / Pause</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Backspace</span><span>Stop</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Home</span><span>Start</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">End</span><span>End</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Page Up</span><span>IN</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Page Down</span><span>OUT</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Insert</span><span>Loop</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Delete</span><span>Clear Selection</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">↑ / ↓</span><span>Zoom + / −</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">← / →</span><span>Cursor − / + 1 sec</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">1–6</span><span>Effects track</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">0</span><span>Master effects</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Ctrl</span><span>Original</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Alt</span><span>Mix</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Win</span><span>Master</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">− / +</span><span>Undo / Redo</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Enter</span><span>Rec On / Rec Off</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Esc</span><span>Reset</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="transport-row">
+
+        <button class="transport-proxy mode-proxy active" data-proxy="originalModeBtn" data-mode="original">Original</button>
+        <button class="transport-proxy mode-proxy" data-proxy="mixModeBtn" data-mode="mix">Mix</button>
+        <button class="transport-proxy mode-proxy" data-proxy="masterModeBtn" data-mode="master">Master</button>
+        <button class="transport-proxy" data-proxy="startBtn">Start</button>
+        <button class="transport-proxy play-proxy" data-proxy="playBtn">Play</button>
+        <button class="transport-proxy" data-proxy="stopBtn">Stop</button>
+        <button class="transport-proxy" data-proxy="endBtn">End</button>
+        <button class="transport-proxy" data-proxy="fragmentStartBtn">IN</button>
+        <button class="transport-proxy loop-proxy" data-proxy="loopBtn">Loop</button>
+        <button class="transport-proxy" data-proxy="fragmentEndBtn">OUT</button>
+        <button class="transport-proxy" data-proxy="zoomOutBtn">−</button>
+        <span id="zoomValueTop" class="zoom-inline">40 px/s</span>
+        <button class="transport-proxy" data-proxy="zoomInBtn">+</button>
+
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- ========================================
+         ORIGINAL TRACK
+    ======================================== -->
+
+    <div class="track">
+
+      <div class="track-controls">
+
+        <div class="track-title">
+          Original
+        </div>
+
+        <div class="volume-row">
+
+          <input
+            type="range"
+            id="originalVolume"
+            min="0"
+            max="100"
+            value="100"
+          >
+
+          <span
+            id="originalVolumeValue"
+            class="volume-value"
+          >
+            100%
+          </span>
+
+        </div>
+
+        <div class="track-save-row">
+          <button data-export-track="original" data-export-scope="full">
+            Export Track
+          </button>
+          <button data-export-track="original" data-export-scope="selection">
+            Export Selection
+          </button>
+        </div>
+
+      </div>
+
+      <div
+        class="timeline-scroll"
+        data-track="original"
+      >
+
+        <div
+          class="timeline-inner"
+          id="originalTimeline"
+        >
+
+          <canvas id="originalCanvas"></canvas>
+
+          <div
+            class="playhead"
+            id="originalPlayhead"
+          ></div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- ========================================
+         VOCALS TRACK
+    ======================================== -->
+
+    <div class="track">
+
+      <div class="track-controls">
+
+        <div class="track-title">
+          Vocals
+        </div>
+
+        <div class="track-buttons">
+
+          <button id="vocalsMuteBtn">
+            Mute
+          </button>
+
+          <button id="vocalsSoloBtn">
+            Solo
+          </button>
+
+        </div>
+
+        <div class="volume-row">
+
+          <input
+            type="range"
+            id="vocalsVolume"
+            min="0"
+            max="100"
+            value="100"
+          >
+
+          <span
+            id="vocalsVolumeValue"
+            class="volume-value"
+          >
+            100%
+          </span>
+
+        </div>
+
+        <div class="track-save-row">
+          <button data-export-track="vocals" data-export-scope="full">
+            Export Track
+          </button>
+          <button data-export-track="vocals" data-export-scope="selection">
+            Export Selection
+          </button>
+        </div>
+        <div class="track-save-row crop-row">
+          <button id="vocalsCropInBtn">
+            Crop In
+          </button>
+          <button id="vocalsCropOutBtn">
+            Crop Out
+          </button>
+        </div>
+
+      </div>
+
+      <div
+        class="timeline-scroll"
+        data-track="vocals"
+      >
+
+        <div
+          class="timeline-inner"
+          id="vocalsTimeline"
+        >
+
+          <canvas id="vocalsCanvas"></canvas>
+
+          <div
+            id="vocalsSingerOverlay"
+            class="vocals-singer-overlay"
+          ></div>
+
+          <div
+            id="vocalsCropMaskLeft"
+            class="crop-mask"
+          ></div>
+
+          <div
+            id="vocalsCropMaskRight"
+            class="crop-mask"
+          ></div>
+
+          <div
+            class="playhead"
+            id="vocalsPlayhead"
+          ></div>
+
+        </div>
+
+      </div>
+
+    </div>
+<!-- ========================================
+         PITCH CORRECTION TRACK | 4.6.0
+    ======================================== -->
+    <div class="track generated-track" id="pitchCorrectionTrackRow">
+      <div class="track-controls">
+        <div class="track-title">Pitch Correct</div>
+        <div class="track-buttons"><button id="pitchCorrectionMuteBtn">Mute</button><button id="pitchCorrectionSoloBtn">Solo</button></div>
+        <div class="volume-row"><input type="range" id="pitchCorrectionVolume" min="0" max="100" value="100"><span id="pitchCorrectionVolumeValue" class="volume-value">100%</span></div>
+        <div class="track-save-row"><button data-export-track="pitchCorrection" data-export-scope="full">Export Track</button><button data-export-track="pitchCorrection" data-export-scope="selection">Export Selection</button></div>
+        <div class="track-save-row crop-row"><button id="pitchCorrectionCropInBtn">Crop In</button><button id="pitchCorrectionCropOutBtn">Crop Out</button></div>
+      </div>
+      <div class="timeline-scroll" data-track="pitchCorrection"><div class="timeline-inner" id="pitchCorrectionTimeline"><canvas id="pitchCorrectionCanvas"></canvas><div id="pitchCorrectionCropMaskLeft" class="crop-mask"></div><div id="pitchCorrectionCropMaskRight" class="crop-mask"></div><div class="playhead" id="pitchCorrectionPlayhead"></div></div></div>
+    </div>
+
+    <!-- ========================================
+         VOCAL HARMONIZER TRACK | 4.6.0
+    ======================================== -->
+    <div class="track generated-track" id="harmonizerTrackRow">
+      <div class="track-controls">
+        <div class="track-title">Harmonizer</div>
+        <div class="track-buttons"><button id="harmonizerMuteBtn">Mute</button><button id="harmonizerSoloBtn">Solo</button></div>
+        <div class="volume-row"><input type="range" id="harmonizerVolume" min="0" max="100" value="100"><span id="harmonizerVolumeValue" class="volume-value">100%</span></div>
+        <div class="track-save-row"><button data-export-track="harmonizer" data-export-scope="full">Export Track</button><button data-export-track="harmonizer" data-export-scope="selection">Export Selection</button></div>
+        <div class="track-save-row crop-row"><button id="harmonizerCropInBtn">Crop In</button><button id="harmonizerCropOutBtn">Crop Out</button></div>
+      </div>
+      <div class="timeline-scroll" data-track="harmonizer"><div class="timeline-inner" id="harmonizerTimeline"><canvas id="harmonizerCanvas"></canvas><div id="harmonizerCropMaskLeft" class="crop-mask"></div><div id="harmonizerCropMaskRight" class="crop-mask"></div><div class="playhead" id="harmonizerPlayhead"></div></div></div>
+    </div>
+
+    <!-- ========================================
+         DRUMS TRACK
+    ======================================== -->
+
+    <div class="track">
+
+      <div class="track-controls">
+
+        <div class="track-title">
+          Drums
+        </div>
+
+        <div class="track-buttons">
+
+          <button id="drumsMuteBtn">
+            Mute
+          </button>
+
+          <button id="drumsSoloBtn">
+            Solo
+          </button>
+
+        </div>
+
+        <div class="volume-row">
+
+          <input
+            type="range"
+            id="drumsVolume"
+            min="0"
+            max="100"
+            value="100"
+          >
+
+          <span
+            id="drumsVolumeValue"
+            class="volume-value"
+          >
+            100%
+          </span>
+
+        </div>
+
+        <div class="track-save-row">
+          <button data-export-track="drums" data-export-scope="full">
+            Export Track
+          </button>
+          <button data-export-track="drums" data-export-scope="selection">
+            Export Selection
+          </button>
+        </div>
+        <div class="track-save-row crop-row">
+          <button id="drumsCropInBtn">
+            Crop In
+          </button>
+          <button id="drumsCropOutBtn">
+            Crop Out
+          </button>
+        </div>
+
+      </div>
+
+      <div
+        class="timeline-scroll"
+        data-track="drums"
+      >
+
+        <div
+          class="timeline-inner"
+          id="drumsTimeline"
+        >
+
+          <canvas id="drumsCanvas"></canvas>
+
+          <div
+            id="drumsCropMaskLeft"
+            class="crop-mask"
+          ></div>
+
+          <div
+            id="drumsCropMaskRight"
+            class="crop-mask"
+          ></div>
+
+          <div
+            class="playhead"
+            id="drumsPlayhead"
+          ></div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- ========================================
+         BASS TRACK
+    ======================================== -->
+
+    <div class="track">
+
+      <div class="track-controls">
+
+        <div class="track-title">
+          Bass
+        </div>
+
+        <div class="track-buttons">
+
+          <button id="bassMuteBtn">
+            Mute
+          </button>
+
+          <button id="bassSoloBtn">
+            Solo
+          </button>
+
+        </div>
+
+        <div class="volume-row">
+
+          <input
+            type="range"
+            id="bassVolume"
+            min="0"
+            max="100"
+            value="100"
+          >
+
+          <span
+            id="bassVolumeValue"
+            class="volume-value"
+          >
+            100%
+          </span>
+
+        </div>
+
+        <div class="track-save-row">
+          <button data-export-track="bass" data-export-scope="full">
+            Export Track
+          </button>
+          <button data-export-track="bass" data-export-scope="selection">
+            Export Selection
+          </button>
+        </div>
+        <div class="track-save-row crop-row">
+          <button id="bassCropInBtn">
+            Crop In
+          </button>
+          <button id="bassCropOutBtn">
+            Crop Out
+          </button>
+        </div>
+
+      </div>
+
+      <div
+        class="timeline-scroll"
+        data-track="bass"
+      >
+
+        <div
+          class="timeline-inner"
+          id="bassTimeline"
+        >
+
+          <canvas id="bassCanvas"></canvas>
+
+          <div
+            id="bassCropMaskLeft"
+            class="crop-mask"
+          ></div>
+
+          <div
+            id="bassCropMaskRight"
+            class="crop-mask"
+          ></div>
+
+          <div
+            class="playhead"
+            id="bassPlayhead"
+          ></div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- ========================================
+         GUITAR TRACK
+    ======================================== -->
+
+    <div class="track">
+
+      <div class="track-controls">
+
+        <div class="track-title">
+          Guitar
+        </div>
+
+        <div class="track-buttons">
+
+          <button id="guitarMuteBtn">
+            Mute
+          </button>
+
+          <button id="guitarSoloBtn">
+            Solo
+          </button>
+
+        </div>
+
+        <div class="volume-row">
+
+          <input
+            type="range"
+            id="guitarVolume"
+            min="0"
+            max="100"
+            value="100"
+          >
+
+          <span
+            id="guitarVolumeValue"
+            class="volume-value"
+          >
+            100%
+          </span>
+
+        </div>
+
+        <div class="track-save-row">
+          <button data-export-track="guitar" data-export-scope="full">
+            Export Track
+          </button>
+          <button data-export-track="guitar" data-export-scope="selection">
+            Export Selection
+          </button>
+        </div>
+        <div class="track-save-row crop-row">
+          <button id="guitarCropInBtn">
+            Crop In
+          </button>
+          <button id="guitarCropOutBtn">
+            Crop Out
+          </button>
+        </div>
+
+      </div>
+
+      <div
+        class="timeline-scroll"
+        data-track="guitar"
+      >
+
+        <div
+          class="timeline-inner"
+          id="guitarTimeline"
+        >
+
+          <canvas id="guitarCanvas"></canvas>
+
+          <div
+            id="guitarCropMaskLeft"
+            class="crop-mask"
+          ></div>
+
+          <div
+            id="guitarCropMaskRight"
+            class="crop-mask"
+          ></div>
+
+          <div
+            class="playhead"
+            id="guitarPlayhead"
+          ></div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- ========================================
+         PIANO TRACK
+    ======================================== -->
+
+    <div class="track">
+
+      <div class="track-controls">
+
+        <div class="track-title">
+          Piano
+        </div>
+
+        <div class="track-buttons">
+
+          <button id="pianoMuteBtn">
+            Mute
+          </button>
+
+          <button id="pianoSoloBtn">
+            Solo
+          </button>
+
+        </div>
+
+        <div class="volume-row">
+
+          <input
+            type="range"
+            id="pianoVolume"
+            min="0"
+            max="100"
+            value="100"
+          >
+
+          <span
+            id="pianoVolumeValue"
+            class="volume-value"
+          >
+            100%
+          </span>
+
+        </div>
+
+        <div class="track-save-row">
+          <button data-export-track="piano" data-export-scope="full">
+            Export Track
+          </button>
+          <button data-export-track="piano" data-export-scope="selection">
+            Export Selection
+          </button>
+        </div>
+        <div class="track-save-row crop-row">
+          <button id="pianoCropInBtn">
+            Crop In
+          </button>
+          <button id="pianoCropOutBtn">
+            Crop Out
+          </button>
+        </div>
+
+      </div>
+
+      <div
+        class="timeline-scroll"
+        data-track="piano"
+      >
+
+        <div
+          class="timeline-inner"
+          id="pianoTimeline"
+        >
+
+          <canvas id="pianoCanvas"></canvas>
+
+          <div
+            id="pianoCropMaskLeft"
+            class="crop-mask"
+          ></div>
+
+          <div
+            id="pianoCropMaskRight"
+            class="crop-mask"
+          ></div>
+
+          <div
+            class="playhead"
+            id="pianoPlayhead"
+          ></div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- ========================================
+         OTHER TRACK
+    ======================================== -->
+
+    <div class="track">
+
+      <div class="track-controls">
+
+        <div class="track-title">
+          Other
+        </div>
+
+        <div class="track-buttons">
+
+          <button id="otherMuteBtn">
+            Mute
+          </button>
+
+          <button id="otherSoloBtn">
+            Solo
+          </button>
+
+        </div>
+
+        <div class="volume-row">
+
+          <input
+            type="range"
+            id="otherVolume"
+            min="0"
+            max="100"
+            value="100"
+          >
+
+          <span
+            id="otherVolumeValue"
+            class="volume-value"
+          >
+            100%
+          </span>
+
+        </div>
+
+        <div class="track-save-row">
+          <button data-export-track="other" data-export-scope="full">
+            Export Track
+          </button>
+          <button data-export-track="other" data-export-scope="selection">
+            Export Selection
+          </button>
+        </div>
+        <div class="track-save-row crop-row">
+          <button id="otherCropInBtn">
+            Crop In
+          </button>
+          <button id="otherCropOutBtn">
+            Crop Out
+          </button>
+        </div>
+
+      </div>
+
+      <div
+        class="timeline-scroll"
+        data-track="other"
+      >
+
+        <div
+          class="timeline-inner"
+          id="otherTimeline"
+        >
+
+          <canvas id="otherCanvas"></canvas>
+
+          <div
+            id="otherCropMaskLeft"
+            class="crop-mask"
+          ></div>
+
+          <div
+            id="otherCropMaskRight"
+            class="crop-mask"
+          ></div>
+
+          <div
+            class="playhead"
+            id="otherPlayhead"
+          ></div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- ========================================
+         MASTER TRACK
+    ======================================== -->
+
+    <div class="track">
+
+      <div class="track-controls master-controls">
+
+        <div class="track-title master-title-row">
+          <span>Master</span>
+          <span class="master-rec-commit-buttons">
+            <button id="clearMasterRecBtn" type="button">Clear Rec</button>
+            <button id="saveMasterRecBtn" type="button" disabled>Save Rec</button>
+          </span>
+        </div>
+
+        <div class="track-buttons">
+          <button id="recordMasterBtn">Rec On</button>
+          <button id="stopMasterBtn" disabled>Rec Off</button>
+        </div>
+
+        <div class="track-buttons">
+          <button id="saveAsMasterBtn" disabled>Export Track</button>
+          <button id="saveMasterSelectionBtn" disabled>Export Selection</button>
+        </div>
+
+        <div class="track-buttons">
+          <button id="undoMasterBtn" disabled>Undo Rec</button>
+          <button id="redoMasterBtn" disabled>Redo Rec</button>
+        </div>
+
+        <div class="volume-row">
+
+          <input
+            type="range"
+            id="masterVolume"
+            min="0"
+            max="100"
+            value="100"
+          >
+
+          <span
+            id="masterVolumeValue"
+            class="volume-value"
+          >
+            100%
+          </span>
+
+        </div>
+
+        <div id="masterState" class="master-state">
+          Empty
+        </div>
+
+      </div>
+
+      <div
+        class="timeline-scroll"
+        data-track="master"
+      >
+
+        <div
+          class="timeline-inner"
+          id="masterTrackTimeline"
+        >
+
+          <canvas id="masterCanvas"></canvas>
+
+          <div
+            class="playhead"
+            id="masterPlayhead"
+          ></div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+
+
+
+    <!-- ========================================
+         LYRICS TRACK
+    ======================================== -->
+
+    <div class="track">
+
+      <div class="lyrics-controls karaoke-controls-group">
+        <div class="karaoke-controls-title">Karaoke</div>
+        <div class="karaoke-controls-buttons">
+          <button type="button" id="editLyricsBtn" disabled>Lyrics Editor</button>
+          <button type="button" id="openLyricsFullScreenBtn" disabled>Full Screen</button>
+        </div>
+      </div>
+
+      <div
+        id="lyricsPanel"
+        class="lyrics-panel"
+      >
+        <span class="lyrics-empty">
+          Lyrics: none
+        </span>
+      </div>
+
+    </div>
+
+
+    
+
+    <!-- ========================================
+         MASTER TIMELINE
+    ======================================== -->
+
+    <div class="master-timeline-title">
+      Master Timeline
+    </div>
+
+    <div class="master-timeline-row">
+
+      <div class="track-info-left">
+        <button id="resetBtn">Reset</button>
+
+        <div
+          id="trackDurationInfo"
+          class="track-duration-info"
+        >
+          Total: 00:00.00
+        </div>
+      </div>
+
+      <div
+        id="masterTimeline"
+        class="master-timeline"
+      >
+
+        <div
+          id="masterTimelineInner"
+          class="master-timeline-inner"
+        >
+
+          <div
+            id="masterRuler"
+            class="master-ruler"
+          ></div>
+
+          <div
+            id="selectionRange"
+            class="selection-range"
+          >
+            <span id="selectionInTime" class="selection-edge-label in time"></span>
+            <span class="selection-edge-label in name">IN</span>
+            <span id="selectionOutTime" class="selection-edge-label out time"></span>
+            <span class="selection-edge-label out name">OUT</span>
+          </div>
+
+          <div id="projectTrimMaskLeft" class="project-trim-mask"></div>
+          <div id="projectTrimMaskRight" class="project-trim-mask"></div>
+          <div id="projectTrimStartMarker" class="project-trim-marker"></div>
+          <div id="projectTrimEndMarker" class="project-trim-marker"></div>
+         
+          <button type="button" id="projectTrimStartHandle" class="project-trim-handle" aria-label="Trim Start" title="Trim Start"></button>
+          <button type="button" id="projectTrimEndHandle" class="project-trim-handle" aria-label="Trim End" title="Trim End"></button>
+
+          <div
+            id="masterCursor"
+            class="master-cursor"
+          ></div>
+
+        </div> <!-- masterTimelineInner -->
+
+      </div> <!-- masterTimeline --> 
+
+          <div id="projectTrimStartTime" class="project-trim-time">0:00</div>
+          <div id="projectTrimEndTime" class="project-trim-time">0:00</div>
+
+    </div> <!-- master-timeline-row -->
+
+
+    <div class="shared-scroll-row">
+
+      <div class="shared-scroll-spacer"></div>
+
+      <div
+        id="sharedScroll"
+        class="shared-scroll"
+      >
+        <div
+          id="sharedScrollInner"
+          class="shared-scroll-inner"
+        ></div>
+      </div>
+
+    </div>
+
+
+    <div
+      id="selectionInfo"
+      class="selection-info"
+    >
+      Selection: none
+    </div>
+
+
+    <!-- ========================================
+         TRACK INFO + TRANSPORT
+    ======================================== -->
+
+
+    <div class="transport-stack transport-bottom">
+
+      <div class="transport-band">
+        <div class="shortcut-legend">
+          <button type="button" id="saveProjectBtn" class="project-side-btn">SAVE Project</button>
+          <div class="shortcut-help" tabindex="0">
+            <span class="shortcut-help-button">Keys ?</span>
+            <div class="shortcut-popup">
+              <div class="shortcut-line"><span class="shortcut-key">Space</span><span>Play / Pause</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Backspace</span><span>Stop</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Home</span><span>Start</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">End</span><span>End</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Page Up</span><span>IN</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Page Down</span><span>OUT</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Insert</span><span>Loop</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Delete</span><span>Clear Selection</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">↑ / ↓</span><span>Zoom + / −</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">← / →</span><span>Cursor − / + 1 sec</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">1–6</span><span>Effects track</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">0</span><span>Master effects</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Ctrl</span><span>Original</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Alt</span><span>Mix</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Win</span><span>Master</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">− / +</span><span>Undo / Redo</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Enter</span><span>Rec On / Rec Off</span></div>
+              <div class="shortcut-line"><span class="shortcut-key">Esc</span><span>Reset</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="transport-row">
+
+        <button id="originalModeBtn" class="active">Original</button>
+        <button id="mixModeBtn">Mix</button>
+        <button id="masterModeBtn">Master</button>
+        <button id="startBtn">Start</button>
+        <button id="playBtn">Play</button>
+        <button id="stopBtn">Stop</button>
+        <button id="endBtn">End</button>
+        <button id="fragmentStartBtn">IN</button>
+        <button id="loopBtn">Loop</button>
+        <button id="fragmentEndBtn">OUT</button>
+        <button id="zoomOutBtn">−</button>
+        <span id="zoomValue" class="zoom-inline">40 px/s</span>
+        <button id="zoomInBtn">+</button>
+
+        </div>
+      </div>
+
+      <div class="transport-counter-line">
+        <div class="transport-counter-spacer"></div>
+        <div id="timeDisplay" class="time-display">
+          00:00.00 / -00:00.00 / V:-00:00.00 / IN --:--.-- / OUT --:--.--
+        </div>
+      </div>
+
+    </div>
+
+
+
+    </div>
+
+
+      <!-- ========================================
+           MIX / MASTER EQ AND EFFECTS
+      ======================================== -->
+
+      <aside class="fx-panel">
+
+        <div class="fx-panel-title">
+          EQ / Effects
+        </div>
+
+        <div class="fx-target-grid">
+
+          <button
+            id="fxTargetVocalsBtn"
+            class="active"
+          >
+            Vocals
+          </button>
+
+          <button id="fxTargetDrumsBtn">
+            Drums
+          </button>
+
+          <button id="fxTargetBassBtn">
+            Bass
+          </button>
+
+          <button id="fxTargetGuitarBtn">
+            Guitar
+          </button>
+
+          <button id="fxTargetPianoBtn">
+            Piano
+          </button>
+
+          <button id="fxTargetOtherBtn">
+            Other
+          </button>
+
+        </div>
+
+        <div class="fx-target-master-row">
+
+          <button id="fxTargetMasterBtn">
+            Master
+          </button>
+
+        </div>
+
+
+        <div class="fx-section">
+
+          <div class="fx-section-title">
+            Frequency
+          </div>
+
+          <div class="eq-row">
+            <label>Low 80 Hz</label>
+            <input
+              id="eqLow"
+              type="range"
+              min="-12"
+              max="12"
+              step="0.5"
+              value="0"
+            >
+            <span
+              id="eqLowValue"
+              class="fx-value"
+            >
+              0 dB
+            </span>
+          </div>
+
+          <div class="eq-row">
+            <label>Low-Mid 250</label>
+            <input
+              id="eqLowMid"
+              type="range"
+              min="-12"
+              max="12"
+              step="0.5"
+              value="0"
+            >
+            <span
+              id="eqLowMidValue"
+              class="fx-value"
+            >
+              0 dB
+            </span>
+          </div>
+
+          <div class="eq-row">
+            <label>Mid 1 kHz</label>
+            <input
+              id="eqMid"
+              type="range"
+              min="-12"
+              max="12"
+              step="0.5"
+              value="0"
+            >
+            <span
+              id="eqMidValue"
+              class="fx-value"
+            >
+              0 dB
+            </span>
+          </div>
+
+          <div class="eq-row">
+            <label>High-Mid 4k</label>
+            <input
+              id="eqHighMid"
+              type="range"
+              min="-12"
+              max="12"
+              step="0.5"
+              value="0"
+            >
+            <span
+              id="eqHighMidValue"
+              class="fx-value"
+            >
+              0 dB
+            </span>
+          </div>
+
+          <div class="eq-row">
+            <label>High 12 kHz</label>
+            <input
+              id="eqHigh"
+              type="range"
+              min="-12"
+              max="12"
+              step="0.5"
+              value="0"
+            >
+            <span
+              id="eqHighValue"
+              class="fx-value"
+            >
+              0 dB
+            </span>
+          </div>
+
+        </div>
+
+
+        <div class="fx-section">
+
+          <div class="fx-section-title">
+            Pan
+          </div>
+
+          <div class="pan-row">
+            <span>L</span>
+
+            <input
+              id="panControl"
+              type="range"
+              min="-100"
+              max="100"
+              step="1"
+              value="0"
+            >
+
+            <span>R</span>
+
+            <span
+              id="panValue"
+              class="fx-value"
+            >
+              C
+            </span>
+          </div>
+
+        </div>
+
+
+        <div class="fx-section">
+
+          <div class="fx-section-title">
+            Effects
+          </div>
+
+          <div class="fx-toggle-row">
+            <span>Compressor</span>
+            <button
+              id="compressorToggleBtn"
+              class="active"
+            >
+              On
+            </button>
+          </div>
+
+          <div class="fx-control-row">
+            <label>Threshold</label>
+            <input
+              id="compressorThreshold"
+              type="range"
+              min="-60"
+              max="0"
+              step="1"
+              value="-18"
+            >
+            <span
+              id="compressorThresholdValue"
+              class="fx-value"
+            >
+              -18 dB
+            </span>
+          </div>
+
+          <div class="fx-control-row">
+            <label>Ratio</label>
+            <input
+              id="compressorRatio"
+              type="range"
+              min="1"
+              max="20"
+              step="0.5"
+              value="4"
+            >
+            <span
+              id="compressorRatioValue"
+              class="fx-value"
+            >
+              4:1
+            </span>
+          </div>
+
+
+          <div class="fx-toggle-row">
+            <span>Reverb</span>
+            <button id="reverbToggleBtn">
+              Off
+            </button>
+          </div>
+
+          <div class="fx-control-row">
+            <label>Reverb</label>
+            <input
+              id="reverbAmount"
+              type="range"
+              min="0"
+              max="100"
+              value="20"
+            >
+            <span
+              id="reverbAmountValue"
+              class="fx-value"
+            >
+              20%
+            </span>
+          </div>
+
+
+          <div class="fx-toggle-row">
+            <span>Delay</span>
+            <button id="delayToggleBtn">
+              Off
+            </button>
+          </div>
+
+          <div class="fx-control-row">
+            <label>Time</label>
+            <input
+              id="delayTime"
+              type="range"
+              min="0"
+              max="1000"
+              step="10"
+              value="220"
+            >
+            <span
+              id="delayTimeValue"
+              class="fx-value"
+            >
+              220 ms
+            </span>
+          </div>
+
+          <div class="fx-control-row">
+            <label>Feedback</label>
+            <input
+              id="delayFeedback"
+              type="range"
+              min="0"
+              max="90"
+              value="25"
+            >
+            <span
+              id="delayFeedbackValue"
+              class="fx-value"
+            >
+              25%
+            </span>
+          </div>
+
+
+          <div class="fx-toggle-row">
+            <span>Limiter</span>
+            <button
+              id="limiterToggleBtn"
+              class="active"
+            >
+              On
+            </button>
+          </div>
+
+          <div class="fx-control-row">
+            <label>Ceiling</label>
+            <input
+              id="limiterCeiling"
+              type="range"
+              min="-6"
+              max="0"
+              step="0.1"
+              value="-0.5"
+            >
+            <span
+              id="limiterCeilingValue"
+              class="fx-value"
+            >
+              -0.5 dB
+            </span>
+          </div>
+
+
+          <div class="fx-toggle-row"><span>Pitch Correction</span></div>
+          <button id="createPitchCorrectionBtn" class="fx-create-button">Create new track</button>
+          <div class="fx-toggle-row" style="margin-top:6px"><span>Vocal Harmonizer</span></div>
+          <button id="createHarmonizerBtn" class="fx-create-button">Create new track</button>
+
+          <div class="fx-control-row">
+            <label>Output</label>
+            <input
+              id="fxOutputGain"
+              type="range"
+              min="-12"
+              max="12"
+              step="0.5"
+              value="0"
+            >
+            <span
+              id="fxOutputGainValue"
+              class="fx-value"
+            >
+              0 dB
+            </span>
+          </div>
+
+        </div>
+
+      </aside>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+<!-- ========================================
+     MASTER EXPORT DIALOG
+======================================== -->
+
+<div id="masterExportDialog" class="export-dialog">
+  <div class="export-dialog-card">
+
+    <div class="export-dialog-title">
+      Save Audio As
+    </div>
+
+    <div class="export-format-grid">
+      <button data-master-format="wav">WAV</button>
+      <button data-master-format="mp3">MP3</button>
+      <button data-master-format="flac">FLAC</button>
+      <button data-master-format="m4a">M4A</button>
+    </div>
+
+    <button id="cancelMasterExportBtn">
+      Cancel
+    </button>
+
+  </div>
+</div>
+
+<!-- ========================================
+     NEW PROJECT PROMPT | 5.4.7
+======================================== -->
+<div id="newProjectPromptDialog" class="export-dialog">
+  <div class="export-dialog-card">
+    <div class="export-dialog-title">New Project</div>
+    <div style="font-size:13px; line-height:1.45; margin-bottom:14px;">
+      To use the full Karaoke features, you need to create a Project.<br><br>
+      You can continue without creating a Project if you only want to separate and work with the audio tracks.
+    </div>
+    <div class="export-format-grid" style="grid-template-columns:1fr 1fr;">
+      <button type="button" id="createNewProjectBtn">Create Project</button>
+      <button type="button" id="continueWithoutProjectBtn">Continue Without Project</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================
+     SAVE PROJECT DIALOG | 5.1.16
+======================================== -->
+<div id="saveProjectDialog" class="export-dialog">
+  <div class="export-dialog-card">
+    <div class="export-dialog-title">Save Project</div>
+    <label for="saveProjectNameInput" style="display:block; margin:0 0 6px;">Project name</label>
+    <input id="saveProjectNameInput" type="text" autocomplete="off" style="width:100%; box-sizing:border-box; margin:0 0 12px;">
+    <label for="saveProjectPathInput" style="display:block; margin:0 0 6px;">Save to</label>
+    <div style="display:grid; grid-template-columns:1fr auto; gap:6px; margin-bottom:12px;">
+      <input id="saveProjectPathInput" type="text" autocomplete="off" value="C:\MyNus\Projects" style="width:100%; box-sizing:border-box;">
+      <button type="button" id="browseSaveProjectPathBtn">Browse…</button>
+    </div>
+    <div id="saveProjectMessage" style="min-height:18px; font-size:12px; margin-bottom:10px;"></div>
+    <div class="export-format-grid" style="grid-template-columns:1fr 1fr;">
+      <button type="button" id="confirmSaveProjectBtn">Save</button>
+      <button type="button" id="cancelSaveProjectBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================
+     LOAD PROJECT DIALOG | 5.1.16
+======================================== -->
+<div id="loadProjectDialog" class="export-dialog">
+  <div class="export-dialog-card">
+    <div class="export-dialog-title">Load Project</div>
+    <div style="font-size:12px; opacity:.75; margin-bottom:10px;">C:\MyNus\Projects</div>
+    <div id="loadProjectList" style="display:grid; gap:6px; max-height:360px; overflow:auto; margin-bottom:12px;"></div>
+    <div class="export-format-grid" style="grid-template-columns:1fr;">
+      <button type="button" id="cancelLoadProjectBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================
+     PROJECT SAVE CONFLICT | 5.1.16
+======================================== -->
+<div id="projectConflictDialog" class="export-dialog">
+  <div class="export-dialog-card">
+    <div class="export-dialog-title">Project already exists</div>
+    <div id="projectConflictMessage" style="font-size:12px; margin-bottom:12px;"></div>
+    <div class="export-format-grid" style="grid-template-columns:1fr 1fr; gap:6px;">
+      <button type="button" id="overwriteProjectBtn">Overwrite</button>
+      <button type="button" id="renameProjectBtn">Rename</button>
+      <button type="button" id="saveProjectCopyBtn">Save Copy</button>
+      <button type="button" id="cancelProjectConflictBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ========================================
+     KARAOKE SONG FINISHED | 5.1.16
+======================================== -->
+<div id="karaokeFinishedDialog" class="export-dialog" style="z-index:5000;">
+  <div class="export-dialog-card">
+    <div class="export-dialog-title">Song finished</div>
+    <div class="export-format-grid" style="grid-template-columns:1fr; gap:8px;">
+      <button type="button" id="karaokePlayAgainBtn">Play again</button>
+      <button type="button" id="karaokeNextProjectBtn">Open next project in playlist</button>
+      <button type="button" id="karaokeLoadAnotherBtn">Load another project</button>
+    </div>
+    <label style="display:flex; align-items:center; gap:8px; margin-top:14px; font-size:13px;">
+      <input type="checkbox" id="karaokeSaveCurrentProjectFlag">
+      <span>Save current project</span>
+    </label>
+    <div id="karaokeFinishedMessage" style="font-size:12px; min-height:16px; margin-top:8px;"></div>
+    <div class="export-format-grid" style="grid-template-columns:1fr; margin-top:8px;">
+      <button type="button" id="karaokeFinishedCancelBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+
+<div id="projectLoader" class="project-loader" aria-live="polite" aria-hidden="true">
+  <div class="project-loader-card">
+    <div class="project-loader-title">Loading project</div>
+    <div id="projectLoaderProject" class="project-loader-phase" style="font-weight:800; color:#f3df72; margin-bottom:8px;"></div>
+    <div id="projectLoaderPhase" class="project-loader-phase">Opening project</div>
+    <div class="project-loader-track"><div id="projectLoaderFill" class="project-loader-fill"></div></div>
+    <div id="projectLoaderPercent" class="project-loader-percent">0%</div>
+  </div>
+</div>
+
+<!-- ========================================
+     LYRICS EDITOR
+======================================== -->
+
+<div id="lyricsEditorDialog" class="lyrics-editor-dialog">
+  <div class="lyrics-editor-card">
+    <div class="lyrics-editor-header">
+      <button type="button" id="lyricsModeSwitchBtn" class="lyrics-mode-switch" title="Switch Lyrics mode">Full Screen</button>
+
+      <div
+        id="lyricsEditorStatus"
+        class="lyrics-editor-status lyrics-editor-status-top"
+      >
+        <div class="lyrics-editor-console-inline">
+          <button type="button" id="lyricsErrorClearBtn">Clear</button>
+          <textarea id="lyricsEditorErrorConsole" spellcheck="false" aria-label="Lyrics Editor messages"></textarea>
+          <button type="button" id="lyricsErrorCopyBtn">Copy</button>
+        </div>
+      </div>
+
+      <button type="button" id="closeLyricsEditorBtn">Close</button>
+    </div>
+
+    <div id="lyricsFullScreenView" class="lyrics-fullscreen-view" aria-hidden="true">
+      <div class="lyrics-fullscreen-topbar">
+        <button type="button" id="lyricsFullScreenBackBtn" class="lyrics-fullscreen-back">Lyrics Editor</button>
+        <div class="lyrics-fullscreen-title-stack">
+          <div id="lyricsFullScreenTrackName" class="lyrics-fullscreen-track-name">No file selected</div>
+          <div class="lyrics-fullscreen-playlist-wrap">
+            <button type="button" id="lyricsFullScreenPlaylistBtn" class="lyrics-fullscreen-playlist-btn">PlayList</button>
+            <div id="lyricsFullScreenPlaylistMenu" class="lyrics-fullscreen-playlist-menu" hidden></div>
+          </div>
+        </div>
+        <div class="lyrics-fullscreen-window-controls">
+          <div class="lyrics-fullscreen-brand">MyNus</div>
+          <button type="button" id="lyricsFullScreenWindowBtn" class="lyrics-fullscreen-window-btn" title="Window mode" aria-label="Switch to window mode">▫</button>
+        </div>
+      </div>
+      <div id="lyricsFullScreenStructureBadge" class="lyrics-fullscreen-structure-badge" hidden></div>
+      <div id="lyricsFullScreenCounter" class="lyrics-fullscreen-counter">-00:00.00</div>
+
+      <div class="lyrics-fullscreen-bottom-controls">
+        <div class="lyrics-fullscreen-keys-wrap">
+          <button type="button" id="lyricsFullScreenKeysBtn" class="lyrics-fullscreen-mini-btn">Keys?</button>
+          <div id="lyricsFullScreenKeysMenu" class="lyrics-fullscreen-keys-menu" hidden>
+            <div><span>Space</span><span>Play / Pause</span></div>
+            <div><span>Tab</span><span>Lyrics Editor</span></div>
+            <div><span>Esc</span><span>Sequencer</span></div>
+            <div><span>Backspace</span><span>Close all Full Screen windows</span></div>
+            <div><span>Page Up</span><span>Open Input + Master</span></div>
+            <div><span>Page Down</span><span>Close Input + Master</span></div>
+          </div>
+        </div>
+        <div class="lyrics-fullscreen-transport-icons">
+          <button type="button" id="lyricsFullScreenPlayBtn" title="Play">▶</button>
+          <button type="button" id="lyricsFullScreenRecBtn" title="Rec">●</button>
+          <button type="button" id="lyricsFullScreenBackTransportBtn" title="Back">⏮</button>
+          <button type="button" id="lyricsFullScreenStopBtn" title="Stop">■</button>
+          <button type="button" id="lyricsFullScreenPauseBtn" title="Pause">⏸</button>
+        </div>
+      </div>
+
+      <div class="lyrics-fullscreen-side-control left">
+        <button type="button" id="lyricsFullScreenMicBtn" class="lyrics-fullscreen-side-icon" title="Input Level">🎤</button>
+        <div id="lyricsFullScreenMicScale" class="lyrics-fullscreen-vertical-scale" hidden>
+          <span class="scale-value" id="lyricsFullScreenMicValue">100</span>
+          <input id="lyricsFullScreenMicRange" type="range" min="0" max="100" value="100" orient="vertical" aria-label="Input Level">
+        </div>
+      </div>
+      <div class="lyrics-fullscreen-side-control right">
+        <button type="button" id="lyricsFullScreenVolumeBtn" class="lyrics-fullscreen-side-icon" title="Master Volume">🔊</button>
+        <div id="lyricsFullScreenVolumeScale" class="lyrics-fullscreen-vertical-scale" hidden>
+          <span class="scale-value" id="lyricsFullScreenVolumeValue">100</span>
+          <input id="lyricsFullScreenVolumeRange" type="range" min="0" max="100" value="100" orient="vertical" aria-label="Master Volume">
+        </div>
+      </div>
+
+      <div id="lyricsFullScreenPitchMenu" class="lyrics-fullscreen-popup" hidden>
+        <div class="lyrics-fullscreen-popup-head"><div class="lyrics-fullscreen-popup-title">Tone</div><button type="button" class="lyrics-fullscreen-popup-close" data-close-fullscreen-menu="pitch" aria-label="Close">×</button></div>
+        <button type="button" data-fullscreen-pitch="up">higher <span class="popup-state">+</span></button>
+        <button type="button" data-fullscreen-pitch="reset">back to source <span id="lyricsFullScreenPitchValue" class="popup-state">0</span></button>
+        <button type="button" data-fullscreen-pitch="down">lower <span class="popup-state">−</span></button>
+      </div>
+      <div id="lyricsFullScreenTracksMenu" class="lyrics-fullscreen-popup" hidden>
+        <div class="lyrics-fullscreen-popup-head">
+          <button type="button" class="lyrics-fullscreen-popup-back" id="lyricsFullScreenTracksResetBtn" title="Back to Source" aria-label="Back to Source">←</button>
+          <button type="button" class="lyrics-fullscreen-popup-close" data-close-fullscreen-menu="tracks" aria-label="Close">×</button>
+        </div>
+        <div class="lyrics-fullscreen-tracks-title">Tracks</div>
+      </div>
+      <div class="lyrics-fullscreen-lines">
+        <div id="lyricsFullScreenCurrent" class="lyrics-fullscreen-current"></div>
+        <div id="lyricsFullScreenNext" class="lyrics-fullscreen-next"></div>
+      </div>
+    </div>
+
+    <div class="lyrics-editor-toolbar">
+
+      <div class="lyrics-editor-toolbar-left">
+        <button type="button" id="lyricsSplitLineBtn">Split</button>
+        <button type="button" id="lyricsMergeUpBtn">Merge Before</button>
+        <button type="button" id="lyricsMergeDownBtn">Merge After</button>
+        <button type="button" id="lyricsDeleteLineBtn">Delete</button>
+        <button type="button" id="lyricsSetStartBtn">Set Start</button>
+        <button type="button" id="lyricsSetEndBtn">Set End</button>
+      </div>
+
+      <div class="lyrics-editor-toolbar-right">
+        <button type="button" id="lyricsUndoBtn">Undo</button>
+        <button type="button" id="lyricsRedoBtn">Redo</button>
+        <button type="button" id="lyricsResetBtn">Reset</button>
+      </div>
+
+    </div>
+
+    <div id="lyricsStructureRow" class="lyrics-structure-row">
+      <div class="lyrics-structure-body">
+        <div id="lyricsStructureEndpoints" class="lyrics-structure-endpoints">
+          <span id="lyricsStructureStartValue" class="lyrics-structure-endpoint-value start">0:00</span>
+          <span id="lyricsStructureMasterCounter" class="lyrics-structure-master-counter">00:00.00</span>
+          <span id="lyricsStructureEndValue" class="lyrics-structure-endpoint-value end">0:00</span>
+        </div>
+        <div id="lyricsStructureTrack" class="lyrics-structure-track">
+          <span class="lyrics-structure-empty">—</span>
+        </div>
+        <div id="lyricsStructureTimeline" class="lyrics-structure-timeline"></div>
+      <div id="lyricsStructureNameMenu" class="lyrics-structure-name-menu"></div>
+      </div>
+    </div>
+
+    <div id="lyricsSpellPopup" class="lyrics-spell-popup"></div>
+
+    <div id="lyricsEditorRows" class="lyrics-editor-rows"></div>
+
+    <div class="lyrics-editor-footer">
+
+      <div class="lyrics-editor-transport">
+        <button type="button" id="lyricsPlayMasterBtn">Play</button>
+        <button type="button" id="lyricsPlayLineBtn">Loop</button>
+        <button type="button" id="lyricsRepeatBtn">|&lt;-Repeat</button>
+      </div>
+
+      <div class="lyrics-footer-counter-group">
+        <div
+          id="lyricsMasterCounter"
+          class="lyrics-master-counter"
+        >
+          00:00.00
+        </div>
+        <div id="lyricsEditorStats" class="lyrics-editor-status">
+          Lines: 0 | Selected: 0 | Edited: —
+        </div>
+        <div class="lyrics-footer-language-row">
+          <span id="lyricsLanguageInfo">Language: RU</span>
+          <button type="button" id="lyricsTranscriptionBtn" disabled>RU Transcription</button>
+        </div>
+      </div>
+
+      <div class="lyrics-editor-actions">
+        <span id="lyricsSaveNotice" style="min-width:150px; font-size:12px; text-align:right;"></span>
+        <button type="button" id="cancelLyricsEditBtn">Cancel</button>
+        <button type="button" id="lyricsLoadBtn">Load</button>
+        <button type="button" id="saveLyricsEditBtn">Save Project</button>
+        <button type="button" id="lyricsSaveAsBtn">Save Lyrics</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<input type="file" id="lyricsLoadInput" accept=".json,.lrc,.srt,.txt" style="display:none">
+
+<div id="lyricsSaveAsDialog" class="lyrics-saveas-dialog">
+  <div class="lyrics-saveas-card">
+    <div class="lyrics-editor-title">Save Lyrics As</div>
+
+    <label for="lyricsSaveAsName">File name</label>
+    <input type="text" id="lyricsSaveAsName" value="lyrics">
+
+    <label for="lyricsSaveAsFormat">Format</label>
+    <select id="lyricsSaveAsFormat">
+      <option value="json">MyNus Lyrics (*.json)</option>
+      <option value="lrc">LRC Karaoke (*.lrc)</option>
+      <option value="srt">SRT Subtitles (*.srt)</option>
+      <option value="txt">Text (*.txt)</option>
+      <option value="pdf">Print (*.pdf)</option>
+    </select>
+
+    <label for="lyricsSaveAsEncoding">Encoding</label>
+    <select id="lyricsSaveAsEncoding">
+      <option value="utf8" selected>UTF-8</option>
+      <option value="cp1251">Windows-1251</option>
+    </select>
+
+    <div class="lyrics-saveas-actions">
+      <button type="button" id="lyricsSaveAsCancelBtn">Cancel</button>
+      <button type="button" id="lyricsSaveAsConfirmBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================
+     HIDDEN AUDIO SOURCES
+======================================== -->
+
+<audio id="originalAudio"></audio>
+<audio id="vocalsAudio"></audio>
+<audio id="pitchCorrectionAudio"></audio>
+<audio id="harmonizerAudio"></audio>
+<audio id="drumsAudio"></audio>
+<audio id="bassAudio"></audio>
+<audio id="guitarAudio"></audio>
+<audio id="pianoAudio"></audio>
+<audio id="otherAudio"></audio>
+<audio id="masterAudio"></audio>
+
+
 <script>
-(function installClientConsoleBridge() {
-  if (window.__MYNUS_CLIENT_CONSOLE_BRIDGE__) return;
 
-  window.__MYNUS_CLIENT_CONSOLE_BRIDGE__ = true;
 
-  const originalConsole = {};
-  const levels = [
-    "log",
-    "info",
-    "warn",
-    "error",
-    "debug"
-  ];
+// ========================================
+// Перехват всех логов CLIENT CONSOLE -> SERVER CMD
+// ========================================
 
-  function serializeConsoleValue(value) {
+(function () {
+  const methods = ["log", "info", "warn", "error", "debug"];
+  const originals = {};
+
+  function serialize(value) {
     if (value instanceof Error) {
-      return value.stack || (
-        value.name
-        + ": "
-        + value.message
-      );
+      return value.stack || value.message || String(value);
     }
 
     if (typeof value === "string") {
       return value;
     }
 
-    if (typeof value === "undefined") {
-      return "undefined";
-    }
-
-    if (typeof value === "function") {
-      return value.toString();
-    }
-
-    if (value instanceof Element) {
-      return value.outerHTML;
-    }
-
     try {
-      const seen = new WeakSet();
-
-      return JSON.stringify(
-        value,
-        (key, item) => {
-          if (typeof item === "bigint") {
-            return String(item) + "n";
-          }
-
-          if (
-            typeof item === "object"
-            && item !== null
-          ) {
-            if (seen.has(item)) {
-              return "[Circular]";
-            }
-
-            seen.add(item);
-          }
-
-          return item;
-        }
-      );
+      return JSON.stringify(value);
     } catch (_) {
       return String(value);
     }
   }
 
-  function sendClientConsole(level, args) {
-    const payload = {
-      level,
+  methods.forEach(level => {
+    originals[level] = console[level].bind(console);
 
-      message: args
-        .map(serializeConsoleValue)
-        .join(" "),
+    console[level] = (...args) => {
+      // Обычная browser console остаётся работать.
+      originals[level](...args);
 
-      client_time: new Date().toISOString(),
-      page: location.href,
-      user_agent: navigator.userAgent
-    };
+      const message = args.map(serialize).join(" ");
 
-    fetch(
-      "/debug/client-console",
-      {
+      fetch("/debug/client-console", {
         method: "POST",
-
         headers: {
           "Content-Type": "application/json"
         },
-
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          level,
+          message,
+          client_time: new Date().toISOString(),
+          page: location.href,
+          user_agent: navigator.userAgent
+        }),
         keepalive: true
-      }
-    ).catch(() => {});
-  }
-
-  levels.forEach(level => {
-    originalConsole[level] =
-      console[level].bind(console);
-
-    console[level] = (...args) => {
-      originalConsole[level](...args);
-
-      sendClientConsole(
-        level,
-        args
-      );
+      }).catch(() => {
+        // ВАЖНО: здесь нельзя console.error(),
+        // иначе получится рекурсивная отправка ошибки.
+      });
     };
   });
 
-  window.addEventListener(
-    "error",
-    event => {
-      sendClientConsole(
-        "error",
-        [
-          "UNCAUGHT ERROR",
-          event.message,
-          event.filename
-            + ":"
-            + event.lineno
-            + ":"
-            + event.colno,
-          event.error || ""
-        ]
-      );
-    }
-  );
+  window.addEventListener("error", event => {
+    console.error(
+      "UNCAUGHT ERROR:",
+      event.message,
+      event.filename + ":" + event.lineno + ":" + event.colno,
+      event.error || ""
+    );
+  });
 
-  window.addEventListener(
-    "unhandledrejection",
-    event => {
-      sendClientConsole(
-        "error",
-        [
-          "UNHANDLED PROMISE REJECTION",
-          event.reason
-        ]
-      );
-    }
-  );
-
-  console.info(
-    "Client console bridge installed"
-  );
+  window.addEventListener("unhandledrejection", event => {
+    console.error(
+      "UNHANDLED PROMISE REJECTION:",
+      event.reason
+    );
+  });
 })();
-</script>
-'''
-
-    if "</head>" in index_html:
-        index_html = index_html.replace(
-            "</head>",
-            client_console_bridge + "\n</head>",
-            1
-        )
-    else:
-        index_html = client_console_bridge + "\n" + index_html
-
-    return index_html
 
 
-# ========================================
-# START SEPARATION
-# ========================================
 
-@app.route("/separate", methods=["POST"])
-# Локальная серверная операция этого блока.
-def separate():
+// ========================================
+// ЭЛЕМЕНТЫ СТРАНИЦЫ
+// ========================================
 
-    if "audio" not in request.files:
+const audioFile =
+  document.getElementById("audioFile");
 
-        return jsonify({
-            "error": "Audio file not received"
-        }), 400
+const selectFileBtn =
+  document.getElementById("selectFileBtn");
+
+const lyricsLanguageSelect =
+  document.getElementById("lyricsLanguageSelect");
+
+const fileName =
+  document.getElementById("fileName");
+
+const splitBtn =
+  document.getElementById("splitBtn");
+
+const status =
+  document.getElementById("status");
+
+const progressWrap =
+  document.getElementById("progressWrap");
+
+const progressBar =
+  document.getElementById("progressBar");
+
+const progressPercent =
+  document.getElementById("progressPercent");
+
+const studio =
+  document.getElementById("studio");
+
+const originalModeBtn =
+  document.getElementById("originalModeBtn");
+
+const mixModeBtn =
+  document.getElementById("mixModeBtn");
+
+const masterModeBtn =
+  document.getElementById("masterModeBtn");
+
+const recordMasterBtn =
+  document.getElementById("recordMasterBtn");
+
+const stopMasterBtn =
+  document.getElementById("stopMasterBtn");
+
+const saveAsMasterBtn =
+  document.getElementById("saveAsMasterBtn");
+
+const undoMasterBtn =
+  document.getElementById("undoMasterBtn");
+
+const redoMasterBtn =
+  document.getElementById("redoMasterBtn");
+
+const clearMasterRecBtn =
+  document.getElementById("clearMasterRecBtn");
+
+const saveMasterRecBtn =
+  document.getElementById("saveMasterRecBtn");
+
+const saveMasterSelectionBtn =
+  document.getElementById("saveMasterSelectionBtn");
+
+const selectionRange =
+  document.getElementById("selectionRange");
+
+const selectionInfo =
+  document.getElementById("selectionInfo");
+
+const selectionInTime =
+  document.getElementById("selectionInTime");
+
+const selectionOutTime =
+  document.getElementById("selectionOutTime");
+
+const masterState =
+  document.getElementById("masterState");
 
 
-    audio = request.files["audio"]
+const fragmentStartBtn =
+  document.getElementById("fragmentStartBtn");
 
-    if audio.filename == "":
+const loopBtn =
+  document.getElementById("loopBtn");
 
-        return jsonify({
-            "error": "Audio file not selected"
-        }), 400
-
-
-    job_id = str(uuid.uuid4())
+const fragmentEndBtn =
+  document.getElementById("fragmentEndBtn");
 
 
-    job_upload_dir = os.path.join(
-        UPLOAD_DIR,
-        job_id
+const fxTargetVocalsBtn =
+  document.getElementById("fxTargetVocalsBtn");
+
+const fxTargetDrumsBtn =
+  document.getElementById("fxTargetDrumsBtn");
+
+const fxTargetBassBtn =
+  document.getElementById("fxTargetBassBtn");
+
+const fxTargetGuitarBtn =
+  document.getElementById("fxTargetGuitarBtn");
+
+const fxTargetPianoBtn =
+  document.getElementById("fxTargetPianoBtn");
+
+const fxTargetOtherBtn =
+  document.getElementById("fxTargetOtherBtn");
+
+const fxTargetMasterBtn =
+  document.getElementById("fxTargetMasterBtn");
+
+const eqLow =
+  document.getElementById("eqLow");
+
+const eqLowMid =
+  document.getElementById("eqLowMid");
+
+const eqMid =
+  document.getElementById("eqMid");
+
+const eqHighMid =
+  document.getElementById("eqHighMid");
+
+const eqHigh =
+  document.getElementById("eqHigh");
+
+const eqLowValue =
+  document.getElementById("eqLowValue");
+
+const eqLowMidValue =
+  document.getElementById("eqLowMidValue");
+
+const eqMidValue =
+  document.getElementById("eqMidValue");
+
+const eqHighMidValue =
+  document.getElementById("eqHighMidValue");
+
+const eqHighValue =
+  document.getElementById("eqHighValue");
+
+const compressorToggleBtn =
+  document.getElementById("compressorToggleBtn");
+
+const compressorThreshold =
+  document.getElementById("compressorThreshold");
+
+const compressorRatio =
+  document.getElementById("compressorRatio");
+
+const compressorThresholdValue =
+  document.getElementById("compressorThresholdValue");
+
+const compressorRatioValue =
+  document.getElementById("compressorRatioValue");
+
+const reverbToggleBtn =
+  document.getElementById("reverbToggleBtn");
+
+const reverbAmount =
+  document.getElementById("reverbAmount");
+
+const reverbAmountValue =
+  document.getElementById("reverbAmountValue");
+
+const delayToggleBtn =
+  document.getElementById("delayToggleBtn");
+
+const delayTime =
+  document.getElementById("delayTime");
+
+const delayFeedback =
+  document.getElementById("delayFeedback");
+
+const delayTimeValue =
+  document.getElementById("delayTimeValue");
+
+const delayFeedbackValue =
+  document.getElementById("delayFeedbackValue");
+
+const limiterToggleBtn =
+  document.getElementById("limiterToggleBtn");
+
+const limiterCeiling =
+  document.getElementById("limiterCeiling");
+
+const limiterCeilingValue =
+  document.getElementById("limiterCeilingValue");
+
+const fxOutputGain =
+  document.getElementById("fxOutputGain");
+
+const fxOutputGainValue =
+  document.getElementById("fxOutputGainValue");
+
+const panControl =
+  document.getElementById("panControl");
+
+const panValue =
+  document.getElementById("panValue");
+
+const timeDisplayTop =
+  document.getElementById("timeDisplayTop");
+
+const zoomValueTop =
+  document.getElementById("zoomValueTop");
+
+const resetBtn =
+  document.getElementById("resetBtn");
+
+const masterExportDialog =
+  document.getElementById("masterExportDialog");
+
+const cancelMasterExportBtn =
+  document.getElementById("cancelMasterExportBtn");
+
+const startBtn =
+  document.getElementById("startBtn");
+
+const playBtn =
+  document.getElementById("playBtn");
+
+const stopBtn =
+  document.getElementById("stopBtn");
+
+const endBtn =
+  document.getElementById("endBtn");
+
+const timeDisplay =
+  document.getElementById("timeDisplay");
+
+const trackDurationInfo =
+  document.getElementById("trackDurationInfo");
+
+const lyricsPanel =
+  document.getElementById("lyricsPanel");
+
+const lyricsUndoBtn = document.getElementById("lyricsUndoBtn");
+const sequencerUndoBtn = document.getElementById("sequencerUndoBtn");
+const sequencerRedoBtn = document.getElementById("sequencerRedoBtn");
+const lyricsTranscriptionBtn = document.getElementById("lyricsTranscriptionBtn");
+const lyricsLanguageInfo = document.getElementById("lyricsLanguageInfo");
+const lyricsRedoBtn = document.getElementById("lyricsRedoBtn");
+const lyricsResetBtn = document.getElementById("lyricsResetBtn");
+const lyricsDeleteLineBtn = document.getElementById("lyricsDeleteLineBtn");
+const lyricsLoadBtn = document.getElementById("lyricsLoadBtn");
+const lyricsSaveAsBtn = document.getElementById("lyricsSaveAsBtn");
+const lyricsLoadInput = document.getElementById("lyricsLoadInput");
+const lyricsSaveAsDialog = document.getElementById("lyricsSaveAsDialog");
+const lyricsSaveAsName = document.getElementById("lyricsSaveAsName");
+const lyricsSaveAsFormat = document.getElementById("lyricsSaveAsFormat");
+const lyricsSaveAsEncoding = document.getElementById("lyricsSaveAsEncoding");
+const lyricsSaveAsCancelBtn = document.getElementById("lyricsSaveAsCancelBtn");
+const lyricsSaveAsConfirmBtn = document.getElementById("lyricsSaveAsConfirmBtn");
+
+const lyricsPlayMasterBtn =
+  document.getElementById("lyricsPlayMasterBtn");
+
+const lyricsMasterCounter =
+  document.getElementById("lyricsMasterCounter");
+const lyricsStructureMasterCounter =
+  document.getElementById("lyricsStructureMasterCounter");
+
+const editLyricsBtn = document.getElementById("editLyricsBtn");
+const openLyricsFullScreenBtn = document.getElementById("openLyricsFullScreenBtn");
+
+editLyricsBtn.disabled = false;
+openLyricsFullScreenBtn.disabled = false;
+
+const lyricsEditorDialog = document.getElementById("lyricsEditorDialog");
+const closeLyricsEditorBtn = document.getElementById("closeLyricsEditorBtn");
+const cancelLyricsEditBtn = document.getElementById("cancelLyricsEditBtn");
+const saveLyricsEditBtn = document.getElementById("saveLyricsEditBtn");
+const lyricsSaveNotice = document.getElementById("lyricsSaveNotice");
+let lyricsSaveNoticeTimer = null;
+const lyricsEditorRows = document.getElementById("lyricsEditorRows");
+const lyricsSpellPopup = document.getElementById("lyricsSpellPopup");
+const lyricsEditorStatus = document.getElementById("lyricsEditorStatus");
+const lyricsEditorStats = document.getElementById("lyricsEditorStats");
+const lyricsEditorErrorConsole = document.getElementById("lyricsEditorErrorConsole");
+const lyricsErrorClearBtn = document.getElementById("lyricsErrorClearBtn");
+const lyricsErrorCopyBtn = document.getElementById("lyricsErrorCopyBtn");
+
+// Работа со Structure в Lyrics Editor.
+function setLyricsEditorError(error, prefix = "") {
+  if (!lyricsEditorErrorConsole) return;
+  const message = error instanceof Error
+    ? (error.stack || error.message || String(error))
+    : String(error ?? "");
+  lyricsEditorErrorConsole.value = prefix ? prefix + message : message;
+  lyricsEditorErrorConsole.scrollTop = 0;
+  lyricsEditorErrorConsole.scrollLeft = 0;
+}
+
+// Работа со Structure в Lyrics Editor.
+function setLyricsEditorMessage(message) {
+  if (!lyricsEditorErrorConsole) return;
+  lyricsEditorErrorConsole.value = String(message ?? "");
+  lyricsEditorErrorConsole.scrollTop = 0;
+  lyricsEditorErrorConsole.scrollLeft = 0;
+}
+
+// Работа со Structure в Lyrics Editor.
+function updateLyricsEditorStats() {
+  if (!lyricsEditorStats) return;
+  lyricsEditorStats.textContent =
+    "Lines: " + lyricsEditorDraft.length + " | Selected: " +
+    (lyricsEditorSelectedLine >= 0 ? lyricsEditorSelectedLine + 1 : 0) +
+    " | Edited: " +
+    (lyricsEditorEditLineIndex >= 0 ? lyricsEditorEditLineIndex + 1 : "—");
+}
+
+lyricsErrorClearBtn?.addEventListener("click", () => {
+  lyricsEditorErrorConsole.value = "";
+});
+
+lyricsErrorCopyBtn?.addEventListener("click", async () => {
+  const text = lyricsEditorErrorConsole?.value || "";
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (_) {
+    lyricsEditorErrorConsole.focus();
+    lyricsEditorErrorConsole.select();
+    document.execCommand("copy");
+    lyricsEditorErrorConsole.setSelectionRange(0, 0);
+  }
+  const oldText = lyricsErrorCopyBtn.textContent;
+  lyricsErrorCopyBtn.textContent = "Copied";
+  setTimeout(() => { lyricsErrorCopyBtn.textContent = oldText; }, 900);
+});
+
+window.addEventListener("error", event => {
+  if (isLyricsUiOpen() ||
+      getComputedStyle(document.getElementById("lyricsEditorDialog")).display !== "none") {
+    setLyricsEditorError(event.error || event.message, "Error: ");
+  }
+});
+window.addEventListener("unhandledrejection", event => {
+  if (isLyricsUiOpen() ||
+      getComputedStyle(document.getElementById("lyricsEditorDialog")).display !== "none") {
+    setLyricsEditorError(event.reason, "Promise error: ");
+  }
+});
+const lyricsSplitLineBtn = document.getElementById("lyricsSplitLineBtn");
+const lyricsMergeUpBtn = document.getElementById("lyricsMergeUpBtn");
+const lyricsMergeDownBtn = document.getElementById("lyricsMergeDownBtn");
+const lyricsSetStartBtn = document.getElementById("lyricsSetStartBtn");
+const lyricsSetEndBtn = document.getElementById("lyricsSetEndBtn");
+const lyricsPlayLineBtn = document.getElementById("lyricsPlayLineBtn");
+const lyricsRepeatBtn = document.getElementById("lyricsRepeatBtn");
+const lyricsStructureTrack = document.getElementById("lyricsStructureTrack");
+const lyricsStructureTimeline = document.getElementById("lyricsStructureTimeline");
+const lyricsStructureStartValue = document.getElementById("lyricsStructureStartValue");
+const lyricsStructureEndValue = document.getElementById("lyricsStructureEndValue");
+const lyricsStructureNameMenu = document.getElementById("lyricsStructureNameMenu");
+const lyricsEditorCard = lyricsEditorDialog ? lyricsEditorDialog.querySelector(".lyrics-editor-card") : null;
+const lyricsEditorHeader = lyricsEditorDialog ? lyricsEditorDialog.querySelector(".lyrics-editor-header") : null;
+const lyricsModeSwitchBtn = document.getElementById("lyricsModeSwitchBtn");
+const lyricsFullScreenView = document.getElementById("lyricsFullScreenView");
+const lyricsFullScreenBackBtn = document.getElementById("lyricsFullScreenBackBtn");
+const lyricsFullScreenTrackName = document.getElementById("lyricsFullScreenTrackName");
+const lyricsFullScreenStructureBadge = document.getElementById("lyricsFullScreenStructureBadge");
+const lyricsFullScreenCounter = document.getElementById("lyricsFullScreenCounter");
+const lyricsFullScreenWindowBtn = document.getElementById("lyricsFullScreenWindowBtn");
+const lyricsFullScreenCurrent = document.getElementById("lyricsFullScreenCurrent");
+const lyricsFullScreenNext = document.getElementById("lyricsFullScreenNext");
+const lyricsFullScreenKeysBtn = document.getElementById("lyricsFullScreenKeysBtn");
+const lyricsFullScreenKeysMenu = document.getElementById("lyricsFullScreenKeysMenu");
+const lyricsFullScreenPlayBtn = document.getElementById("lyricsFullScreenPlayBtn");
+const lyricsFullScreenRecBtn = document.getElementById("lyricsFullScreenRecBtn");
+const lyricsFullScreenBackTransportBtn = document.getElementById("lyricsFullScreenBackTransportBtn");
+const lyricsFullScreenStopBtn = document.getElementById("lyricsFullScreenStopBtn");
+const lyricsFullScreenPauseBtn = document.getElementById("lyricsFullScreenPauseBtn");
+const lyricsFullScreenMicBtn = document.getElementById("lyricsFullScreenMicBtn");
+const lyricsFullScreenMicScale = document.getElementById("lyricsFullScreenMicScale");
+const lyricsFullScreenMicRange = document.getElementById("lyricsFullScreenMicRange");
+const lyricsFullScreenMicValue = document.getElementById("lyricsFullScreenMicValue");
+const lyricsFullScreenVolumeBtn = document.getElementById("lyricsFullScreenVolumeBtn");
+const lyricsFullScreenVolumeScale = document.getElementById("lyricsFullScreenVolumeScale");
+const lyricsFullScreenVolumeRange = document.getElementById("lyricsFullScreenVolumeRange");
+const lyricsFullScreenVolumeValue = document.getElementById("lyricsFullScreenVolumeValue");
+const recentAudioMenu = document.getElementById("recentAudioMenu");
+
+
+const originalAudio =
+  document.getElementById("originalAudio");
+
+const originalVolume =
+  document.getElementById("originalVolume");
+
+const originalVolumeValue =
+  document.getElementById("originalVolumeValue");
+
+const vocalsAudio =
+  document.getElementById("vocalsAudio");
+
+const vocalsSingerOverlay =
+  document.getElementById(
+    "vocalsSingerOverlay"
+  );
+
+const vocalsMuteBtn =
+  document.getElementById("vocalsMuteBtn");
+
+const vocalsSoloBtn =
+  document.getElementById("vocalsSoloBtn");
+
+const vocalsVolume =
+  document.getElementById("vocalsVolume");
+
+const vocalsVolumeValue =
+  document.getElementById("vocalsVolumeValue");
+
+const pitchCorrectionAudio = document.getElementById("pitchCorrectionAudio");
+const pitchCorrectionMuteBtn = document.getElementById("pitchCorrectionMuteBtn");
+const pitchCorrectionSoloBtn = document.getElementById("pitchCorrectionSoloBtn");
+const pitchCorrectionVolume = document.getElementById("pitchCorrectionVolume");
+const pitchCorrectionVolumeValue = document.getElementById("pitchCorrectionVolumeValue");
+const harmonizerAudio = document.getElementById("harmonizerAudio");
+const harmonizerMuteBtn = document.getElementById("harmonizerMuteBtn");
+const harmonizerSoloBtn = document.getElementById("harmonizerSoloBtn");
+const harmonizerVolume = document.getElementById("harmonizerVolume");
+const harmonizerVolumeValue = document.getElementById("harmonizerVolumeValue");
+const createPitchCorrectionBtn = document.getElementById("createPitchCorrectionBtn");
+const createHarmonizerBtn = document.getElementById("createHarmonizerBtn");
+
+const drumsAudio =
+  document.getElementById("drumsAudio");
+
+const drumsMuteBtn =
+  document.getElementById("drumsMuteBtn");
+
+const drumsSoloBtn =
+  document.getElementById("drumsSoloBtn");
+
+const drumsVolume =
+  document.getElementById("drumsVolume");
+
+const drumsVolumeValue =
+  document.getElementById("drumsVolumeValue");
+
+const bassAudio =
+  document.getElementById("bassAudio");
+
+const bassMuteBtn =
+  document.getElementById("bassMuteBtn");
+
+const bassSoloBtn =
+  document.getElementById("bassSoloBtn");
+
+const bassVolume =
+  document.getElementById("bassVolume");
+
+const bassVolumeValue =
+  document.getElementById("bassVolumeValue");
+
+const guitarAudio =
+  document.getElementById("guitarAudio");
+
+const guitarMuteBtn =
+  document.getElementById("guitarMuteBtn");
+
+const guitarSoloBtn =
+  document.getElementById("guitarSoloBtn");
+
+const guitarVolume =
+  document.getElementById("guitarVolume");
+
+const guitarVolumeValue =
+  document.getElementById("guitarVolumeValue");
+
+const pianoAudio =
+  document.getElementById("pianoAudio");
+
+const pianoMuteBtn =
+  document.getElementById("pianoMuteBtn");
+
+const pianoSoloBtn =
+  document.getElementById("pianoSoloBtn");
+
+const pianoVolume =
+  document.getElementById("pianoVolume");
+
+const pianoVolumeValue =
+  document.getElementById("pianoVolumeValue");
+
+const otherAudio =
+  document.getElementById("otherAudio");
+
+const otherMuteBtn =
+  document.getElementById("otherMuteBtn");
+
+const otherSoloBtn =
+  document.getElementById("otherSoloBtn");
+
+const otherVolume =
+  document.getElementById("otherVolume");
+
+const otherVolumeValue =
+  document.getElementById("otherVolumeValue");
+
+const masterAudio =
+  document.getElementById("masterAudio");
+
+const masterVolume =
+  document.getElementById("masterVolume");
+
+const masterVolumeValue =
+  document.getElementById("masterVolumeValue");
+
+const vocalsCropInBtn =
+  document.getElementById("vocalsCropInBtn");
+
+const vocalsCropOutBtn =
+  document.getElementById("vocalsCropOutBtn");
+const pitchCorrectionCropInBtn = document.getElementById("pitchCorrectionCropInBtn");
+const pitchCorrectionCropOutBtn = document.getElementById("pitchCorrectionCropOutBtn");
+const harmonizerCropInBtn = document.getElementById("harmonizerCropInBtn");
+const harmonizerCropOutBtn = document.getElementById("harmonizerCropOutBtn");
+
+const drumsCropInBtn =
+  document.getElementById("drumsCropInBtn");
+
+const drumsCropOutBtn =
+  document.getElementById("drumsCropOutBtn");
+
+const bassCropInBtn =
+  document.getElementById("bassCropInBtn");
+
+const bassCropOutBtn =
+  document.getElementById("bassCropOutBtn");
+
+const guitarCropInBtn =
+  document.getElementById("guitarCropInBtn");
+
+const guitarCropOutBtn =
+  document.getElementById("guitarCropOutBtn");
+
+const pianoCropInBtn =
+  document.getElementById("pianoCropInBtn");
+
+const pianoCropOutBtn =
+  document.getElementById("pianoCropOutBtn");
+
+const otherCropInBtn =
+  document.getElementById("otherCropInBtn");
+
+const otherCropOutBtn =
+  document.getElementById("otherCropOutBtn");
+
+const vocalsCropMaskLeft =
+  document.getElementById("vocalsCropMaskLeft");
+
+const vocalsCropMaskRight =
+  document.getElementById("vocalsCropMaskRight");
+const pitchCorrectionCropMaskLeft = document.getElementById("pitchCorrectionCropMaskLeft");
+const pitchCorrectionCropMaskRight = document.getElementById("pitchCorrectionCropMaskRight");
+const harmonizerCropMaskLeft = document.getElementById("harmonizerCropMaskLeft");
+const harmonizerCropMaskRight = document.getElementById("harmonizerCropMaskRight");
+
+const drumsCropMaskLeft =
+  document.getElementById("drumsCropMaskLeft");
+
+const drumsCropMaskRight =
+  document.getElementById("drumsCropMaskRight");
+
+const bassCropMaskLeft =
+  document.getElementById("bassCropMaskLeft");
+
+const bassCropMaskRight =
+  document.getElementById("bassCropMaskRight");
+
+const guitarCropMaskLeft =
+  document.getElementById("guitarCropMaskLeft");
+
+const guitarCropMaskRight =
+  document.getElementById("guitarCropMaskRight");
+
+const pianoCropMaskLeft =
+  document.getElementById("pianoCropMaskLeft");
+
+const pianoCropMaskRight =
+  document.getElementById("pianoCropMaskRight");
+
+const otherCropMaskLeft =
+  document.getElementById("otherCropMaskLeft");
+
+const otherCropMaskRight =
+  document.getElementById("otherCropMaskRight");
+
+const zoomOutBtn =
+  document.getElementById("zoomOutBtn");
+
+const zoomInBtn =
+  document.getElementById("zoomInBtn");
+
+const zoomValue =
+  document.getElementById("zoomValue");
+
+const masterTimeline =
+  document.getElementById("masterTimeline");
+
+const sharedScroll =
+  document.getElementById("sharedScroll");
+
+const sharedScrollInner =
+  document.getElementById("sharedScrollInner");
+
+const masterTimelineInner =
+  document.getElementById("masterTimelineInner");
+
+const masterCursor =
+  document.getElementById("masterCursor");
+
+const masterRuler =
+  document.getElementById("masterRuler");
+
+const projectTrimMaskLeft = document.getElementById("projectTrimMaskLeft");
+const projectTrimMaskRight = document.getElementById("projectTrimMaskRight");
+const projectTrimStartMarker = document.getElementById("projectTrimStartMarker");
+const projectTrimEndMarker = document.getElementById("projectTrimEndMarker");
+const projectTrimStartTime = document.getElementById("projectTrimStartTime");
+const projectTrimEndTime = document.getElementById("projectTrimEndTime");
+const projectTrimStartHandle = document.getElementById("projectTrimStartHandle");
+const projectTrimEndHandle = document.getElementById("projectTrimEndHandle");
+
+
+const canvases = {
+
+  original:
+    document.getElementById("originalCanvas"),
+
+  vocals:
+    document.getElementById("vocalsCanvas"),
+  pitchCorrection: document.getElementById("pitchCorrectionCanvas"),
+  harmonizer: document.getElementById("harmonizerCanvas"),
+
+  drums:
+    document.getElementById("drumsCanvas"),
+
+  bass:
+    document.getElementById("bassCanvas"),
+
+  guitar:
+    document.getElementById("guitarCanvas"),
+
+  piano:
+    document.getElementById("pianoCanvas"),
+
+  other:
+    document.getElementById("otherCanvas"),
+
+  master:
+    document.getElementById("masterCanvas")
+
+};
+
+
+const timelines = {
+
+  original:
+    document.getElementById("originalTimeline"),
+
+  vocals:
+    document.getElementById("vocalsTimeline"),
+  pitchCorrection: document.getElementById("pitchCorrectionTimeline"),
+  harmonizer: document.getElementById("harmonizerTimeline"),
+
+  drums:
+    document.getElementById("drumsTimeline"),
+
+  bass:
+    document.getElementById("bassTimeline"),
+
+  guitar:
+    document.getElementById("guitarTimeline"),
+
+  piano:
+    document.getElementById("pianoTimeline"),
+
+  other:
+    document.getElementById("otherTimeline"),
+
+  master:
+    document.getElementById("masterTrackTimeline")
+
+};
+
+
+const playheads = {
+
+  original:
+    document.getElementById("originalPlayhead"),
+
+  vocals:
+    document.getElementById("vocalsPlayhead"),
+
+  pitchCorrection:
+    document.getElementById("pitchCorrectionPlayhead"),
+
+  harmonizer:
+    document.getElementById("harmonizerPlayhead"),
+
+  drums:
+    document.getElementById("drumsPlayhead"),
+
+  bass:
+    document.getElementById("bassPlayhead"),
+
+  guitar:
+    document.getElementById("guitarPlayhead"),
+
+  piano:
+    document.getElementById("pianoPlayhead"),
+
+  other:
+    document.getElementById("otherPlayhead"),
+
+  master:
+    document.getElementById("masterPlayhead")
+
+};
+
+
+const scrollAreas =
+  [...document.querySelectorAll(".timeline-scroll")];
+
+
+// ========================================
+// СОСТОЯНИЕ ПРИЛОЖЕНИЯ
+// ========================================
+
+let mode =
+  "original";
+
+let isPlaying =
+  false;
+
+let duration =
+  0;
+
+let pixelsPerSecond =
+  40;
+
+let originalFileURL =
+  null;
+
+let singerSegments = [];
+
+let waveformData = {
+
+  original: null,
+
+  vocals: null,
+  pitchCorrection: null,
+  harmonizer: null,
+  drums: null,
+  bass: null,
+  guitar: null,
+  piano: null,
+  other: null,
+
+  master: null
+
+};
+
+
+const stemIds = [
+  "vocals",
+  "pitchCorrection",
+  "harmonizer",
+  "drums",
+  "bass",
+  "guitar",
+  "piano",
+  "other"
+];
+
+
+const instrumentalStemIds = [
+  "pitchCorrection",
+  "harmonizer",
+  "drums",
+  "bass",
+  "guitar",
+  "piano",
+  "other"
+];
+
+
+const stemState =
+  Object.fromEntries(
+    stemIds.map(
+      stemId => [
+        stemId,
+        {
+          muted: false,
+          solo: false,
+          volume: 1
+        }
+      ]
     )
+  );
 
-    job_result_dir = os.path.join(
-        RESULT_DIR,
-        job_id
+stemState.pitchCorrection.muted = true;
+stemState.harmonizer.muted = true;
+
+const stemCrop = Object.fromEntries(
+  stemIds.map(
+    stemId => [
+      stemId,
+      {
+        in: 0,
+        out: null
+      }
+    ]
+  )
+);
+
+
+
+let lyricsData = {
+  language: null,
+  text: "",
+  words: []
+};
+
+
+let karaokeLines = [];
+
+
+let activeKaraokeLine =
+  -1;
+
+let lyricsEditorDraft = [];
+let lyricsEditorSelectedLine = -1;
+let lyricsEditorEditLineIndex = -1;
+let lyricsEditorCaretOffset = 0;
+let lyricsEditorEditStartState = null;
+let lyricsEditorPointerTime = null;
+let lyricsStructureDraft = [];
+let lyricsStructureSelectedIndex = -1;
+let lyricsStructureSelectedIndices = new Set();
+let lyricsStructureTransportMode = "play";
+let lyricsStructureLoopStart = null;
+let lyricsStructureLoopEnd = null;
+const UI_MODE = Object.freeze({
+  SEQUENCER: "sequencer",
+  LYRICS: "lyrics",
+  KARAOKE: "karaoke"
+});
+let uiMode = UI_MODE.SEQUENCER;
+
+// Логика режима Karaoke и его интерфейса.
+function isKaraokeUiMode() {
+  return uiMode === UI_MODE.KARAOKE;
+}
+
+// Работа со Structure в Lyrics Editor.
+function isLyricsUiOpen() {
+  return uiMode !== UI_MODE.SEQUENCER;
+}
+
+// Structure редактируется только в Lyrics Editor. Full Screen показывает те же данные read-only.
+function isLyricsStructureEditable() {
+  return uiMode === UI_MODE.LYRICS;
+}
+let recentSelectedAudioFile = null;
+
+let lyricsUndoStack = [];
+let lyricsRedoStack = [];
+
+let originalWhisperLyrics = {
+  language: null,
+  text: "",
+  words: []
+};
+
+let originalWhisperKaraokeLines = [];
+
+let masterCursorTime =
+  0;
+
+
+let lyricsTransportMode =
+  "master";
+
+
+let lyricsLoopPaused =
+  false;
+
+// Общий текстовый маркер в Lines: граница перед словом N.
+
+
+let vocalStartTimeRaw =
+  null;
+
+let vocalEndTimeRaw =
+  null;
+
+let vocalStartTime =
+  null;
+
+let vocalEndTime =
+  null;
+
+
+let animationFrame =
+  null;
+
+let scrollSyncLock =
+  false;
+
+let masterCursorDragging =
+  false;
+
+
+// ========================================
+// СОСТОЯНИЕ ЗАПИСИ MASTER
+// ========================================
+
+let mixAudioContext = null;
+let stemSourceNodes = {};
+let stemGainNodes = {};
+let masterAnalyserNode = null;
+let masterRecordDestination = null;
+let masterRecorder = null;
+let masterRecordChunks = [];
+let masterRecording = false;
+
+let masterRecordBus = null;
+let masterRecordProcessor = null;
+let masterRecordSilentGain = null;
+let masterPcmChunks = [];
+let masterPcmSampleRate = 0;
+let masterPcmChannels = 2;
+let masterPcmFrameCount = 0;
+
+let masterBlob = null;
+let savedMasterBlob = null;
+let masterObjectURL = null;
+let masterRecordStartTime = 0;
+let masterRecordTimelineStart = 0;
+let masterRecordTimelineEnd = 0;
+let masterRecordAnimation = null;
+let masterLivePeaks = [];
+let masterDuration = 0;
+
+let masterSegments = [];
+let masterUndoStack = [];
+let masterRedoStack = [];
+
+// 5.4.15 | Единый диапазон Selection / IN / OUT.
+// fragmentStart и fragmentEnd — единственный источник данных для выделения, Loop и Export Selection.
+let fragmentStart = null;
+let fragmentEnd = null;
+let projectTrimStart = 0;
+let projectTrimEnd = null;
+let projectTrimDragging = null;
+
+// 5.4.13 | Separate Sequencer history. Session-only; never saved into Project JSON.
+let sequencerUndoStack = [];
+let sequencerRedoStack = [];
+let sequencerHistoryRestoring = false;
+const SEQUENCER_HISTORY_LIMIT = 100;
+let loopEnabled = false;
+let selectionDragging = false;
+let selectionPointerStartX = 0;
+let selectionMoved = false;
+
+let exportTargetTrack = "master";
+let exportTargetScope = "full";
+
+// Исходный аудиофайл, выбранный пользователем. Не использовать для технической Original-дорожки Project.
+let currentOriginalFile = null;
+// Файл/Blob текущей дорожки Original: исходный File при обычной загрузке или восстановленный File при Project LOAD.
+let currentOriginalTrackFile = null;
+// Исходное имя аудиофайла для Lyrics Save As; сохраняется в Project.json и восстанавливается при Project LOAD.
+let currentSourceAudioName = null;
+let currentStemURLs = {};
+
+
+let fxTarget =
+  "vocals";
+
+const defaultFxSettings = {
+  eqLow: 0,
+  eqLowMid: 0,
+  eqMid: 0,
+  eqHighMid: 0,
+  eqHigh: 0,
+
+  pan: 0,
+
+  compressorOn: true,
+  compressorThreshold: -18,
+  compressorRatio: 4,
+
+  reverbOn: false,
+  reverbAmount: 20,
+
+  delayOn: false,
+  delayTime: 220,
+  delayFeedback: 25,
+
+  limiterOn: true,
+  limiterCeiling: -0.5,
+
+  outputGain: 0
+};
+
+
+const fxSettings = {
+
+  vocals: {
+    ...defaultFxSettings
+  },
+
+  pitchCorrection: {
+    ...defaultFxSettings
+  },
+
+  harmonizer: {
+    ...defaultFxSettings
+  },
+
+  drums: {
+    ...defaultFxSettings
+  },
+
+  bass: {
+    ...defaultFxSettings
+  },
+
+  guitar: {
+    ...defaultFxSettings
+  },
+
+  piano: {
+    ...defaultFxSettings
+  },
+
+  other: {
+    ...defaultFxSettings
+  },
+
+  master: {
+    ...defaultFxSettings
+  }
+
+};
+
+let stemFxInputs = {};
+let stemFxNodes = {};
+
+let masterFxInput = null;
+
+let masterEqNodes = [];
+let masterPanNode = null;
+let masterCompressorNode = null;
+
+let masterReverbDryGain = null;
+let masterReverbWetGain = null;
+
+let masterDelayNode = null;
+let masterDelayFeedbackGain = null;
+
+let masterDelayDryGain = null;
+let masterDelayWetGain = null;
+
+let masterLimiterNode = null;
+let masterFxOutputGainNode = null;
+
+let masterSourceNode = null;
+
+
+
+// ========================================
+// ДУБЛИРОВАНИЕ ТРАНСПОРТА
+// ========================================
+
+document
+  .querySelectorAll(
+    "[data-proxy]"
+  )
+  .forEach(
+    proxy => {
+
+      proxy.addEventListener(
+        "click",
+        () => {
+
+          const target =
+            document.getElementById(
+              proxy.dataset.proxy
+            );
+
+
+          if (target) {
+
+            target.click();
+
+          }
+
+        }
+      );
+
+    }
+  );
+
+
+// Управление транспортом и воспроизведением.
+function syncTransportMirrors() {
+
+  document
+    .querySelectorAll(
+      ".mode-proxy"
     )
+    .forEach(
+      button => {
 
-    os.makedirs(
-        job_upload_dir,
-        exist_ok=True
+        button.classList.toggle(
+          "active",
+          button.dataset.mode === mode
+        );
+
+      }
+    );
+
+
+  document
+    .querySelectorAll(
+      ".play-proxy"
     )
+    .forEach(
+      button => {
 
-    os.makedirs(
-        job_result_dir,
-        exist_ok=True
+        button.textContent =
+          isPlaying
+          ? "Pause"
+          : "Play";
+
+      }
+    );
+
+
+  document
+    .querySelectorAll(
+      ".loop-proxy"
     )
+    .forEach(
+      button => {
+
+        button.classList.toggle(
+          "active",
+          loopEnabled
+        );
+
+      }
+    );
 
 
-    filename = secure_filename(
-        audio.filename
-    )
+  if (
+    zoomValueTop
+  ) {
 
-    if not filename:
-        filename = "audio.mp3"
+    zoomValueTop.textContent =
+      pixelsPerSecond
+        .toFixed(1)
+      + " px/s";
 
+  }
 
-    input_path = os.path.join(
-        job_upload_dir,
-        filename
-    )
-
-    audio.save(
-        input_path
-    )
+}
 
 
-    jobs[job_id] = {
-        "progress": 0,
-        "status": "processing",
-        "vocals": None,
-        "drums": None,
-        "bass": None,
-        "guitar": None,
-        "piano": None,
-        "other": None,
-        "vocal_start": None,
-        "vocal_end": None,
-        "error": None
+// ========================================
+// ПОСЛЕДНИЕ АУДИОФАЙЛЫ
+// ========================================
+
+const RECENT_AUDIO_DB = "mynus_recent_audio_v2";
+const RECENT_AUDIO_STORE = "files";
+const RECENT_AUDIO_LIMIT = 10;
+
+// Локальная функциональная операция этого блока.
+function openRecentAudioDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(RECENT_AUDIO_DB, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(RECENT_AUDIO_STORE)) {
+        db.createObjectStore(RECENT_AUDIO_STORE, { keyPath: "key" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+// Сохранение текущего Project и связанных данных.
+async function saveRecentAudioHandle(handle, file) {
+  if (!handle || !file || !window.indexedDB) return;
+  try {
+    const db = await openRecentAudioDb();
+    const tx = db.transaction(RECENT_AUDIO_STORE, "readwrite");
+    const store = tx.objectStore(RECENT_AUDIO_STORE);
+    const allRequest = store.getAll();
+    allRequest.onsuccess = () => {
+      const rows = Array.isArray(allRequest.result) ? allRequest.result : [];
+      const key = `${file.name}::${file.size}::${file.lastModified}`;
+      const next = rows.filter(row => row.key !== key).sort((a,b) => (b.savedAt||0)-(a.savedAt||0));
+      next.unshift({ key, name:file.name, size:file.size||0, lastModified:file.lastModified||0, savedAt:Date.now(), handle });
+      store.clear();
+      next.slice(0, RECENT_AUDIO_LIMIT).forEach(row => store.put(row));
+    };
+  } catch (_) {}
+}
+
+// Локальная функциональная операция этого блока.
+async function getRecentAudioEntries() {
+  if (!window.indexedDB) return [];
+  try {
+    const db = await openRecentAudioDb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(RECENT_AUDIO_STORE, "readonly");
+      const request = tx.objectStore(RECENT_AUDIO_STORE).getAll();
+      request.onsuccess = () => {
+        const rows = Array.isArray(request.result) ? request.result : [];
+        resolve(rows.sort((a,b) => (b.savedAt||0)-(a.savedAt||0)).slice(0, RECENT_AUDIO_LIMIT));
+      };
+      request.onerror = () => reject(request.error);
+    });
+  } catch (_) { return []; }
+}
+
+// Открытие, закрытие и обновление элемента интерфейса.
+function closeRecentAudioMenu() {
+  if (recentAudioMenu) recentAudioMenu.classList.remove("open");
+}
+
+// Локальная функциональная операция этого блока.
+async function selectRecentAudioEntry(entry) {
+  if (!entry || !entry.handle) return;
+  try {
+    let permission = await entry.handle.queryPermission({ mode: "read" });
+    if (permission !== "granted") permission = await entry.handle.requestPermission({ mode: "read" });
+    if (permission !== "granted") return;
+    const file = await entry.handle.getFile();
+    clearProjectState();
+    recentSelectedAudioFile = file;
+    fileName.textContent = file.name;
+    closeRecentAudioMenu();
+  } catch (_) {}
+}
+
+// Открытие, закрытие и обновление элемента интерфейса.
+async function openRecentAudioMenu(event) {
+  event.preventDefault();
+  if (!recentAudioMenu) return;
+  const entries = await getRecentAudioEntries();
+  recentAudioMenu.innerHTML = "";
+  if (!entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "recent-audio-menu-empty";
+    empty.textContent = "No recent files";
+    recentAudioMenu.appendChild(empty);
+  } else {
+    entries.forEach(entry => {
+      const item = document.createElement("button");
+      item.type = "button"; item.className = "recent-audio-menu-item";
+      item.textContent = entry.name; item.title = entry.name;
+      item.addEventListener("click", () => selectRecentAudioEntry(entry));
+      recentAudioMenu.appendChild(item);
+    });
+  }
+  const rect = fileName.getBoundingClientRect();
+  const menuWidth = Math.min(520, Math.max(280, rect.width));
+  recentAudioMenu.style.width = `${menuWidth}px`;
+  recentAudioMenu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - menuWidth - 8))}px`;
+  recentAudioMenu.style.top = `${Math.min(rect.bottom + 4, window.innerHeight - 260)}px`;
+  recentAudioMenu.classList.add("open");
+}
+
+fileName.addEventListener("contextmenu", openRecentAudioMenu);
+document.addEventListener("click", event => {
+  if (!recentAudioMenu || recentAudioMenu.contains(event.target)) return;
+  closeRecentAudioMenu();
+});
+window.addEventListener("resize", closeRecentAudioMenu);
+window.addEventListener("resize", closeLyricsStructureNameMenu);
+window.addEventListener("blur", closeRecentAudioMenu);
+
+// ========================================
+// ВЫБОР ФАЙЛА
+// ========================================
+
+selectFileBtn.addEventListener(
+  "click",
+  async () => {
+
+    if (window.showOpenFilePicker) {
+      try {
+        const [handle] = await window.showOpenFilePicker({
+          multiple: false,
+  types: [{
+    description: "Audio",
+    accept: { "audio/*": [".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg"] }
+  }]
+               });
+        if (!handle) return;
+        const file = await handle.getFile();
+        clearProjectState();
+        recentSelectedAudioFile = file;
+        fileName.textContent = file.name;
+        await saveRecentAudioHandle(handle, file);
+        return;
+      } catch (error) {
+        if (error && error.name === "AbortError") return;
+      }
+    }
+
+    audioFile.click();
+  }
+);
+
+
+audioFile.addEventListener(
+  "change",
+  () => {
+    const file = audioFile.files[0];
+    if (file) clearProjectState();
+    recentSelectedAudioFile = null;
+    fileName.textContent = file ? file.name : "No file selected";
+  }
+);
+
+
+// ========================================
+// РАЗДЕЛЕНИЕ АУДИО
+// ========================================
+
+splitBtn.addEventListener(
+  "click",
+  async () => {
+
+    const file =
+      audioFile.files[0]
+      || recentSelectedAudioFile;
+
+
+    if (!file) {
+
+      status.textContent =
+        "Select an audio file";
+      status.className = "progress-status info";
+
+      return;
+
     }
 
 
-    thread = threading.Thread(
-        target=run_demucs,
-        args=(
-            job_id,
-            input_path,
-            job_result_dir
-        ),
-        daemon=True
-    )
-
-    thread.start()
+    const formData =
+      new FormData();
 
 
-    return jsonify({
-        "job_id": job_id
-    })
+    formData.append(
+      "audio",
+      file
+    );
+
+    formData.append(
+      "lyrics_language",
+      lyricsLanguageSelect.value
+    );
 
 
-# ========================================
-# VOCAL START\END DETECTION
-# ========================================
+    splitBtn.disabled =
+      true;
 
-# Локальная серверная операция этого блока.
-def detect_vocal_range(
-    vocals_path
-):
-
-    command = [
-        "ffmpeg",
-        "-hide_banner",
-        "-i",
-        vocals_path,
-        "-af",
-        "silencedetect=noise=-38dB:d=0.35",
-        "-f",
-        "null",
-        "-"
-    ]
-
-    process = subprocess.run(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        errors="replace"
-    )
-
-    output = (
-        process.stdout
-        + "\n"
-        + process.stderr
-    )
+    // Выбранный файл уже был очищен через clearProjectState().
+    // Состояние PlayList намеренно сохраняется.
 
 
-    silence_ends = [
-        float(value)
-        for value in re.findall(
-            r"silence_end:\s*([0-9.]+)",
-            output
+    studio.style.display =
+      "none";
+
+
+    progressWrap.style.display =
+      "block";
+
+
+    progressBar.style.width =
+      "0%";
+
+
+    progressPercent.textContent =
+      "0%";
+
+
+    status.textContent =
+      "Separating...";
+    status.className = "progress-status process";
+
+
+    try {
+
+      if (originalFileURL) {
+
+        URL.revokeObjectURL(
+          originalFileURL
+        );
+
+      }
+
+
+      originalFileURL =
+        URL.createObjectURL(
+          file
+        );
+
+
+      originalAudio.src =
+        originalFileURL;
+
+
+      const response =
+        await fetch(
+          "/separate",
+          {
+
+            method: "POST",
+
+            body: formData
+
+          }
+        );
+
+
+      if (!response.ok) {
+
+        let errorData = {};
+
+
+        try {
+
+          errorData =
+            await response.json();
+
+        }
+
+        catch {
+
+          errorData = {};
+
+        }
+
+
+        throw new Error(
+
+          errorData.details
+          || errorData.error
+          || "Server error"
+
+        );
+
+      }
+
+
+      const startData =
+        await response.json();
+
+
+      const jobId =
+        startData.job_id;
+
+
+      resetMaster();
+
+      singerSegments = [];
+      renderSingerSegments();
+
+
+      stemIds.forEach(
+        stemId => {
+
+          stemCrop[
+            stemId
+          ].in =
+            0;
+
+
+          stemCrop[
+            stemId
+          ].out =
+            null;
+
+        }
+      );
+
+
+      updateCropButtons();
+
+
+      const data =
+        await waitForSeparation(
+          jobId
+        );
+
+
+      singerSegments =
+        Array.isArray(
+          data.singer_segments
         )
-    ]
+        ? data.singer_segments
+        : [];
 
 
-    silence_starts = [
-        float(value)
-        for value in re.findall(
-            r"silence_start:\s*([0-9.]+)",
-            output
-        )
-    ]
+      stemIds.forEach(
+        stemId => {
+
+          const stemURL =
+            data[
+              stemId
+            ];
 
 
-    vocal_start = (
-        silence_ends[0]
-        if silence_ends
-        else 0.0
-    )
+          /*
+          ========================================
+          GENERATED TRACKS | 4.6.0 FIX 2
 
+          Demucs returns only separated stems.
+          Pitch Correction / Vocal Harmonizer
+          are generated later and therefore have
+          no URL at this stage.
+          ========================================
+          */
 
-    vocal_end = None
+          if (!stemURL) {
 
+            currentStemURLs[
+              stemId
+            ] =
+              null;
 
-    for value in silence_starts:
-
-        if value > vocal_start:
-            vocal_end = value
-
-
-    return (
-        max(
-            0.0,
-            vocal_start
-        ),
-        vocal_end
-    )
-
-# ========================================
-# WHISPERX LYRICS
-# ========================================
-
-# Локальная серверная операция этого блока.
-def detect_lyrics(vocal_path):
-
-    import whisperx
-    import torch
-
-    device = (
-        "cuda"
-        if torch.cuda.is_available()
-        else "cpu"
-    )
-
-    compute_type = (
-        "float16"
-        if device == "cuda"
-        else "int8"
-    )
-
-    print(
-        f"WhisperX: {device}, "
-        f"{compute_type}"
-    )
-
-    audio = whisperx.load_audio(
-        vocal_path
-    )
-
-    model = whisperx.load_model(
-        "small",
-        device,
-        compute_type=compute_type
-    )
-
-    result = model.transcribe(
-        audio,
-        batch_size=4
-    )
-
-    language = result.get(
-        "language"
-    ) or "ru"
-
-
-    if language not in {
-        "ru",
-        "en",
-        "es",
-        "it",
-        "fr",
-        "uk"
-    }:
-
-        language = "en"
-
-
-    align_model, metadata = (
-        whisperx.load_align_model(
-            language_code=language,
-            device=device
-        )
-    )
-
-
-    result = whisperx.align(
-        result["segments"],
-        align_model,
-        metadata,
-        audio,
-        device,
-        return_char_alignments=False
-    )
-
-    words = []
-
-    for segment in result["segments"]:
-
-        for word in segment.get(
-            "words",
-            []
-        ):
 
             if (
-                "start" not in word
-                or
-                "end" not in word
-            ):
-                continue
+              stemAudio[
+                stemId
+              ]
+            ) {
 
-            words.append({
-                "word":
-                    word.get(
-                        "word",
-                        ""
-                    ).strip(),
+              stemAudio[
+                stemId
+              ].removeAttribute(
+                "src"
+              );
 
-                "start":
-                    round(
-                        float(
-                            word["start"]
-                        ),
-                        3
-                    ),
-
-                "end":
-                    round(
-                        float(
-                            word["end"]
-                        ),
-                        3
-                    )
-            })
-
-    text = " ".join(
-        segment.get(
-            "text",
-            ""
-        ).strip()
-
-        for segment
-        in result["segments"]
-    ).strip()
-
-    return {
-        "language": language,
-        "text": text,
-        "words": words
-    }
-
-# ========================================
-# DEMUCS PROCESS
-# ========================================
-
-# Локальная серверная операция этого блока.
-def run_demucs(
-    job_id,
-    input_path,
-    job_result_dir
-):
-
-    command = [
-
-        sys.executable,
-        "-m",
-        "demucs",
-
-        "-n",
-        "htdemucs_6s",
-
-        "--mp3",
-
-        "-o",
-        job_result_dir,
-
-        input_path
-    ]
+            }
 
 
-    try:
+            return;
 
-        process = subprocess.Popen(
+          }
 
-            command,
 
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+          stemAudio[
+            stemId
+          ].src =
+            stemURL;
 
-            text=True,
 
-            bufsize=1
+          currentStemURLs[
+            stemId
+          ] =
+            stemURL;
+
+        }
+      );
+
+
+      vocalStartTimeRaw =
+        Number.isFinite(
+          Number(
+            data.vocal_start
+          )
         )
+        ? Number(
+            data.vocal_start
+          )
+        : null;
 
 
-        # ========================================
-        # READ DEMUCS OUTPUT
-        # ========================================
-
-        for line in process.stdout:
-
-            print(line, end="")
-
-            matches = re.findall(
-                r"(\d{1,3})%",
-                line
-            )
-
-            if matches:
-
-                percent = int(
-                    matches[-1]
-                )
-
-                percent = max(
-                    0,
-                    min(
-                        100,
-                        percent
-                    )
-                )
-
-                jobs[job_id]["progress"] = (
-                    percent
-                )
-
-
-        process.wait()
-
-
-        if process.returncode != 0:
-
-            jobs[job_id]["status"] = (
-                "error"
-            )
-
-            jobs[job_id]["error"] = (
-                "Demucs process failed"
-            )
-
-            return
-
-
-        # ========================================
-        # FIND DEMUCS OUTPUT
-        # ========================================
-
-        model_dir = os.path.join(
-            job_result_dir,
-            "htdemucs_6s"
+      vocalEndTimeRaw =
+        Number.isFinite(
+          Number(
+            data.vocal_end
+          )
         )
+        ? Number(
+            data.vocal_end
+          )
+        : null;
 
 
-        song_dirs = [
-
-            directory
-
-            for directory
-            in os.listdir(model_dir)
-
-            if os.path.isdir(
-
-                os.path.join(
-                    model_dir,
-                    directory
-                )
-            )
-        ]
+      vocalStartTime =
+        vocalStartTimeRaw;
 
 
-        if not song_dirs:
-
-            raise Exception(
-                "Demucs output not found"
-            )
+      vocalEndTime =
+        vocalEndTimeRaw;
 
 
-        song_dir = os.path.join(
-            model_dir,
-            song_dirs[0]
-        )
-
-
-        stem_names = [
-            "vocals",
-            "drums",
-            "bass",
-            "guitar",
-            "piano",
-            "other"
-        ]
-
-
-        stem_targets = {}
-
-
-        for stem_name in stem_names:
-
-            source_path = os.path.join(
-                song_dir,
-                f"{stem_name}.mp3"
-            )
-
-            target_path = os.path.join(
-                job_result_dir,
-                f"{stem_name}.mp3"
-            )
-
-            if not os.path.isfile(
-                source_path
-            ):
-
-                raise Exception(
-                    f"Demucs stem not found: {stem_name}"
-                )
-
-            shutil.copy(
-                source_path,
-                target_path
-            )
-
-            stem_targets[
-                stem_name
-            ] = target_path
-
-        # ========================================
-        # DETECT VOCAL START / END
-        # ========================================
-
+      lyricsData =
         (
-            vocal_start,
-            vocal_end
-        ) = detect_vocal_range(
-            stem_targets["vocals"]
+          data.lyrics
+          &&
+          Array.isArray(
+            data.lyrics.words
+          )
         )
+        ? data.lyrics
+        : {
+            language: null,
+            text: "",
+            words: []
+          };
 
 
-        # ========================================
-        # DETECT LYRICS
-        # ========================================
+      buildKaraokeLines();
 
-        lyrics = detect_lyrics(
-            stem_targets["vocals"]
-        )
-
-
-        # ========================================
-        # JOB COMPLETE
-        # ========================================
       
-        jobs[job_id]["progress"] = 100
 
-        jobs[job_id]["status"] = (
-            "done"
+      originalWhisperLyrics =
+        JSON.parse(JSON.stringify(lyricsData));
+
+      originalWhisperKaraokeLines =
+        JSON.parse(JSON.stringify(karaokeLines));
+
+      renderLyrics();
+
+
+      // Сохраняем исходный пользовательский файл отдельно от технической Original-дорожки Project.
+      currentOriginalFile =
+        file;
+      currentOriginalTrackFile = file;
+      currentSourceAudioName = file.name;
+
+
+      status.textContent =
+        "Loading tracks...";
+      status.className = "progress-status process";
+
+
+      await Promise.all([
+
+        waitForMetadata(
+          originalAudio
+        ),
+
+        ...stemIds
+          .filter(
+            stemId =>
+              Boolean(
+                data[
+                  stemId
+                ]
+              )
+          )
+          .map(
+            stemId =>
+              waitForMetadata(
+                stemAudio[
+                  stemId
+                ]
+              )
+          )
+
+      ]);
+
+
+      duration =
+        originalAudio.duration;
+
+
+// Structure создаётся автоматически только один раз —
+// при первичной обработке нового трека.
+
+const detectedInitialStructure =
+  detectLyricsStructure(
+    karaokeLines
+  );
+
+const detectedStructureSongEnd =
+  structureSongEnd(
+    detectedInitialStructure
+  );
+
+const normalizedInitialStructure =
+  normalizeStructureCoverage(
+    detectedInitialStructure,
+    detectedStructureSongEnd
+  );
+
+lyricsStructureDraft =
+  normalizedInitialStructure.map(
+    item => ({
+      ...item
+    })
+  );
+
+lyricsStructureSelectedIndex =
+  -1;
+
+lyricsStructureSelectedIndices =
+  new Set();
+
+
+// ========================================
+// STRUCTURE | ПОСЛЕДОВАТЕЛЬНЫЙ ЛОГ
+// ========================================
+
+console.log(
+  "[STRUCTURE] START"
+  + " | blocks="
+  + lyricsStructureDraft.length
+  + " | songEnd="
+  + detectedStructureSongEnd
+);
+
+lyricsStructureDraft.forEach(
+  (item, index) => {
+
+    const blockNumber =
+      index + 1;
+
+    const previous =
+      index > 0
+        ? lyricsStructureDraft[index - 1]
+        : null;
+
+    const name =
+      String(
+        item.label
+        || item.type
+        || ""
+      );
+
+    const type =
+      String(
+        item.type
+        || ""
+      );
+
+    const start =
+      Number(
+        item.start
+      );
+
+    const end =
+      Number(
+        item.end
+      );
+
+    const duration =
+      end - start;
+
+    const status =
+      Number.isFinite(start)
+      &&
+      Number.isFinite(end)
+      &&
+      end > start
+        ? "VALID"
+        : "INVALID";
+
+    const boundaryStatus =
+      !previous
+        ? "FIRST"
+        : Number(previous.end) === start
+          ? "CONTINUOUS"
+          : "GAP_OR_OVERLAP";
+
+    console.log(
+      "[STRUCTURE] ACTION "
+      + blockNumber
+      + "/"
+      + lyricsStructureDraft.length
+      + " | ASSIGN BLOCK"
+    );
+
+    console.log(
+      "[STRUCTURE] BLOCK "
+      + blockNumber
+      + " | name="
+      + JSON.stringify(name)
+      + " | type="
+      + JSON.stringify(type)
+      + " | start="
+      + start
+      + " | end="
+      + end
+      + " | duration="
+      + duration
+      + " | firstLine="
+      + (
+          item.firstLine
+          ?? null
         )
-
-
-        jobs[job_id]["vocals"] = (
-            f"/results/{job_id}/vocals.mp3"
+      + " | lastLine="
+      + (
+          item.lastLine
+          ?? null
         )
+      + " | status="
+      + status
+      + " | boundary="
+      + boundaryStatus
+    );
 
-        jobs[job_id]["drums"] = (
-            f"/results/{job_id}/drums.mp3"
-        )
+    console.log(
+      "[STRUCTURE] BLOCK "
+      + blockNumber
+      + " | ALL FIELDS="
+      + JSON.stringify(item)
+    );
+  }
+);
 
-        jobs[job_id]["bass"] = (
-            f"/results/{job_id}/bass.mp3"
-        )
-
-        jobs[job_id]["guitar"] = (
-            f"/results/{job_id}/guitar.mp3"
-        )
-
-        jobs[job_id]["piano"] = (
-            f"/results/{job_id}/piano.mp3"
-        )
-
-        jobs[job_id]["other"] = (
-            f"/results/{job_id}/other.mp3"
-        )
-
-        jobs[job_id]["vocal_start"] = (
-            vocal_start
-        )
-
-        jobs[job_id]["vocal_end"] = (
-            vocal_end
-        )
-
-        jobs[job_id]["lyrics"] = (
-            lyrics
-        )
-
-    except Exception as error:
-
-        print(error)
-
-        jobs[job_id]["status"] = (
-            "error"
-        )
-
-        jobs[job_id]["error"] = str(
-            error
-        )
+console.log(
+  "[STRUCTURE] END"
+);
 
 
-# ========================================
-# PROCESS PROGRESS
-# ========================================
 
-@app.route("/progress/<job_id>")
-# Локальная серверная операция этого блока.
-def progress(job_id):
-
-    if job_id not in jobs:
-
-        return jsonify({
-            "error": "Job not found"
-        }), 404
+studio.style.display =
+  "block";
+      
+      const fitWidth =
+        Math.max(
+          1,
+          masterTimeline.clientWidth
+        );
 
 
-    return jsonify(
-        jobs[job_id]
-    )
+      pixelsPerSecond =
+        duration > 0
+        ? fitWidth / duration
+        : 10;
 
 
-# ========================================
-# RESULT FILES
-# ========================================
-
-@app.route(
-    "/results/<job_id>/<filename>"
-)
-# Локальная серверная операция этого блока.
-def result_file(
-    job_id,
-    filename
-):
-
-    folder = os.path.join(
-        RESULT_DIR,
-        job_id
-    )
+      zoomValue.textContent =
+        pixelsPerSecond
+          .toFixed(1)
+        + " px/s";
 
 
-    return send_from_directory(
-        folder,
-        filename
-    )
+      sharedScrollInner.style.width =
+        getTimelineWidth()
+        + "px";
 
 
-# ========================================
-# AUDIO EXPORT
-# ========================================
-
-# Локальная серверная операция этого блока.
-def find_ffmpeg():
-
-    ffmpeg = shutil.which(
-        "ffmpeg"
-    )
+      await loadWaveforms(
+        file,
+        data
+      );
 
 
-    if ffmpeg:
-
-        return ffmpeg
+      updateEffectiveVocalRange();
 
 
-    local_app_data = os.environ.get(
-        "LOCALAPPDATA",
-        ""
-    )
+      resetTransport();
+
+          drawAllWaveforms();
+      renderSingerSegments();
+
+      drawMasterTimeline();
 
 
-    candidates = [
-
-        os.path.join(
-            local_app_data,
-            "Microsoft",
-            "WinGet",
-            "Links",
-            "ffmpeg.exe"
-        )
-
-    ]
+    
+      progressBar.style.width =
+        "100%";
 
 
-    package_pattern = os.path.join(
-        local_app_data,
-        "Microsoft",
-        "WinGet",
-        "Packages",
-        "*FFmpeg*",
-        "**",
-        "ffmpeg.exe"
-    )
+      progressPercent.textContent =
+        "100%";
 
 
-    candidates.extend(
-        glob.glob(
-            package_pattern,
-            recursive=True
-        )
-    )
+      status.textContent =
+        "Ready";
+      status.className = "progress-status success";
 
+      // Разделение завершено. Предлагаем создать Project для полной работы Karaoke.
+      newProjectPromptDialog?.classList.add("open");
 
-    for candidate in candidates:
-
-        if os.path.isfile(
-            candidate
-        ):
-
-            return candidate
-
-
-    return None
-
-
-@app.route(
-    "/export-audio",
-    methods=["POST"]
-)
-# Локальная серверная операция этого блока.
-def export_audio():
-
-    if "audio" not in request.files:
-
-        return jsonify({
-            "error":
-                "Audio file not received"
-        }), 400
-
-
-    audio = request.files[
-        "audio"
-    ]
-
-
-    export_format = (
-        request.form
-        .get(
-            "format",
-            ""
-        )
-        .lower()
-    )
-
-
-    allowed_formats = {
-        "wav",
-        "mp3",
-        "flac",
-        "m4a"
     }
 
 
-    if export_format not in allowed_formats:
+    catch (error) {
 
-        return jsonify({
-            "error":
-                "Unsupported export format"
-        }), 400
-
-
-    track_name = secure_filename(
-        request.form.get(
-            "track",
-            "audio"
-        )
-    )
+      console.error(
+        error
+      );
 
 
-    start_value = request.form.get(
-        "start"
-    )
+      status.textContent =
+        "Processing error: "
+        + error.message;
+      status.className = "progress-status error";
+
+    }
 
 
-    end_value = request.form.get(
-        "end"
-    )
+    finally {
+
+      splitBtn.disabled =
+        false;
+
+    }
+
+  }
+);
 
 
-    start_time = None
-    end_time = None
+// ========================================
+// ПРОГРЕСС DEMUCS
+// ========================================
+
+// Локальная функциональная операция этого блока.
+async function waitForSeparation(
+  jobId
+) {
+
+  while (true) {
+
+    const response =
+      await fetch(
+        "/progress/"
+        + jobId
+      );
 
 
-    try:
+    if (!response.ok) {
 
-        if start_value is not None:
+      throw new Error(
+        "Progress request failed"
+      );
 
-            start_time = float(
-                start_value
-            )
-
-
-        if end_value is not None:
-
-            end_time = float(
-                end_value
-            )
+    }
 
 
-    except ValueError:
+    const data =
+      await response.json();
 
-        return jsonify({
-            "error":
-                "Invalid selection time"
-        }), 400
+
+    const progress =
+      Number(
+        data.progress || 0
+      );
+
+
+    progressBar.style.width =
+      progress
+      + "%";
+
+
+    progressPercent.textContent =
+      progress
+      + "%";
+
+
+    status.textContent =
+      "Separating...";
+    status.className = "progress-status process";
 
 
     if (
-        start_time is not None
-        and
-        end_time is not None
-        and
-        end_time <= start_time
-    ):
+      data.status === "done"
+    ) {
 
-        return jsonify({
-            "error":
-                "Invalid selection range"
-        }), 400
+      progressBar.style.width =
+        "100%";
 
 
-    ffmpeg = find_ffmpeg()
+      progressPercent.textContent =
+        "100%";
 
 
-    if not ffmpeg:
+      return data;
 
-        return jsonify({
-            "error":
-                "FFmpeg not found"
-        }), 500
+    }
 
 
-    export_id = str(
-        uuid.uuid4()
+    if (
+      data.status === "error"
+    ) {
+
+      throw new Error(
+
+        data.error
+        || "Demucs error"
+
+      );
+
+    }
+
+
+    await sleep(
+      300
+    );
+
+  }
+
+}
+
+
+// Локальная функциональная операция этого блока.
+function sleep(
+  milliseconds
+) {
+
+  return new Promise(
+
+    resolve =>
+      setTimeout(
+        resolve,
+        milliseconds
+      )
+
+  );
+
+}
+
+
+// ========================================
+// МЕТАДАННЫЕ АУДИО
+// ========================================
+
+// Локальная функциональная операция этого блока.
+function waitForMetadata(
+  audio
+) {
+
+  return new Promise(
+    (resolve, reject) => {
+
+      if (
+        Number.isFinite(
+          audio.duration
+        )
+        &&
+        audio.duration > 0
+      ) {
+
+        resolve();
+
+        return;
+
+      }
+
+
+      audio.addEventListener(
+        "loadedmetadata",
+        resolve,
+        {
+          once: true
+        }
+      );
+
+
+      audio.addEventListener(
+        "error",
+        reject,
+        {
+          once: true
+        }
+      );
+
+    }
+  );
+
+}
+
+
+// ========================================
+// ДЕКОДИРОВАНИЕ ВОЛНОВОЙ ФОРМЫ
+// ========================================
+
+// Загрузка Project и восстановление рабочего состояния.
+async function loadWaveforms(
+  originalFile,
+  data
+) {
+
+  const audioContext =
+    new AudioContext();
+
+
+  const originalBuffer =
+    await originalFile.arrayBuffer();
+
+
+  waveformData.original =
+    await audioContext.decodeAudioData(
+      originalBuffer.slice(0)
+    );
+
+
+  for (
+    const stemId
+    of stemIds
+  ) {
+
+    const stemURL =
+      data[
+        stemId
+      ];
+
+
+    /*
+    ========================================
+    GENERATED TRACKS | 4.6.0 FIX
+
+    Pitch Correction and Vocal Harmonizer
+    are not returned by Demucs. They are
+    created later from the Vocals track.
+    ========================================
+    */
+
+    if (!stemURL) {
+
+      continue;
+
+    }
+
+
+    const stemBuffer =
+      await fetch(
+        stemURL
+      )
+      .then(
+        response =>
+          response.arrayBuffer()
+      );
+
+
+    waveformData[
+      stemId
+    ] =
+      await audioContext.decodeAudioData(
+        stemBuffer.slice(0)
+      );
+
+  }
+
+
+  await audioContext.close();
+
+}
+
+
+// ========================================
+// ВОЛНОВАЯ ФОРМА MASTER
+// ========================================
+
+// Работа с Master/Mix и итоговым аудиосостоянием.
+function clearMasterCanvas() {
+
+  const canvas =
+    canvases.master;
+
+  const timeline =
+    timelines.master;
+
+  const width =
+    getTimelineWidth();
+
+  const height =
+    90;
+
+  timeline.style.width =
+    width + "px";
+
+  canvas.width =
+    width;
+
+  canvas.height =
+    height;
+
+  canvas.style.width =
+    width + "px";
+
+  canvas.style.height =
+    height + "px";
+
+  canvas
+    .getContext("2d")
+    .clearRect(
+      0,
+      0,
+      width,
+      height
+    );
+
+}
+
+
+// Работа с Master/Mix и итоговым аудиосостоянием.
+function resetMaster() {
+
+  masterLivePeaks =
+    [];
+
+
+  masterSegments =
+    [];
+
+
+  masterUndoStack =
+    [];
+
+
+  masterRedoStack =
+    [];
+
+
+  waveformData.master =
+    null;
+
+
+  masterBlob =
+    null;
+
+
+  savedMasterBlob =
+    null;
+
+
+  masterDuration =
+    0;
+
+
+  if (masterObjectURL) {
+
+    URL.revokeObjectURL(
+      masterObjectURL
+    );
+
+
+    masterObjectURL =
+      null;
+
+  }
+
+
+  masterAudio.pause();
+
+
+  masterAudio.removeAttribute(
+    "src"
+  );
+
+
+  masterAudio.load();
+
+
+  clearMasterCanvas();
+
+
+  clearSelection();
+
+
+  masterState.textContent =
+    "No Records";
+
+
+  recordMasterBtn.disabled =
+    false;
+
+
+  stopMasterBtn.disabled =
+    true;
+
+
+  saveAsMasterBtn.disabled =
+    true;
+
+
+  saveMasterSelectionBtn.disabled =
+    true;
+
+
+  updateMasterHistoryButtons();
+
+}
+
+
+
+// ========================================
+// ОТРИСОВКА ВОЛНОВОЙ ФОРМЫ
+// ========================================
+
+
+// Перерисовка и синхронизация интерфейса.
+function renderSingerSegments() {
+
+  if (
+    !vocalsSingerOverlay
+  ) {
+    return;
+  }
+
+
+  vocalsSingerOverlay.innerHTML =
+    "";
+
+
+  if (
+    !Array.isArray(
+      singerSegments
     )
-
-
-    export_job_dir = os.path.join(
-        EXPORT_DIR,
-        export_id
+    ||
+    !singerSegments.length
+    ||
+    !Number.isFinite(
+      pixelsPerSecond
     )
+    ||
+    pixelsPerSecond <= 0
+  ) {
+    return;
+  }
 
 
-    os.makedirs(
-        export_job_dir,
-        exist_ok=True
-    )
+  singerSegments.forEach(
+    segment => {
+
+      const start =
+        Number(
+          segment.start
+        );
 
 
-    incoming_name = secure_filename(
-        audio.filename
-        or
-        "audio.bin"
-    )
+      const end =
+        Number(
+          segment.end
+        );
 
 
-    extension = os.path.splitext(
-        incoming_name
-    )[1]
+      if (
+        !Number.isFinite(
+          start
+        )
+        ||
+        !Number.isFinite(
+          end
+        )
+        ||
+        end <= start
+      ) {
+        return;
+      }
 
 
-    if not extension:
-
-        extension = ".bin"
-
-
-    input_path = os.path.join(
-        export_job_dir,
-        "input"
-        + extension
-    )
+      const block =
+        document.createElement(
+          "div"
+        );
 
 
-    output_path = os.path.join(
-        export_job_dir,
+      block.className =
+        "vocals-singer-segment";
+
+
+      block.style.left =
         (
-            track_name
-            or
-            "audio"
+          start
+          *
+          pixelsPerSecond
         )
-        + "."
-        + export_format
-    )
+        +
+        "px";
 
 
-    audio.save(
-        input_path
-    )
+      block.style.width =
+        Math.max(
+          1,
+          (
+            end
+            -
+            start
+          )
+          *
+          pixelsPerSecond
+        )
+        +
+        "px";
 
 
-    command = [
-        ffmpeg,
-        "-y"
-    ]
+      const label =
+        document.createElement(
+          "span"
+        );
 
 
-    if start_time is not None:
+      label.className =
+        "vocals-singer-label";
 
-        command += [
-            "-ss",
-            f"{start_time:.6f}"
+
+      label.textContent =
+        String(
+          segment.singer
+          ||
+          "?"
+        );
+
+
+      block.appendChild(
+        label
+      );
+
+
+      vocalsSingerOverlay.appendChild(
+        block
+      );
+
+    }
+  );
+
+}
+
+
+// Построение и обновление формы аудиосигнала.
+function drawAllWaveforms() {
+
+  drawWaveform(
+    canvases.original,
+    timelines.original,
+    waveformData.original
+  );
+
+
+  stemIds.forEach(
+    stemId => {
+
+      drawWaveform(
+        canvases[
+          stemId
+        ],
+        timelines[
+          stemId
+        ],
+        waveformData[
+          stemId
         ]
+      );
+
+    }
+  );
 
 
-    command += [
-        "-i",
-        input_path
-    ]
+  drawMasterCompositeWaveform();
+
+
+  updateCropMasks();
+  updateProjectTrimDisplay();
+
+
+  sharedScrollInner.style.width =
+    getTimelineWidth()
+    + "px";
+
+
+  applySharedScroll();
+
+
+  updatePlayheads();
+
+  updateMasterCursor();
+
+}
+
+
+
+
+
+// Построение и обновление формы аудиосигнала.
+function drawWaveform(
+  canvas,
+  timeline,
+  audioBuffer
+) {
+
+  if (!audioBuffer) {
+
+    if (
+      canvas === canvases.master
+    ) {
+
+      clearMasterCanvas();
+
+    }
+
+    return;
+
+  }
+
+
+  const width =
+    getTimelineWidth();
+
+
+  const height =
+    90;
+
+
+  timeline.style.width =
+    width
+    + "px";
+
+
+  canvas.width =
+    width;
+
+
+  canvas.height =
+    height;
+
+
+  canvas.style.width =
+    width
+    + "px";
+
+
+  canvas.style.height =
+    height
+    + "px";
+
+
+  const context =
+    canvas.getContext("2d");
+
+
+  context.clearRect(
+    0,
+    0,
+    width,
+    height
+  );
+
+
+  const samples =
+    audioBuffer.getChannelData(0);
+
+
+  const step =
+    Math.max(
+      1,
+      Math.floor(
+        samples.length
+        / width
+      )
+    );
+
+
+  const middle =
+    height / 2;
+
+
+  context.beginPath();
+
+
+  for (
+    let x = 0;
+    x < width;
+    x++
+  ) {
+
+    const start =
+      x
+      * step; // шаг
+
+
+    let min =
+      1;
+
+
+    let max =
+      -1;
+
+
+    for (
+      let i = 0;
+      i < step;
+      i++
+    ) {
+
+      const sample =
+        samples[
+          start + i
+        ];
+
+
+      if (
+        sample === undefined
+      ) {
+
+        break;
+
+      }
+
+
+      if (
+        sample < min
+      ) {
+
+        min =
+          sample;
+
+      }
+
+
+      if (
+        sample > max
+      ) {
+
+        max =
+          sample;
+
+      }
+
+    }
+
+
+    const y1 =
+      middle
+      +
+      min
+      * middle; // середина
+
+
+    const y2 =
+      middle
+      +
+      max
+      * middle; // середина
+
+
+    context.moveTo(
+      x,
+      y1
+    );
+
+
+    context.lineTo(
+      x,
+      y2
+    );
+
+  }
+
+
+  context.strokeStyle =
+    "#333";
+
+
+  context.lineWidth =
+    1;
+
+
+  context.stroke();
+
+}
+
+
+// Локальная функциональная операция этого блока.
+function getTimelineWidth() {
+
+  return Math.max(
+    1,
+    Math.ceil(
+      duration
+      * pixelsPerSecond // пикселей в секунду
+    )
+  );
+
+}
+
+
+// ========================================
+// GLOBAL PROJECT TRIM | 5.4.11
+// ========================================
+
+function formatTrimTime(value) {
+  const total = Math.max(0, Math.round(Number(value) || 0));
+  const minutes = Math.floor(total / 60);
+  const seconds = String(total % 60).padStart(2, "0");
+  return minutes + ":" + seconds;
+}
+
+function getProjectTrimStart() {
+  const end = Math.max(0, Number(duration) || 0);
+  return Math.max(0, Math.min(Number(projectTrimStart) || 0, end));
+}
+
+function getProjectTrimEnd() {
+  const fullEnd = Math.max(0, Number(duration) || 0);
+
+  if (projectTrimEnd == null) {
+    return fullEnd;
+  }
+
+  const savedEnd = Number(projectTrimEnd);
+
+  if (!Number.isFinite(savedEnd)) {
+    return fullEnd;
+  }
+
+  return Math.max(
+    getProjectTrimStart(),
+    Math.min(savedEnd, fullEnd)
+  );
+}
+
+function getProjectPlaybackEnd() {
+  const trimEnd = getProjectTrimEnd();
+  if (mode === "master" && masterDuration > 0) return Math.min(trimEnd, masterDuration);
+  return trimEnd;
+}
+
+function ensureProjectTrimTrackOverlays() {
+  Object.values(timelines).forEach(timeline => {
+    if (!timeline) return;
+    if (!timeline.querySelector(".project-trim-track-mask.left")) {
+      const left = document.createElement("div");
+      left.className = "project-trim-track-mask left";
+      const right = document.createElement("div");
+      right.className = "project-trim-track-mask right";
+      const start = document.createElement("div");
+      start.className = "project-trim-track-marker start";
+      const end = document.createElement("div");
+      end.className = "project-trim-track-marker end";
+      timeline.append(left, right, start, end);
+    }
+  });
+}
+
+function updateProjectTrimDisplay() {
+  const width = getTimelineWidth();
+  const start = getProjectTrimStart();
+  const end = getProjectTrimEnd();
+  const startX = Math.max(0, Math.min(width, start * pixelsPerSecond));
+  const endX = Math.max(0, Math.min(width, end * pixelsPerSecond));
+
+  if (projectTrimMaskLeft) {
+    projectTrimMaskLeft.style.left = "0px";
+    projectTrimMaskLeft.style.width = startX + "px";
+  }
+  if (projectTrimMaskRight) {
+    projectTrimMaskRight.style.left = endX + "px";
+    projectTrimMaskRight.style.width = Math.max(0, width - endX) + "px";
+  }
+  [projectTrimStartMarker, projectTrimStartHandle].forEach(node => {
+    if (node) node.style.left = startX + "px";
+});
+
+[projectTrimEndMarker, projectTrimEndHandle].forEach(node => {
+    if (node) node.style.left = endX + "px";
+});
+
+const scrollLeft = getSharedScrollLeft();
+const rowRect =
+    masterTimeline.parentElement.getBoundingClientRect();
+
+if (projectTrimStartTime && projectTrimStartHandle) {
+    const handleRect =
+        projectTrimStartHandle.getBoundingClientRect();
+
+    projectTrimStartTime.style.left =
+        (
+            handleRect.left
+            + handleRect.width / 2
+            - rowRect.left
+        ) + "px";
+}
+
+if (projectTrimEndTime && projectTrimEndHandle) {
+    const handleRect =
+        projectTrimEndHandle.getBoundingClientRect();
+
+    projectTrimEndTime.style.left =
+        (
+            handleRect.left
+            + handleRect.width / 2
+            - rowRect.left
+        ) + "px";
+}
+  if (projectTrimStartTime) projectTrimStartTime.textContent = formatTrimTime(start);
+  if (projectTrimEndTime) projectTrimEndTime.textContent = formatTrimTime(end);
+
+  ensureProjectTrimTrackOverlays();
+  Object.values(timelines).forEach(timeline => {
+    if (!timeline) return;
+    const left = timeline.querySelector(".project-trim-track-mask.left");
+    const right = timeline.querySelector(".project-trim-track-mask.right");
+    const startMarker = timeline.querySelector(".project-trim-track-marker.start");
+    const endMarker = timeline.querySelector(".project-trim-track-marker.end");
+    if (left) { left.style.left = "0px"; left.style.width = startX + "px"; }
+    if (right) { right.style.left = endX + "px"; right.style.width = Math.max(0, width - endX) + "px"; }
+    if (startMarker) startMarker.style.left = startX + "px";
+    if (endMarker) endMarker.style.left = endX + "px";
+  });
+}
+
+// SEQUENCER HISTORY | 5.4.13
+// ========================================
+
+function cloneSequencerHistoryState() {
+  return {
+    stemState: cloneSerializable(stemState, {}),
+    stemCrop: cloneSerializable(stemCrop, {}),
+    fxSettings: cloneSerializable(fxSettings, {}),
+    trimStart: projectTrimStart,
+    trimEnd: projectTrimEnd,
+    originalVolume: Number(originalVolume?.value ?? 100),
+    masterVolume: Number(masterVolume?.value ?? 100)
+  };
+}
+
+function sequencerHistoryStateKey(state) {
+  try { return JSON.stringify(state); }
+  catch (_) { return ""; }
+}
+
+function updateSequencerUndoRedoButtons() {
+  if (sequencerUndoBtn) sequencerUndoBtn.disabled = !sequencerUndoStack.length;
+  if (sequencerRedoBtn) sequencerRedoBtn.disabled = !sequencerRedoStack.length;
+}
+
+function clearSequencerHistory() {
+  sequencerUndoStack = [];
+  sequencerRedoStack = [];
+  updateSequencerUndoRedoButtons();
+}
+
+function pushSequencerHistorySnapshot() {
+  if (sequencerHistoryRestoring) return;
+  const state = cloneSequencerHistoryState();
+  const last = sequencerUndoStack[sequencerUndoStack.length - 1];
+  if (last && sequencerHistoryStateKey(last) === sequencerHistoryStateKey(state)) return;
+  sequencerUndoStack.push(state);
+  if (sequencerUndoStack.length > SEQUENCER_HISTORY_LIMIT) sequencerUndoStack.shift();
+  sequencerRedoStack = [];
+  updateSequencerUndoRedoButtons();
+}
+
+function applySequencerHistoryState(state) {
+  if (!state) return;
+  sequencerHistoryRestoring = true;
+  try {
+    stemIds.forEach(stemId => {
+      if (state.stemState?.[stemId]) Object.assign(stemState[stemId], cloneSerializable(state.stemState[stemId], {}));
+      if (state.stemCrop?.[stemId]) Object.assign(stemCrop[stemId], cloneSerializable(state.stemCrop[stemId], {}));
+    });
+
+    if (state.fxSettings && typeof state.fxSettings === "object") {
+      Object.keys(fxSettings).forEach(target => {
+        if (state.fxSettings[target]) Object.assign(fxSettings[target], cloneSerializable(state.fxSettings[target], {}));
+      });
+    }
+
+    projectTrimStart = Number.isFinite(Number(state.trimStart)) ? Math.max(0, Number(state.trimStart)) : 0;
+    projectTrimEnd = state.trimEnd == null
+      ? null
+      : (Number.isFinite(Number(state.trimEnd)) ? Math.max(projectTrimStart, Number(state.trimEnd)) : null);
+
+    if (originalVolume && Number.isFinite(Number(state.originalVolume))) {
+      originalVolume.value = String(state.originalVolume);
+      originalVolumeValue.textContent = String(state.originalVolume) + "%";
+      originalAudio.volume = (Number(state.originalVolume) / 100) *
+        (typeof lyricsFullScreenMasterLevel === "number" ? lyricsFullScreenMasterLevel : 1);
+    }
+
+    if (masterVolume && Number.isFinite(Number(state.masterVolume))) {
+      masterVolume.value = String(state.masterVolume);
+      masterVolumeValue.textContent = String(state.masterVolume) + "%";
+      masterAudio.volume = (Number(state.masterVolume) / 100) *
+        (typeof lyricsFullScreenMasterLevel === "number" ? lyricsFullScreenMasterLevel : 1);
+    }
+
+    stemIds.forEach(stemId => {
+      if (stemVolumeControls[stemId]) {
+        stemVolumeControls[stemId].value =
+          String(Math.round((Number(stemState[stemId]?.volume) || 0) * 100));
+      }
+      if (stemVolumeValues[stemId]) {
+        stemVolumeValues[stemId].textContent =
+          String(Math.round((Number(stemState[stemId]?.volume) || 0) * 100)) + "%";
+      }
+    });
+
+    updateMixButtons();
+    updateCropButtons();
+    updateCropMasks();
+    updateEffectiveVocalRange();
+    loadFxPanelValues();
+    stemIds.forEach(stemId => applyFxSettings(stemId));
+    applyFxSettings("master");
+    applyMix();
+    updateProjectTrimDisplay();
+    renderLyricsStructure();
+  } finally {
+    sequencerHistoryRestoring = false;
+  }
+}
+
+function undoSequencer() {
+  if (!sequencerUndoStack.length) return;
+  sequencerRedoStack.push(cloneSequencerHistoryState());
+  applySequencerHistoryState(sequencerUndoStack.pop());
+  updateSequencerUndoRedoButtons();
+}
+
+function redoSequencer() {
+  if (!sequencerRedoStack.length) return;
+  sequencerUndoStack.push(cloneSequencerHistoryState());
+  applySequencerHistoryState(sequencerRedoStack.pop());
+  updateSequencerUndoRedoButtons();
+}
+
+function bindSequencerHistoryCapture() {
+  const clickControls = [
+    ...Object.values(stemMuteButtons),
+    ...Object.values(stemSoloButtons),
+    ...Object.values(stemCropInButtons),
+    ...Object.values(stemCropOutButtons),
+    compressorToggleBtn, reverbToggleBtn, delayToggleBtn, limiterToggleBtn
+  ].filter(Boolean);
+
+  clickControls.forEach(control =>
+    control.addEventListener("click", pushSequencerHistorySnapshot, true)
+  );
+
+  const rangeControls = [
+    originalVolume, masterVolume,
+    ...Object.values(stemVolumeControls),
+    eqLow, eqLowMid, eqMid, eqHighMid, eqHigh, panControl,
+    compressorThreshold, compressorRatio, reverbAmount,
+    delayTime, delayFeedback, limiterCeiling, fxOutputGain
+  ].filter(Boolean);
+
+  rangeControls.forEach(control => {
+    control.addEventListener("pointerdown", pushSequencerHistorySnapshot, true);
+    control.addEventListener("keydown", event => {
+      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown",
+           "PageUp", "PageDown", "Home", "End"].includes(event.key)) {
+        pushSequencerHistorySnapshot();
+      }
+    }, true);
+  });
+
+  projectTrimStartHandle?.addEventListener("pointerdown", pushSequencerHistorySnapshot, true);
+  projectTrimEndHandle?.addEventListener("pointerdown", pushSequencerHistorySnapshot, true);
+}
+
+
+function setProjectTrimBoundary(which, rawTime) {
+  if (!duration) return;
+  const snapped = Math.max(0, Math.min(duration, Math.round(Number(rawTime) || 0)));
+  if (which === "start") {
+    const maxStart = Math.max(0, getProjectTrimEnd() - 1);
+    projectTrimStart = Math.min(snapped, maxStart);
+    if (getCurrentTime() < projectTrimStart) setGlobalCursorTime(projectTrimStart);
+  } else {
+    const minEnd = Math.min(duration, getProjectTrimStart() + 1);
+    projectTrimEnd = Math.max(minEnd, snapped);
+    if (getCurrentTime() > projectTrimEnd) setGlobalCursorTime(projectTrimEnd);
+  }
+  updateProjectTrimDisplay();
+  // 5.4.18 | IN / OUT и Selection всегда остаются внутри изменившегося Trim.
+  updateSelectionDisplay();
+  // Structure reads the same Project Trim values; rerender immediately so its
+  // masks, boundary markers and endpoint timecodes move with the Sequencer handle.
+  renderLyricsStructure();
+}
+
+function projectTrimTimeFromPointer(event) {
+  const rect = masterTimelineInner.getBoundingClientRect();
+  const x = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
+  return rect.width > 0 ? (x / rect.width) * duration : 0;
+}
+
+function bindProjectTrimHandle(handle, which) {
+  handle?.addEventListener("pointerdown", event => {
+    projectTrimDragging = which;
+    handle.setPointerCapture(event.pointerId);
+    event.stopPropagation();
+    event.preventDefault();
+  });
+  handle?.addEventListener("pointermove", event => {
+    if (projectTrimDragging !== which) return;
+    setProjectTrimBoundary(which, projectTrimTimeFromPointer(event));
+    event.stopPropagation();
+    event.preventDefault();
+  });
+  handle?.addEventListener("pointerup", event => {
+    if (projectTrimDragging !== which) return;
+    setProjectTrimBoundary(which, projectTrimTimeFromPointer(event));
+    projectTrimDragging = null;
+    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+    event.stopPropagation();
+    event.preventDefault();
+  });
+  handle?.addEventListener("pointercancel", () => { projectTrimDragging = null; });
+}
+
+bindProjectTrimHandle(projectTrimStartHandle, "start");
+bindProjectTrimHandle(projectTrimEndHandle, "end");
+
+// ========================================
+// ОТРИСОВКА ВРЕМЕННОЙ ШКАЛЫ MASTER
+// ========================================
+
+// Работа с Master/Mix и итоговым аудиосостоянием.
+function drawMasterTimeline() {
+
+  const width =
+    getTimelineWidth();
+
+
+  masterTimelineInner.style.width =
+    width
+    + "px";
+
+
+  masterRuler.innerHTML =
+    "";
+
+
+  // Соседние видимые деления держим на расстоянии не менее примерно 1 см (~38 CSS px).
+  const minTickPixels = 38;
+  const niceIntervals = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 30, 60, 120, 300, 600];
+  let interval = niceIntervals[niceIntervals.length - 1];
+
+  for (const candidate of niceIntervals) {
+    if (candidate * pixelsPerSecond >= minTickPixels) {
+      interval = candidate;
+      break;
+    }
+  }
+
+
+  for (
+    let second = 0;
+    second <= duration;
+    second += interval
+  ) {
+
+    const x =
+      second
+      * pixelsPerSecond; // пикселей в секунду
+
+
+    const mark =
+      document.createElement(
+        "div"
+      );
+
+
+    mark.className =
+      "master-ruler-mark";
+
+
+    mark.style.left =
+      x
+      + "px";
+
+
+    if (x < width - 1) {
+      masterRuler.appendChild(
+        mark
+      );
+    }
+
+
+    const label =
+      document.createElement(
+        "div"
+      );
+
+
+    label.className =
+      "master-ruler-label";
+
+
+    label.style.left =
+      x
+      + "px";
+
+
+    // 5.4.18 | Нужны для синей подсветки: текущее деление и его цена при данном Zoom.
+    label.dataset.time = String(second);
+    label.dataset.interval = String(interval);
+
+
+    {
+      const total = Math.max(0, Math.round(Number(second) || 0));
+      const mm = Math.floor(total / 60);
+      const ss = String(total % 60).padStart(2, "0");
+      label.textContent = mm + "." + ss;
+    }
+
+
+    masterRuler.appendChild(
+      label
+    );
+
+  }
+
+
+  updateMasterCursor();
+  updateMasterRulerActiveTick();
+  updateProjectTrimDisplay();
+
+}
+
+
+// ========================================
+// ВОСПРОИЗВЕДЕНИЕ / ПАУЗА
+// ========================================
+
+playBtn.addEventListener(
+  "click",
+  () => {
+
+    if (isPlaying) {
+
+      pauseAll();
+
+    }
+
+    else {
+
+      playCurrentMode();
+
+    }
+
+  }
+);
+
+
+// Управление транспортом и воспроизведением.
+function playCurrentMode() {
+
+  let time =
+    getCurrentTime();
+
+  const playbackStart = getProjectTrimStart();
+  const playbackEnd = getProjectPlaybackEnd();
+
+  if (time < playbackStart || time >= playbackEnd - 0.001) {
+    time = playbackStart;
+  }
+
+  if (isKaraokeUiMode() && playbackEnd > 0 && time < playbackEnd - 0.25) {
+    karaokeFinishTriggered = false;
+    closeKaraokeFinishedDialog();
+  }
+
+
+  syncAllTo(
+    time
+  );
+
+
+  if (
+    mode === "original"
+  ) {
+
+    originalAudio.play();
+
+  }
+
+
+  else if (
+    mode === "mix"
+  ) {
+
+    ensureMixAudioGraph();
 
 
     if (
-        start_time is not None
-        and
-        end_time is not None
-    ):
+      mixAudioContext.state ===
+      "suspended"
+    ) {
 
-        command += [
-            "-t",
-            f"{(
-                end_time
-                - start_time
-            ):.6f}"
+      mixAudioContext.resume();
+
+    }
+
+
+    applyMix();
+
+
+    stemIds.forEach(
+      stemId => {
+
+        applyFxSettings(
+          stemId
+        );
+
+      }
+    );
+
+
+    stemIds.forEach(
+      stemId => {
+
+        if (
+          !stemTrackIsAvailable(
+            stemId
+          )
+        ) {
+
+          return;
+
+        }
+
+
+        const playPromise =
+          stemAudio[
+            stemId
+          ].play();
+
+
+        if (
+          playPromise
+          &&
+          typeof playPromise.catch ===
+            "function"
+        ) {
+
+          playPromise.catch(
+            error => {
+
+              console.warn(
+                "Track play skipped:",
+                stemId,
+                error
+              );
+
+            }
+          );
+
+        }
+
+      }
+    );
+
+  }
+
+
+  else {
+
+    ensureMixAudioGraph();
+
+
+    if (
+      mixAudioContext.state ===
+      "suspended"
+    ) {
+
+      mixAudioContext.resume();
+
+    }
+
+
+    applyFxSettings(
+      "master"
+    );
+
+
+    masterAudio.play();
+
+  }
+
+
+  isPlaying =
+    true;
+
+
+  updateStemPlaybackVisuals();
+
+
+  playBtn.textContent =
+    "Pause";
+
+
+  syncTransportMirrors();
+  updateLyricsTransportButtons();
+
+
+  startAnimation();
+
+}
+
+
+// ========================================
+// ПАУЗА / СТОП
+// ========================================
+
+// Управление транспортом и воспроизведением.
+function pauseAll() {
+
+  originalAudio.pause();
+
+
+  stemIds.forEach(
+    stemId => {
+
+      stemAudio[
+        stemId
+      ].pause();
+
+    }
+  );
+
+
+  masterAudio.pause();
+
+
+  isPlaying =
+    false;
+
+
+  updateStemPlaybackVisuals();
+
+
+  playBtn.textContent =
+    "Play";
+
+
+  syncTransportMirrors();
+  updateLyricsTransportButtons();
+
+
+  stopAnimation();
+
+}
+
+
+
+
+
+stopBtn.addEventListener(
+  "click",
+  () => {
+
+    pauseAll();
+
+    // 5.4.18 | STOP всегда сбрасывает LOOP.
+    loopEnabled = false;
+    loopBtn.classList.remove("active");
+    syncTransportMirrors();
+
+    syncAllTo(getProjectTrimStart());
+
+    updatePlayheads();
+
+    updateMasterCursor();
+
+    updateTimeDisplay();
+
+  }
+);
+
+
+// ========================================
+// НАЧАЛО / КОНЕЦ
+// ========================================
+
+startBtn.addEventListener(
+  "click",
+  () => {
+
+    syncAllTo(getProjectTrimStart());
+
+    updatePlayheads();
+
+    updateMasterCursor();
+
+    updateTimeDisplay();
+
+    syncScrollTo(0);
+
+  }
+);
+
+
+endBtn.addEventListener(
+  "click",
+  () => {
+
+    const endTime =
+      Math.max(
+        0,
+        getProjectPlaybackEnd() - 0.01
+      );
+
+
+    syncAllTo(
+      endTime
+    );
+
+
+    updatePlayheads();
+
+    updateMasterCursor();
+
+    updateTimeDisplay();
+
+
+    syncScrollTo(
+      getTimelineWidth()
+    );
+
+  }
+);
+
+
+const stemAudio = {
+  vocals: vocalsAudio,
+  pitchCorrection: pitchCorrectionAudio,
+  harmonizer: harmonizerAudio,
+  drums: drumsAudio,
+  bass: bassAudio,
+  guitar: guitarAudio,
+  piano: pianoAudio,
+  other: otherAudio
+};
+
+
+const stemMuteButtons = {
+  vocals: vocalsMuteBtn,
+  pitchCorrection: pitchCorrectionMuteBtn,
+  harmonizer: harmonizerMuteBtn,
+  drums: drumsMuteBtn,
+  bass: bassMuteBtn,
+  guitar: guitarMuteBtn,
+  piano: pianoMuteBtn,
+  other: otherMuteBtn
+};
+
+
+const stemSoloButtons = {
+  vocals: vocalsSoloBtn,
+  pitchCorrection: pitchCorrectionSoloBtn,
+  harmonizer: harmonizerSoloBtn,
+  drums: drumsSoloBtn,
+  bass: bassSoloBtn,
+  guitar: guitarSoloBtn,
+  piano: pianoSoloBtn,
+  other: otherSoloBtn
+};
+
+
+const stemVolumeControls = {
+  vocals: vocalsVolume,
+  pitchCorrection: pitchCorrectionVolume,
+  harmonizer: harmonizerVolume,
+  drums: drumsVolume,
+  bass: bassVolume,
+  guitar: guitarVolume,
+  piano: pianoVolume,
+  other: otherVolume
+};
+
+
+const stemVolumeValues = {
+  vocals: vocalsVolumeValue,
+  pitchCorrection: pitchCorrectionVolumeValue,
+  harmonizer: harmonizerVolumeValue,
+  drums: drumsVolumeValue,
+  bass: bassVolumeValue,
+  guitar: guitarVolumeValue,
+  piano: pianoVolumeValue,
+  other: otherVolumeValue
+};
+
+const stemCropInButtons = {
+  vocals: vocalsCropInBtn,
+  pitchCorrection: pitchCorrectionCropInBtn,
+  harmonizer: harmonizerCropInBtn,
+  drums: drumsCropInBtn,
+  bass: bassCropInBtn,
+  guitar: guitarCropInBtn,
+  piano: pianoCropInBtn,
+  other: otherCropInBtn
+};
+
+const stemCropOutButtons = {
+  vocals: vocalsCropOutBtn,
+  pitchCorrection: pitchCorrectionCropOutBtn,
+  harmonizer: harmonizerCropOutBtn,
+  drums: drumsCropOutBtn,
+  bass: bassCropOutBtn,
+  guitar: guitarCropOutBtn,
+  piano: pianoCropOutBtn,
+  other: otherCropOutBtn
+};
+
+const stemCropMaskLeft = {
+  vocals: vocalsCropMaskLeft,
+  pitchCorrection: pitchCorrectionCropMaskLeft,
+  harmonizer: harmonizerCropMaskLeft,
+  drums: drumsCropMaskLeft,
+  bass: bassCropMaskLeft,
+  guitar: guitarCropMaskLeft,
+  piano: pianoCropMaskLeft,
+  other: otherCropMaskLeft
+};
+
+const stemCropMaskRight = {
+  vocals: vocalsCropMaskRight,
+  pitchCorrection: pitchCorrectionCropMaskRight,
+  harmonizer: harmonizerCropMaskRight,
+  drums: drumsCropMaskRight,
+  bass: bassCropMaskRight,
+  guitar: guitarCropMaskRight,
+  piano: pianoCropMaskRight,
+  other: otherCropMaskRight
+};
+
+
+
+// ========================================
+// ГРОМКОСТЬ ORIGINAL / MASTER
+// ========================================
+
+originalVolume.addEventListener(
+  "input",
+  () => {
+
+    const value =
+      Number(
+        originalVolume.value
+      );
+
+
+    originalAudio.volume =
+      (value / 100) * (typeof lyricsFullScreenMasterLevel === "number" ? lyricsFullScreenMasterLevel : 1);
+
+
+    originalVolumeValue.textContent =
+      value + "%";
+
+  }
+);
+
+
+masterVolume.addEventListener(
+  "input",
+  () => {
+
+    const value =
+      Number(
+        masterVolume.value
+      );
+
+
+    masterAudio.volume =
+      (value / 100) * (typeof lyricsFullScreenMasterLevel === "number" ? lyricsFullScreenMasterLevel : 1);
+
+
+    masterVolumeValue.textContent =
+      value + "%";
+
+  }
+);
+
+
+// ========================================
+// ИСХОДНАЯ ДОРОЖКА / МИКС
+// ========================================
+
+originalModeBtn.addEventListener(
+  "click",
+  () => {
+
+    switchMode(
+      "original"
+    );
+
+  }
+);
+
+
+mixModeBtn.addEventListener(
+  "click",
+  () => {
+
+    switchMode(
+      "mix"
+    );
+
+  }
+);
+
+
+masterModeBtn.addEventListener(
+  "click",
+  () => {
+
+    if (!masterBlob) {
+
+      status.textContent =
+        "Master is empty";
+      status.className = "progress-status info";
+
+      return;
+
+    }
+
+    switchMode(
+      "master"
+    );
+
+  }
+);
+
+
+// Локальная функциональная операция этого блока.
+function switchMode(
+  newMode
+) {
+
+  if (
+    mode === newMode
+  ) {
+
+    return;
+
+  }
+
+
+  const time =
+    getCurrentTime();
+
+
+  const wasPlaying =
+    isPlaying;
+
+
+  originalAudio.pause();
+
+
+  stemIds.forEach(
+    stemId => {
+
+      stemAudio[
+        stemId
+      ].pause();
+
+    }
+  );
+
+
+  masterAudio.pause();
+
+
+  mode =
+    newMode;
+
+
+  originalModeBtn.classList.toggle(
+    "active",
+    mode === "original"
+  );
+
+
+  mixModeBtn.classList.toggle(
+    "active",
+    mode === "mix"
+  );
+
+
+  masterModeBtn.classList.toggle(
+    "active",
+    mode === "master"
+  );
+
+
+  syncAllTo(
+    time
+  );
+
+
+  if (
+    wasPlaying
+  ) {
+
+    playCurrentMode();
+
+  }
+
+
+  updatePlayheads();
+
+updateMasterCursor();
+
+updateTimeDisplay();
+
+updateStemPlaybackVisuals();
+
+syncTransportMirrors();
+
+}
+
+
+// ========================================
+// УПРАВЛЕНИЕ MIX
+
+// ========================================
+
+// Работа с Master/Mix и итоговым аудиосостоянием.
+function activateMixMode() {
+
+  if (
+    mode !== "mix"
+  ) {
+
+    switchMode(
+      "mix"
+    );
+
+  }
+
+}
+
+
+stemIds.forEach(
+  stemId => {
+
+    stemMuteButtons[
+      stemId
+    ].addEventListener(
+      "click",
+      () => {
+
+        activateMixMode();
+
+
+        stemState[
+          stemId
+        ].muted =
+          !stemState[
+            stemId
+          ].muted;
+
+
+        updateMixButtons();
+
+
+        applyMix();
+
+      }
+    );
+
+
+    stemSoloButtons[
+      stemId
+    ].addEventListener(
+      "click",
+      () => {
+
+        activateMixMode();
+
+
+        stemState[
+          stemId
+        ].solo =
+          !stemState[
+            stemId
+          ].solo;
+
+
+        updateMixButtons();
+
+
+        applyMix();
+
+      }
+    );
+
+
+    stemVolumeControls[
+      stemId
+    ].addEventListener(
+      "input",
+      () => {
+
+        activateMixMode();
+
+
+        const value =
+          Number(
+            stemVolumeControls[
+              stemId
+            ].value
+          );
+
+
+        stemState[
+          stemId
+        ].volume =
+          value / 100;
+
+
+        stemVolumeValues[
+          stemId
+        ].textContent =
+          value
+          + "%";
+
+
+        applyMix();
+
+      }
+    );
+
+  }
+);
+
+
+// Работа с Master/Mix и итоговым аудиосостоянием.
+function updateMixButtons() {
+
+  stemIds.forEach(
+    stemId => {
+
+      stemMuteButtons[
+        stemId
+      ].classList.toggle(
+        "active",
+        stemState[
+          stemId
+        ].muted
+      );
+
+
+      stemSoloButtons[
+        stemId
+      ].classList.toggle(
+        "active",
+        stemState[
+          stemId
+        ].solo
+      );
+
+    }
+  );
+
+}
+
+
+// Работа с Master/Mix и итоговым аудиосостоянием.
+function applyMix() {
+
+  const anySolo =
+    stemIds.some(stemId =>
+      isKaraokeUiMode() && lyricsFullScreenTrackState?.[stemId]
+        ? Boolean(lyricsFullScreenTrackState[stemId].solo)
+        : Boolean(stemState[stemId].solo)
+    );
+
+
+  stemIds.forEach(
+    stemId => {
+
+      const sourceState = stemState[stemId];
+      const fsState = isKaraokeUiMode() ? lyricsFullScreenTrackState?.[stemId] : null;
+      const state = fsState || sourceState;
+
+
+      const current =
+        getCurrentTime();
+
+
+      const crop =
+        stemCrop[
+          stemId
+        ];
+
+
+      const insideCrop =
+        current >= crop.in
+        &&
+        (
+          crop.out === null
+          ||
+          current < crop.out
+        );
+
+
+      const enabled =
+        !state.muted
+        &&
+        insideCrop
+        &&
+        (
+          !anySolo
+          ||
+          state.solo
+        );
+
+
+      const level =
+        enabled
+        ? state.volume * (typeof lyricsFullScreenMasterLevel === "number" ? lyricsFullScreenMasterLevel : 1)
+        : 0;
+
+
+      if (
+        stemGainNodes[
+          stemId
         ]
+      ) {
+
+        stemAudio[
+          stemId
+        ].volume =
+          1;
 
 
-    if export_format == "wav":
+        stemGainNodes[
+          stemId
+        ].gain.value =
+          level;
 
-        command += [
-            "-c:a",
-            "pcm_s24le"
-        ]
+      }
 
+      else {
 
-    elif export_format == "mp3":
+        stemAudio[
+          stemId
+        ].volume =
+          level;
 
-        command += [
-            "-c:a",
-            "libmp3lame",
-            "-b:a",
-            "320k"
-        ]
+      }
 
-
-    elif export_format == "flac":
-
-        command += [
-            "-c:a",
-            "flac"
-        ]
+    }
+  );
 
 
-    elif export_format == "m4a":
+  if (isKaraokeUiMode()) applyLyricsFullScreenTrackFxNodes();
+  updatePlayheads();
+  updateStemPlaybackVisuals();
 
-        command += [
-            "-c:a",
-            "aac",
-            "-b:a",
-            "256k"
-        ]
+}
 
 
-    command.append(
-        output_path
-    )
+// 5.4.18 | Визуальное состояние дорожек определяется по реальной строке Timeline,
+ // а не через скрытые <audio>. Active / passive / muted разделены явно.
+function updateStemPlaybackVisuals() {
+
+  const anySolo =
+    stemIds.some(stemId =>
+      isKaraokeUiMode() && lyricsFullScreenTrackState?.[stemId]
+        ? Boolean(lyricsFullScreenTrackState[stemId].solo)
+        : Boolean(stemState[stemId].solo)
+    );
+
+  const current = getCurrentTime();
+
+  const setRowState = (trackId, stateName) => {
+    const timeline = document.querySelector('.timeline-scroll[data-track="' + trackId + '"]');
+    const row = timeline?.closest(".track");
+    if (!row) return;
+    row.classList.toggle("track-active", stateName === "active");
+    row.classList.toggle("track-passive", stateName === "passive");
+    row.classList.toggle("track-muted", stateName === "muted");
+  };
+
+  // Original активен только в режиме Original; в остальных режимах он пассивен.
+  setRowState("original", mode === "original" ? "active" : "passive");
+
+  stemIds.forEach(stemId => {
+    const fsState = isKaraokeUiMode() ? lyricsFullScreenTrackState?.[stemId] : null;
+    const state = fsState || stemState[stemId];
+    const crop = stemCrop[stemId];
+    const insideCrop =
+      current >= crop.in
+      && (crop.out === null || current < crop.out);
+
+    if (state.muted) {
+      setRowState(stemId, "muted");
+      return;
+    }
+
+    const active = Boolean(
+      mode === "mix"
+      && stemTrackIsAvailable(stemId)
+      && insideCrop
+      && (!anySolo || state.solo)
+      && Number(state.volume) > 0
+    );
+
+    setRowState(stemId, active ? "active" : "passive");
+  });
+
+  setRowState("master", mode === "master" && Boolean(masterBlob) ? "active" : "passive");
+
+  updateTrackSelectionOverlays();
+}
 
 
-    print(
-        "FFmpeg command:",
-        command
-    )
+// ========================================
+// ОБРЕЗКА TRACK IN / OUT
+// ========================================
+
+stemIds.forEach(
+  stemId => {
+
+    stemCropInButtons[
+      stemId
+    ].addEventListener(
+      "click",
+      () => {
+
+        if (
+          stemCrop[
+            stemId
+          ].in > 0
+        ) {
+
+          stemCrop[
+            stemId
+          ].in = 0;
+
+        }
+
+        else {
+
+          const current =
+            getCurrentTime();
 
 
-    try:
+          if (
+            stemCrop[
+              stemId
+            ].out === null
+            ||
+            current <
+            stemCrop[
+              stemId
+            ].out
+          ) {
 
-        process = subprocess.run(
+            stemCrop[
+              stemId
+            ].in =
+              current;
 
-            command,
+          }
 
-            capture_output=True,
+        }
 
-            text=True
+
+        updateCropButtons();
+
+        updateCropMasks();
+
+
+        if (
+          stemId === "vocals"
+        ) {
+
+          updateEffectiveVocalRange();
+
+        }
+
+      }
+    );
+
+
+    stemCropOutButtons[
+      stemId
+    ].addEventListener(
+      "click",
+      () => {
+
+        if (
+          stemCrop[
+            stemId
+          ].out !== null
+        ) {
+
+          stemCrop[
+            stemId
+          ].out = null;
+
+        }
+
+        else {
+
+          const current =
+            getCurrentTime();
+
+
+          if (
+            current >
+            stemCrop[
+              stemId
+            ].in
+          ) {
+
+            stemCrop[
+              stemId
+            ].out =
+              current;
+
+          }
+
+        }
+
+
+        updateCropButtons();
+
+        updateCropMasks();
+
+
+        if (
+          stemId === "vocals"
+        ) {
+
+          updateEffectiveVocalRange();
+
+        }
+
+      }
+    );
+
+  }
+);
+
+
+// Перерисовка и синхронизация интерфейса.
+function updateCropButtons() {
+
+  stemIds.forEach(
+    stemId => {
+
+      stemCropInButtons[
+        stemId
+      ].classList.toggle(
+        "active",
+        stemCrop[
+          stemId
+        ].in > 0
+      );
+
+
+      stemCropOutButtons[
+        stemId
+      ].classList.toggle(
+        "active",
+        stemCrop[
+          stemId
+        ].out !== null
+      );
+
+    }
+  );
+
+}
+
+
+// Перерисовка и синхронизация интерфейса.
+function updateCropMasks() {
+
+  const width =
+    getTimelineWidth();
+
+
+  stemIds.forEach(
+    stemId => {
+
+      const crop =
+        stemCrop[
+          stemId
+        ];
+
+
+      const left =
+        stemCropMaskLeft[
+          stemId
+        ];
+
+
+      const right =
+        stemCropMaskRight[
+          stemId
+        ];
+
+
+      const leftWidth =
+        Math.max(
+          0,
+          crop.in
+          * pixelsPerSecond // пикселей в секунду
+        );
+
+
+      left.style.left =
+        "0px";
+
+
+      left.style.width =
+        leftWidth
+        + "px";
+
+
+      if (
+        crop.out === null
+      ) {
+
+        right.style.display =
+          "none";
+
+      }
+
+      else {
+
+        const outX =
+          crop.out
+          * pixelsPerSecond; // пикселей в секунду
+
+
+        right.style.display =
+          "block";
+
+
+        right.style.left =
+          outX
+          + "px";
+
+
+        right.style.width =
+          Math.max(
+            0,
+            width - outX
+          )
+          + "px";
+
+      }
+
+    }
+  );
+
+}
+
+
+// Применение и обновление аудиоэффектов.
+function updateEffectiveVocalRange() {
+
+  const buffer =
+    waveformData.vocals;
+
+
+  if (!buffer) {
+
+    vocalStartTime =
+      vocalStartTimeRaw;
+
+
+    vocalEndTime =
+      vocalEndTimeRaw;
+
+
+    updateTimeDisplay();
+
+    return;
+
+  }
+
+
+  const sampleRate =
+    buffer.sampleRate;
+
+
+  const samples =
+    buffer.getChannelData(
+      0
+    );
+
+
+  const cropIn =
+    Math.max(
+      0,
+      stemCrop.vocals.in || 0
+    );
+
+
+  const cropOut =
+    stemCrop.vocals.out === null
+    ? buffer.duration
+    : Math.min(
+        buffer.duration,
+        stemCrop.vocals.out
+      );
+
+
+  const startFrame =
+    Math.floor(
+      cropIn
+      * sampleRate // частота дискретизации
+    );
+
+
+  const endFrame =
+    Math.min(
+      samples.length,
+      Math.floor(
+        cropOut
+        * sampleRate // частота дискретизации
+      )
+    );
+
+
+  const threshold =
+    Math.pow(
+      10,
+      -38 / 20
+    );
+
+
+  const windowSeconds =
+    0.02;
+
+
+  const requiredSeconds =
+    0.35;
+
+
+  const windowFrames =
+    Math.max(
+      1,
+      Math.floor(
+        sampleRate
+        * windowSeconds // длительность окна в секундах
+      )
+    );
+
+
+  const requiredWindows =
+    Math.max(
+      1,
+      Math.ceil(
+        requiredSeconds
+        / windowSeconds
+      )
+    );
+
+
+  const windows =
+    [];
+
+
+  for (
+    let frame = startFrame;
+    frame < endFrame;
+    frame += windowFrames
+  ) {
+
+    const windowEnd =
+      Math.min(
+        endFrame,
+        frame + windowFrames
+      );
+
+
+    let sumSquares = 0;
+
+    let count = 0;
+
+
+    for (
+      let i = frame;
+      i < windowEnd;
+      i++
+    ) {
+
+      const sample =
+        samples[i];
+
+
+      sumSquares +=
+        sample * sample;
+
+
+      count++;
+
+    }
+
+
+    windows.push({
+      frame,
+      active:
+        count > 0
+        &&
+        Math.sqrt(
+          sumSquares / count
         )
+        >= threshold
+    });
+
+  }
 
 
-        if process.returncode != 0:
+  let firstActive = null;
 
-            print(
-                process.stdout
-            )
+  let run = 0;
 
 
-            print(
-                process.stderr
-            )
+  for (
+    let i = 0;
+    i < windows.length;
+    i++
+  ) {
+
+    if (windows[i].active) {
+
+      run++;
 
 
-            return jsonify({
-                "error":
-                    "FFmpeg export failed",
-                "details":
-                    process.stderr
-            }), 500
+      if (
+        run >=
+        requiredWindows
+      ) {
+
+        firstActive =
+          windows[
+            i
+            - requiredWindows
+            + 1
+          ].frame;
+
+        break;
+
+      }
+
+    }
+
+    else {
+
+      run = 0;
+
+    }
+
+  }
 
 
-        return send_file(
+  let lastActive = null;
 
-            output_path,
-
-            as_attachment=True,
-
-            download_name=(
-                (
-                    track_name
-                    or
-                    "audio"
-                )
-                + "."
-                + export_format
-            )
-
-        )
+  run = 0;
 
 
-    except Exception as error:
+  for (
+    let i = windows.length - 1;
+    i >= 0;
+    i--
+  ) {
 
-        print(error)
+    if (windows[i].active) {
 
-
-        return jsonify({
-            "error":
-                str(error)
-        }), 500
-
-
+      run++;
 
 
-# ========================================
-# LYRICS AUTOFIX
-# ========================================
+      if (
+        run >=
+        requiredWindows
+      ) {
 
-_language_tools = {}
-
-# Локальная серверная операция этого блока.
-def normalize_language(language):
-    value = str(language or "ru-RU").lower()
-    if value.startswith("en"):
-        return "en-US"
-    return "ru-RU"
-
+        const endWindow =
+          windows[
+            i
+            + requiredWindows
+            - 1
+          ];
 
 
-# Локальная серверная операция этого блока.
-def get_language_tool(language="ru-RU"):
+        lastActive =
+          Math.min(
+            endFrame,
+            endWindow.frame
+            + windowFrames
+          );
 
-    if language not in _language_tools:
+        break;
 
-        _language_tools[language] = (
-            language_tool_python.LanguageTool(
-                language
-            )
-        )
+      }
 
-    return _language_tools[language]
+    }
+
+    else {
+
+      run = 0;
+
+    }
+
+  }
 
 
+  vocalStartTime =
+    firstActive === null
+    ? null
+    : firstActive / sampleRate;
 
-@app.route(
-    "/spellcheck",
-    methods=["POST"]
+
+  vocalEndTime =
+    lastActive === null
+    ? null
+    : lastActive / sampleRate;
+
+
+  updateTimeDisplay();
+
+}
+
+
+// ========================================
+// ПАНЕЛЬ EQ / ЭФФЕКТОВ
+
+// ========================================
+
+const fxTargetButtons = {
+
+  vocals:
+    fxTargetVocalsBtn,
+
+  drums:
+    fxTargetDrumsBtn,
+
+  bass:
+    fxTargetBassBtn,
+
+  guitar:
+    fxTargetGuitarBtn,
+
+  piano:
+    fxTargetPianoBtn,
+
+  other:
+    fxTargetOtherBtn,
+
+  master:
+    fxTargetMasterBtn
+
+};
+
+
+Object.entries(
+  fxTargetButtons
 )
-# Локальная серверная операция этого блока.
-def spellcheck():
+.forEach(
+  ([
+    target,
+    button
+  ]) => {
 
-    data = request.get_json(
-        silent=True
-    ) or {}
+    button.addEventListener(
+      "click",
+      () => {
 
-    text = str(
-        data.get(
-            "text",
-            ""
-        )
-    )
+        setFxTarget(
+          target
+        );
 
-    try:
+      }
+    );
 
-        language = normalize_language(
-            data.get(
-                "language",
-                "ru-RU"
+  }
+);
+
+
+// Применение и обновление аудиоэффектов.
+function setFxTarget(
+  target
+) {
+
+  fxTarget =
+    target;
+
+
+  Object.entries(
+    fxTargetButtons
+  )
+  .forEach(
+    ([
+      key,
+      button
+    ]) => {
+
+      button.classList.toggle(
+        "active",
+        key === target
+      );
+
+    }
+  );
+
+
+  loadFxPanelValues();
+
+}
+
+
+// Загрузка Project и восстановление рабочего состояния.
+function loadFxPanelValues() {
+
+  const settings =
+    fxSettings[
+      fxTarget
+    ];
+
+
+  eqLow.value =
+    settings.eqLow;
+
+
+  eqLowMid.value =
+    settings.eqLowMid;
+
+
+  eqMid.value =
+    settings.eqMid;
+
+
+  eqHighMid.value =
+    settings.eqHighMid;
+
+
+  eqHigh.value =
+    settings.eqHigh;
+
+
+  panControl.value =
+    settings.pan;
+
+
+  compressorThreshold.value =
+    settings.compressorThreshold;
+
+
+  compressorRatio.value =
+    settings.compressorRatio;
+
+
+  reverbAmount.value =
+    settings.reverbAmount;
+
+
+  delayTime.value =
+    settings.delayTime;
+
+
+  delayFeedback.value =
+    settings.delayFeedback;
+
+
+  limiterCeiling.value =
+    settings.limiterCeiling;
+
+
+  fxOutputGain.value =
+    settings.outputGain;
+
+
+  compressorToggleBtn
+    .classList.toggle(
+      "active",
+      settings.compressorOn
+    );
+
+
+  compressorToggleBtn.textContent =
+    settings.compressorOn
+    ? "On"
+    : "Off";
+
+
+  reverbToggleBtn
+    .classList.toggle(
+      "active",
+      settings.reverbOn
+    );
+
+
+  reverbToggleBtn.textContent =
+    settings.reverbOn
+    ? "On"
+    : "Off";
+
+
+  delayToggleBtn
+    .classList.toggle(
+      "active",
+      settings.delayOn
+    );
+
+
+  delayToggleBtn.textContent =
+    settings.delayOn
+    ? "On"
+    : "Off";
+
+
+  limiterToggleBtn
+    .classList.toggle(
+      "active",
+      settings.limiterOn
+    );
+
+
+  limiterToggleBtn.textContent =
+    settings.limiterOn
+    ? "On"
+    : "Off";
+
+
+  updateFxLabels();
+
+}
+
+
+// Применение и обновление аудиоэффектов.
+function updateFxLabels() {
+
+  eqLowValue.textContent =
+    eqLow.value
+    + " dB";
+
+
+  eqLowMidValue.textContent =
+    eqLowMid.value
+    + " dB";
+
+
+  eqMidValue.textContent =
+    eqMid.value
+    + " dB";
+
+
+  eqHighMidValue.textContent =
+    eqHighMid.value
+    + " dB";
+
+
+  eqHighValue.textContent =
+    eqHigh.value
+    + " dB";
+
+
+  const panNumber =
+    Number(
+      panControl.value
+    );
+
+
+  panValue.textContent =
+    panNumber === 0
+    ? "C"
+    : panNumber < 0
+      ? "L " + Math.abs(panNumber)
+      : "R " + panNumber;
+
+
+  compressorThresholdValue
+    .textContent =
+      compressorThreshold.value
+      + " dB";
+
+
+  compressorRatioValue
+    .textContent =
+      compressorRatio.value
+      + ":1";
+
+
+  reverbAmountValue
+    .textContent =
+      reverbAmount.value
+      + "%";
+
+
+  delayTimeValue.textContent =
+    delayTime.value
+    + " ms";
+
+
+  delayFeedbackValue
+    .textContent =
+      delayFeedback.value
+      + "%";
+
+
+  limiterCeilingValue
+    .textContent =
+      limiterCeiling.value
+      + " dB";
+
+
+  fxOutputGainValue
+    .textContent =
+      fxOutputGain.value
+      + " dB";
+
+}
+
+
+[
+  eqLow,
+  eqLowMid,
+  eqMid,
+  eqHighMid,
+  eqHigh,
+  panControl,
+  compressorThreshold,
+  compressorRatio,
+  reverbAmount,
+  delayTime,
+  delayFeedback,
+  limiterCeiling,
+  fxOutputGain
+]
+.forEach(
+  control => {
+
+    control.addEventListener(
+      "input",
+      () => {
+
+        const settings =
+          fxSettings[
+            fxTarget
+          ];
+
+
+        settings.eqLow =
+          Number(
+            eqLow.value
+          );
+
+
+        settings.eqLowMid =
+          Number(
+            eqLowMid.value
+          );
+
+
+        settings.eqMid =
+          Number(
+            eqMid.value
+          );
+
+
+        settings.eqHighMid =
+          Number(
+            eqHighMid.value
+          );
+
+
+        settings.eqHigh =
+          Number(
+            eqHigh.value
+          );
+
+
+        settings.pan =
+          Number(
+            panControl.value
+          );
+
+
+        settings.compressorThreshold =
+          Number(
+            compressorThreshold.value
+          );
+
+
+        settings.compressorRatio =
+          Number(
+            compressorRatio.value
+          );
+
+
+        settings.reverbAmount =
+          Number(
+            reverbAmount.value
+          );
+
+
+        settings.delayTime =
+          Number(
+            delayTime.value
+          );
+
+
+        settings.delayFeedback =
+          Number(
+            delayFeedback.value
+          );
+
+
+        settings.limiterCeiling =
+          Number(
+            limiterCeiling.value
+          );
+
+
+        settings.outputGain =
+          Number(
+            fxOutputGain.value
+          );
+
+
+        updateFxLabels();
+
+
+        applyFxSettings(
+          fxTarget
+        );
+
+      }
+    );
+
+  }
+);
+
+
+compressorToggleBtn
+  .addEventListener(
+    "click",
+    () => {
+
+      const settings =
+        fxSettings[
+          fxTarget
+        ];
+
+
+      settings.compressorOn =
+        !settings.compressorOn;
+
+
+      loadFxPanelValues();
+
+
+      applyFxSettings(
+        fxTarget
+      );
+
+    }
+  );
+
+
+reverbToggleBtn
+  .addEventListener(
+    "click",
+    () => {
+
+      const settings =
+        fxSettings[
+          fxTarget
+        ];
+
+
+      settings.reverbOn =
+        !settings.reverbOn;
+
+
+      loadFxPanelValues();
+
+
+      applyFxSettings(
+        fxTarget
+      );
+
+    }
+  );
+
+
+delayToggleBtn
+  .addEventListener(
+    "click",
+    () => {
+
+      const settings =
+        fxSettings[
+          fxTarget
+        ];
+
+
+      settings.delayOn =
+        !settings.delayOn;
+
+
+      loadFxPanelValues();
+
+
+      applyFxSettings(
+        fxTarget
+      );
+
+    }
+  );
+
+
+limiterToggleBtn
+  .addEventListener(
+    "click",
+    () => {
+
+      const settings =
+        fxSettings[
+          fxTarget
+        ];
+
+
+      settings.limiterOn =
+        !settings.limiterOn;
+
+
+      loadFxPanelValues();
+
+
+      applyFxSettings(
+        fxTarget
+      );
+
+    }
+  );
+
+
+loadFxPanelValues();
+
+
+sequencerUndoBtn?.addEventListener("click", undoSequencer);
+sequencerRedoBtn?.addEventListener("click", redoSequencer);
+bindSequencerHistoryCapture();
+updateSequencerUndoRedoButtons();
+
+
+// ========================================
+// МАРШРУТИЗАЦИЯ АУДИО MASTER
+// ========================================
+
+// Работа с Master/Mix и итоговым аудиосостоянием.
+function ensureMixAudioGraph() {
+
+  if (mixAudioContext) {
+    return;
+  }
+
+
+  mixAudioContext =
+    new AudioContext();
+
+
+  masterSourceNode =
+    mixAudioContext.createMediaElementSource(
+      masterAudio
+    );
+
+
+  masterAnalyserNode =
+    mixAudioContext.createAnalyser();
+
+
+  masterAnalyserNode.fftSize =
+    2048;
+
+
+  masterRecordDestination =
+    null;
+
+
+  masterRecordBus =
+    mixAudioContext.createGain();
+
+
+  masterRecordProcessor =
+    mixAudioContext.createScriptProcessor(
+      2048,
+      2,
+      2
+    );
+
+
+  masterRecordSilentGain =
+    mixAudioContext.createGain();
+
+
+  masterRecordSilentGain.gain.value =
+    0;
+
+
+  masterRecordBus.connect(
+    masterRecordProcessor
+  );
+
+
+  masterRecordProcessor.connect(
+    masterRecordSilentGain
+  );
+
+
+  masterRecordSilentGain.connect(
+    mixAudioContext.destination
+  );
+
+
+  masterRecordProcessor.onaudioprocess =
+    event => {
+
+      if (!masterRecording) {
+        return;
+      }
+
+
+      const input =
+        event.inputBuffer;
+
+
+      const channelCount =
+        Math.max(
+          1,
+          Math.min(
+            2,
+            input.numberOfChannels
+          )
+        );
+
+
+      const frames =
+        input.length;
+
+
+      const chunk =
+        [];
+
+
+      for (
+        let channel = 0;
+        channel < channelCount;
+        channel++
+      ) {
+
+        chunk.push(
+          new Float32Array(
+            input.getChannelData(
+              channel
             )
+          )
+        );
+
+      }
+
+
+      if (
+        channelCount === 1
+      ) {
+
+        chunk.push(
+          new Float32Array(
+            chunk[0]
+          )
+        );
+
+      }
+
+
+      masterPcmChunks.push(
+        chunk
+      );
+
+
+      masterPcmFrameCount +=
+        frames;
+
+
+      // Живая волновая форма строится из того же PCM, который реально записывается.
+      let peak =
+        0;
+
+
+      for (
+        let channel = 0;
+        channel < chunk.length;
+        channel++
+      ) {
+
+        const samples =
+          chunk[
+            channel
+          ];
+
+
+        for (
+          let i = 0;
+          i < samples.length;
+          i++
+        ) {
+
+          peak =
+            Math.max(
+              peak,
+              Math.abs(
+                samples[i]
+              )
+            );
+
+        }
+
+      }
+
+
+      masterLivePeaks.push(
+        Math.min(
+          1,
+          peak
         )
+      );
 
-        tool = get_language_tool(
-            language
-        )
-
-        matches = tool.check(
-            text
-        )
-
-        result = []
-
-        for match in matches:
-
-            replacements = [
-                str(value)
-                for value in (
-                    match.replacements
-                    or []
-                )[:8]
-            ]
-
-            result.append({
-                "offset":
-                    int(match.offset),
-                "length":
-                    int(match.error_length),
-                "message":
-                    str(match.message),
-                "replacements":
-                    replacements
-            })
-
-        return jsonify({
-            "language": language,
-            "matches": result
-        })
-
-    except Exception as error:
-
-        print(error)
-
-        return jsonify({
-            "error": str(error)
-        }), 500
+    };
 
 
+  stemIds.forEach(
+    stemId => {
 
-# ========================================
-# LYRICS LANGUAGE + RU TRANSCRIPTION
-# ========================================
+      stemSourceNodes[
+        stemId
+      ] =
+        mixAudioContext.createMediaElementSource(
+          stemAudio[
+            stemId
+          ]
+        );
 
-SUPPORTED_LYRICS_LANGUAGES = {"ru","en","es","it","fr","uk"}
 
-# Локальная серверная операция этого блока.
-def _fallback_language(text):
-    value = str(text or "").strip()
-    if re.search(r"[ІіЇїЄєҐґ]", value):
-        return "uk"
-    if re.search(r"[А-Яа-яЁё]", value):
-        return "ru"
+      stemGainNodes[
+        stemId
+      ] =
+        mixAudioContext.createGain();
 
-    lower = " " + value.lower() + " "
-    markers = {
-        "it":[" che "," non "," per "," sono "," amore "," mio "," mia "],
-        "es":[" que "," para "," soy "," amor "," corazón "," eres "],
-        "fr":[" je "," pas "," pour "," avec "," amour "," suis "," mon "],
-        "en":[" the "," i "," you "," and "," with "," love "," my "," is "]
+
+      stemFxInputs[
+        stemId
+      ] =
+        mixAudioContext.createGain();
+
+
+      stemSourceNodes[
+        stemId
+      ].connect(
+        stemGainNodes[
+          stemId
+        ]
+      );
+
+
+      stemGainNodes[
+        stemId
+      ].connect(
+        stemFxInputs[
+          stemId
+        ]
+      );
+
+
+      const stemChain =
+        createFxChain(
+          stemFxInputs[
+            stemId
+          ],
+          stemId
+        );
+
+
+      stemChain.output.connect(
+        mixAudioContext.destination
+      );
+
+
+      stemChain.output.connect(
+        masterAnalyserNode
+      );
+
+
+      stemChain.output.connect(
+        masterRecordBus
+      );
+
+
+      stemAudio[
+        stemId
+      ].volume =
+        1;
+
     }
-    scores = {
-        lang: sum(lower.count(x) for x in words)
-        for lang,words in markers.items()
+  );
+
+
+  masterFxInput =
+    mixAudioContext.createGain();
+
+
+  masterSourceNode.connect(
+    masterFxInput
+  );
+
+
+  const masterChain =
+    createFxChain(
+      masterFxInput,
+      "master"
+    );
+
+
+  masterChain.output.connect(
+    mixAudioContext.destination
+  );
+
+
+  masterAudio.volume =
+    (Number(
+      masterVolume.value
+    ) / 100) * (typeof lyricsFullScreenMasterLevel === "number" ? lyricsFullScreenMasterLevel : 1);
+
+
+  applyMix();
+
+
+  stemIds.forEach(
+    stemId => {
+
+      applyFxSettings(
+        stemId
+      );
+
     }
-    return max(scores,key=scores.get) if max(scores.values()) else "en"
+  );
 
-# Локальная серверная операция этого блока.
-def detect_lyrics_line_language(text):
-    value = str(text or "").strip()
-    if not value:
-        return "ru"
-    if re.search(r"[ІіЇїЄєҐґ]", value):
-        return "uk"
-    if re.search(r"[А-Яа-яЁё]", value):
-        return "ru"
-    try:
-        from langdetect import detect
-        language = detect(value)
-        if language in SUPPORTED_LYRICS_LANGUAGES:
-            return language
-    except Exception:
-        pass
-    return _fallback_language(value)
 
-@app.route("/detect-lyrics-languages", methods=["POST"])
-# Локальная серверная операция этого блока.
-def detect_lyrics_languages():
-    data = request.get_json(silent=True) or {}
-    lines = data.get("lines", [])
-    if not isinstance(lines,list):
-        return jsonify({"error":"Invalid lyrics lines"}),400
-    return jsonify({
-        "languages":[detect_lyrics_line_language(line) for line in lines]
+  applyFxSettings(
+    "master"
+  );
+
+}
+
+
+
+// Применение и обновление аудиоэффектов.
+function createFxChain(
+  inputNode,
+  target
+) {
+
+  const definitions = [
+    ["lowshelf", 80, 0],
+    ["peaking", 250, 1],
+    ["peaking", 1000, 1],
+    ["peaking", 4000, 1],
+    ["highshelf", 12000, 0]
+  ];
+
+  const eqNodes =
+    definitions.map(
+      item => {
+
+        const node =
+          mixAudioContext.createBiquadFilter();
+
+        node.type =
+          item[0];
+
+        node.frequency.value =
+          item[1];
+
+        if (item[2]) {
+          node.Q.value =
+            item[2];
+        }
+
+        return node;
+
+      }
+    );
+
+  inputNode.connect(
+    eqNodes[0]
+  );
+
+  for (
+    let i = 0;
+    i < eqNodes.length - 1;
+    i++
+  ) {
+
+    eqNodes[i].connect(
+      eqNodes[i + 1]
+    );
+
+  }
+
+  const panner =
+    mixAudioContext.createStereoPanner();
+
+
+  const compressor =
+    mixAudioContext.createDynamicsCompressor();
+
+  eqNodes[
+    eqNodes.length - 1
+  ].connect(
+    panner
+  );
+
+
+  panner.connect(
+    compressor
+  );
+
+  const reverbDry =
+    mixAudioContext.createGain();
+
+  const convolver =
+    mixAudioContext.createConvolver();
+
+  convolver.buffer =
+    createImpulseResponse(
+      mixAudioContext,
+      2.2,
+      2.5
+    );
+
+  const reverbWet =
+    mixAudioContext.createGain();
+
+  const reverbSum =
+    mixAudioContext.createGain();
+
+  compressor.connect(
+    reverbDry
+  );
+
+  compressor.connect(
+    convolver
+  );
+
+  convolver.connect(
+    reverbWet
+  );
+
+  reverbDry.connect(
+    reverbSum
+  );
+
+  reverbWet.connect(
+    reverbSum
+  );
+
+  const delayDry =
+    mixAudioContext.createGain();
+
+  const delay =
+    mixAudioContext.createDelay(
+      2
+    );
+
+  const delayFeedback =
+    mixAudioContext.createGain();
+
+  const delayWet =
+    mixAudioContext.createGain();
+
+  const delaySum =
+    mixAudioContext.createGain();
+
+  reverbSum.connect(
+    delayDry
+  );
+
+  reverbSum.connect(
+    delay
+  );
+
+  delay.connect(
+    delayFeedback
+  );
+
+  delayFeedback.connect(
+    delay
+  );
+
+  delay.connect(
+    delayWet
+  );
+
+  delayDry.connect(
+    delaySum
+  );
+
+  delayWet.connect(
+    delaySum
+  );
+
+  const limiter =
+    mixAudioContext.createDynamicsCompressor();
+
+  limiter.ratio.value =
+    20;
+
+  limiter.attack.value =
+    0.003;
+
+  limiter.release.value =
+    0.05;
+
+  delaySum.connect(
+    limiter
+  );
+
+  const outputGain =
+    mixAudioContext.createGain();
+
+  limiter.connect(
+    outputGain
+  );
+
+  if (
+    target === "master"
+  ) {
+
+    masterEqNodes =
+      eqNodes;
+
+    masterPanNode =
+      panner;
+
+    masterCompressorNode =
+      compressor;
+
+    masterReverbDryGain =
+      reverbDry;
+
+    masterReverbWetGain =
+      reverbWet;
+
+    masterDelayNode =
+      delay;
+
+    masterDelayFeedbackGain =
+      delayFeedback;
+
+    masterDelayDryGain =
+      delayDry;
+
+    masterDelayWetGain =
+      delayWet;
+
+    masterLimiterNode =
+      limiter;
+
+    masterFxOutputGainNode =
+      outputGain;
+
+  }
+
+  else {
+
+    stemFxNodes[
+      target
+    ] = {
+
+      eq:
+        eqNodes,
+
+      pan:
+        panner,
+
+      compressor:
+        compressor,
+
+      reverbDry:
+        reverbDry,
+
+      reverbWet:
+        reverbWet,
+
+      delay:
+        delay,
+
+      delayFeedback:
+        delayFeedback,
+
+      delayDry:
+        delayDry,
+
+      delayWet:
+        delayWet,
+
+      limiter:
+        limiter,
+
+      output:
+        outputGain
+
+    };
+
+  }
+
+
+  return {
+    output:
+      outputGain
+  };
+
+}
+
+
+// Локальная функциональная операция этого блока.
+function createImpulseResponse(
+  audioContext,
+  seconds,
+  decay
+) {
+
+  const sampleRate =
+    audioContext.sampleRate;
+
+  const length =
+    Math.floor(
+      sampleRate
+      * seconds // секунды
+    );
+
+  const impulse =
+    audioContext.createBuffer(
+      2,
+      length,
+      sampleRate
+    );
+
+  for (
+    let channel = 0;
+    channel < 2;
+    channel++
+  ) {
+
+    const data =
+      impulse.getChannelData(
+        channel
+      );
+
+    for (
+      let i = 0;
+      i < length;
+      i++
+    ) {
+
+      data[i] =
+        (
+          Math.random()
+          * 2
+          - 1
+        )
+        *
+        Math.pow(
+          1
+          - i / length,
+          decay
+        );
+
+    }
+
+  }
+
+  return impulse;
+
+}
+
+
+// Локальная функциональная операция этого блока.
+function dbToGain(
+  db
+) {
+
+  return Math.pow(
+    10,
+    db / 20
+  );
+
+}
+
+
+// Применение и обновление аудиоэффектов.
+function getFxNodes(
+  target
+) {
+
+  if (
+    target !== "master"
+  ) {
+
+    return (
+      stemFxNodes[
+        target
+      ]
+      ||
+      {}
+    );
+
+  }
+
+
+  return {
+
+    eq:
+      masterEqNodes,
+
+    pan:
+      masterPanNode,
+
+    compressor:
+      masterCompressorNode,
+
+    reverbDry:
+      masterReverbDryGain,
+
+    reverbWet:
+      masterReverbWetGain,
+
+    delay:
+      masterDelayNode,
+
+    delayFeedback:
+      masterDelayFeedbackGain,
+
+    delayDry:
+      masterDelayDryGain,
+
+    delayWet:
+      masterDelayWetGain,
+
+    limiter:
+      masterLimiterNode,
+
+    output:
+      masterFxOutputGainNode
+
+  };
+
+}
+
+
+
+// Применение и обновление аудиоэффектов.
+function applyFxSettings(
+  target
+) {
+
+  if (!mixAudioContext) {
+    return;
+  }
+
+  const settings =
+    fxSettings[target];
+
+  const nodes =
+    getFxNodes(
+      target
+    );
+
+  if (
+    !nodes.eq
+    ||
+    nodes.eq.length === 0
+  ) {
+    return;
+  }
+
+  const eqValues = [
+    settings.eqLow,
+    settings.eqLowMid,
+    settings.eqMid,
+    settings.eqHighMid,
+    settings.eqHigh
+  ];
+
+  nodes.eq.forEach(
+    (
+      node,
+      index
+    ) => {
+
+      node.gain.value =
+        eqValues[index];
+
+    }
+  );
+
+  if (
+    nodes.pan
+  ) {
+
+    nodes.pan.pan.value =
+      Math.max(
+        -1,
+        Math.min(
+          1,
+          settings.pan / 100
+        )
+      );
+
+  }
+
+
+  nodes.compressor.threshold.value =
+    settings.compressorOn
+    ? settings.compressorThreshold
+    : 0;
+
+  nodes.compressor.ratio.value =
+    settings.compressorOn
+    ? settings.compressorRatio
+    : 1;
+
+  const reverbMix =
+    settings.reverbOn
+    ? settings.reverbAmount / 100
+    : 0;
+
+  nodes.reverbDry.gain.value =
+    1;
+
+  nodes.reverbWet.gain.value =
+    reverbMix;
+
+  nodes.delay.delayTime.value =
+    settings.delayOn
+    ? settings.delayTime / 1000
+    : 0;
+
+  nodes.delayFeedback.gain.value =
+    settings.delayOn
+    ? settings.delayFeedback / 100
+    : 0;
+
+  nodes.delayDry.gain.value =
+    1;
+
+  nodes.delayWet.gain.value =
+    settings.delayOn
+    ? 0.65
+    : 0;
+
+  nodes.limiter.threshold.value =
+    settings.limiterOn
+    ? settings.limiterCeiling
+    : 0;
+
+  nodes.limiter.ratio.value =
+    settings.limiterOn
+    ? 20
+    : 1;
+
+  nodes.output.gain.value =
+    dbToGain(
+      settings.outputGain
+    );
+
+}
+
+
+// ========================================
+// ЗАПИСЬ MASTER
+// ========================================
+
+recordMasterBtn.addEventListener(
+  "click",
+  startMasterRecording
+);
+
+stopMasterBtn.addEventListener(
+  "click",
+  stopMasterRecording
+);
+
+
+// Работа с Master/Mix и итоговым аудиосостоянием.
+async function startMasterRecording() {
+
+  if (
+    masterRecording
+  ) {
+
+    return;
+
+  }
+
+
+  activateMixMode();
+
+
+  ensureMixAudioGraph();
+
+
+  if (
+    mixAudioContext.state ===
+    "suspended"
+  ) {
+
+    await mixAudioContext.resume();
+
+  }
+
+
+  // Фиксируем точную стартовую позицию на общей временной шкале песни.
+  masterRecordTimelineStart =
+    getCurrentTime();
+
+
+  masterRecordTimelineEnd =
+    masterRecordTimelineStart;
+
+
+  syncAllTo(
+    masterRecordTimelineStart
+  );
+
+
+  waveformData.master =
+    null;
+
+
+  masterBlob =
+    null;
+
+
+  // 5.4.18 | Save Rec — отдельный commit. Новая запись не уничтожает уже сохранённый commit.
+  masterLivePeaks =
+    [];
+
+
+  masterPcmChunks =
+    [];
+
+
+  masterPcmSampleRate =
+    mixAudioContext.sampleRate;
+
+
+  masterPcmChannels =
+    2;
+
+
+  masterPcmFrameCount =
+    0;
+
+
+  clearMasterCanvas();
+
+
+  // Сначала запускаем воспроизведение, при этом захват PCM пока выключен.
+  if (
+    !isPlaying
+  ) {
+
+    playCurrentMode();
+
+  }
+
+
+  // Непосредственно перед захватом повторно синхронизируем все шесть stems.
+  const lockedStart =
+    getCurrentTime();
+
+
+  syncAllTo(
+    lockedStart
+  );
+
+
+  masterRecordTimelineStart =
+    lockedStart;
+
+
+  masterRecordTimelineEnd =
+    lockedStart;
+
+
+  masterRecording =
+    true;
+
+
+  masterRecordStartTime =
+    performance.now();
+
+
+  recordMasterBtn.disabled =
+    true;
+
+
+  stopMasterBtn.disabled =
+    false;
+
+
+  saveAsMasterBtn.disabled =
+    true;
+
+
+  masterState.textContent =
+    "Recording...";
+
+
+  startMasterWaveformCapture();
+
+}
+
+
+// Управление транспортом и воспроизведением.
+function stopMasterRecording() {
+
+  if (
+    !masterRecording
+  ) {
+
+    return;
+
+  }
+
+
+  // Сначала прекращаем приём PCM.
+  masterRecording =
+    false;
+
+
+  masterRecordTimelineEnd =
+    getCurrentTime();
+
+
+  stopMasterWaveformCapture();
+
+
+  recordMasterBtn.disabled =
+    false;
+
+
+  stopMasterBtn.disabled =
+    true;
+
+
+  masterState.textContent =
+    "Processing recording...";
+
+
+  finishMasterRecording();
+
+}
+
+
+// Работа с Master/Mix и итоговым аудиосостоянием.
+async function finishMasterRecording() {
+
+  try {
+
+    if (
+      masterPcmFrameCount <= 0
+      ||
+      masterPcmChunks.length === 0
+    ) {
+
+      throw new Error(
+        "No PCM frames recorded"
+      );
+
+    }
+
+
+    const timelineDuration =
+      Math.max(
+        0,
+        masterRecordTimelineEnd
+        - masterRecordTimelineStart
+      );
+
+
+    const expectedFrames =
+      Math.max(
+        1,
+        Math.round(
+          timelineDuration
+          * masterPcmSampleRate // частота дискретизации PCM Master
+        )
+      );
+
+
+    const availableFrames =
+      masterPcmFrameCount;
+
+
+    const frameCount =
+      Math.min(
+        availableFrames,
+        expectedFrames
+      );
+
+
+    const decodeContext =
+      new AudioContext({
+        sampleRate:
+          masterPcmSampleRate
+      });
+
+
+    const segmentBuffer =
+      decodeContext.createBuffer(
+        masterPcmChannels,
+        frameCount,
+        masterPcmSampleRate
+      );
+
+
+    let writeOffset =
+      0;
+
+
+    for (
+      const chunk
+      of masterPcmChunks
+    ) {
+
+      if (
+        writeOffset >= frameCount
+      ) {
+
+        break;
+
+      }
+
+
+      const chunkFrames =
+        Math.min(
+          chunk[0].length,
+          frameCount
+          - writeOffset
+        );
+
+
+      for (
+        let channel = 0;
+        channel < masterPcmChannels;
+        channel++
+      ) {
+
+        segmentBuffer
+          .getChannelData(
+            channel
+          )
+          .set(
+            chunk[
+              Math.min(
+                channel,
+                chunk.length - 1
+              )
+            ].subarray(
+              0,
+              chunkFrames
+            ),
+            writeOffset
+          );
+
+      }
+
+
+      writeOffset +=
+        chunkFrames;
+
+    }
+
+
+    await decodeContext.close();
+
+
+    masterUndoStack.push(
+      cloneMasterSegments(
+        masterSegments
+      )
+    );
+
+
+    masterRedoStack =
+      [];
+
+
+    const replaceStart =
+      masterRecordTimelineStart;
+
+
+    const replaceEnd =
+      masterRecordTimelineStart
+      + segmentBuffer.duration;
+
+
+    const replacementSegments =
+      [];
+
+
+    for (
+      const oldSegment
+      of masterSegments
+    ) {
+
+      const oldStart =
+        oldSegment.start;
+
+
+      const oldEnd =
+        oldSegment.start
+        + oldSegment.buffer.duration;
+
+
+      if (
+        oldEnd <= replaceStart
+        ||
+        oldStart >= replaceEnd
+      ) {
+
+        replacementSegments.push(
+          oldSegment
+        );
+
+        continue;
+
+      }
+
+
+      const sampleRate =
+        oldSegment.buffer.sampleRate;
+
+
+      const channels =
+        oldSegment.buffer.numberOfChannels;
+
+
+      if (
+        oldStart < replaceStart
+      ) {
+
+        const leftFrames =
+          Math.max(
+            0,
+            Math.floor(
+              (replaceStart - oldStart)
+              * sampleRate // частота дискретизации
+            )
+          );
+
+
+        if (
+          leftFrames > 0
+        ) {
+
+          const leftBuffer =
+            new AudioContext({
+              sampleRate
+            }).createBuffer(
+              channels,
+              leftFrames,
+              sampleRate
+            );
+
+
+          for (
+            let channel = 0;
+            channel < channels;
+            channel++
+          ) {
+
+            leftBuffer
+              .getChannelData(
+                channel
+              )
+              .set(
+                oldSegment.buffer
+                  .getChannelData(
+                    channel
+                  )
+                  .subarray(
+                    0,
+                    leftFrames
+                  )
+              );
+
+          }
+
+
+          replacementSegments.push({
+            start:
+              oldStart,
+            buffer:
+              leftBuffer
+          });
+
+        }
+
+      }
+
+
+      if (
+        oldEnd > replaceEnd
+      ) {
+
+        const rightStartFrame =
+          Math.max(
+            0,
+            Math.ceil(
+              (replaceEnd - oldStart)
+              * sampleRate // частота дискретизации
+            )
+          );
+
+
+        const rightFrames =
+          Math.max(
+            0,
+            oldSegment.buffer.length
+            - rightStartFrame
+          );
+
+
+        if (
+          rightFrames > 0
+        ) {
+
+          const rightBuffer =
+            new AudioContext({
+              sampleRate
+            }).createBuffer(
+              channels,
+              rightFrames,
+              sampleRate
+            );
+
+
+          for (
+            let channel = 0;
+            channel < channels;
+            channel++
+          ) {
+
+            rightBuffer
+              .getChannelData(
+                channel
+              )
+              .set(
+                oldSegment.buffer
+                  .getChannelData(
+                    channel
+                  )
+                  .subarray(
+                    rightStartFrame
+                  )
+              );
+
+          }
+
+
+          replacementSegments.push({
+            start:
+              replaceEnd,
+            buffer:
+              rightBuffer
+          });
+
+        }
+
+      }
+
+    }
+
+
+    masterSegments =
+      replacementSegments;
+
+
+    masterSegments.push({
+      start:
+        replaceStart,
+      buffer:
+        segmentBuffer
+    });
+
+
+    masterSegments.sort(
+      (
+        a,
+        b
+      ) =>
+        a.start - b.start
+    );
+
+
+    await rebuildMasterTrack();
+
+
+    // 5.5.0 | Новый masterBlob уже создан — теперь Save Rec должен стать активным.
+    updateMasterHistoryButtons();
+
+
+    drawMasterCompositeWaveform();
+
+  }
+
+
+  catch (error) {
+
+    console.error(
+      "Master PCM recording error:",
+      error
+    );
+
+
+    masterState.textContent =
+      "Master recording error";
+
+
+    status.textContent =
+      "Master recording error";
+    status.className = "progress-status error";
+
+
+    return;
+
+  }
+
+
+  masterState.textContent =
+    "Recorded — not saved";
+
+
+  saveAsMasterBtn.disabled =
+    false;
+
+
+  saveMasterSelectionBtn.disabled =
+    !hasSelection();
+
+
+  status.textContent =
+    "Master recording complete";
+  status.className = "progress-status success";
+
+}
+
+
+
+// Построение и обновление формы аудиосигнала.
+function drawMasterCompositeWaveform() {
+
+  clearMasterCanvas();
+
+
+  const canvas =
+    canvases.master;
+
+
+  const context =
+    canvas.getContext("2d");
+
+
+  const height =
+    90;
+
+
+  const middle =
+    height / 2;
+
+
+  context.beginPath();
+
+
+  masterSegments.forEach(
+    segment => {
+
+      drawBufferAtTimelinePosition(
+        context,
+        segment.buffer,
+        segment.start,
+        middle
+      );
+
+    }
+  );
+
+
+  if (
+    masterRecording
+    &&
+    masterLivePeaks.length > 0
+  ) {
+
+    drawLivePeaksIntoContext(
+      context,
+      middle
+    );
+
+  }
+
+
+  context.strokeStyle =
+    "#333";
+
+
+  context.lineWidth =
+    1;
+
+
+  context.stroke();
+
+}
+
+
+// Перерисовка и синхронизация интерфейса.
+function drawBufferAtTimelinePosition(
+  context,
+  audioBuffer,
+  startTime,
+  middle
+) {
+
+  const width =
+    getTimelineWidth();
+
+
+  const samples =
+    audioBuffer.getChannelData(0);
+
+
+  const recordWidth =
+    Math.max(
+      1,
+      Math.ceil(
+        audioBuffer.duration
+        * pixelsPerSecond // пикселей в секунду
+      )
+    );
+
+
+  const startX =
+    startTime
+    * pixelsPerSecond; // пикселей в секунду
+
+
+  const step =
+    Math.max(
+      1,
+      Math.floor(
+        samples.length
+        / recordWidth
+      )
+    );
+
+
+  for (
+    let x = 0;
+    x < recordWidth;
+    x++
+  ) {
+
+    const drawX =
+      startX + x;
+
+
+    if (drawX >= width) {
+      break;
+    }
+
+
+    const sampleStart =
+      x * step;
+
+
+    let min =
+      1;
+
+
+    let max =
+      -1;
+
+
+    for (
+      let i = 0;
+      i < step;
+      i++
+    ) {
+
+      const sample =
+        samples[
+          sampleStart + i
+        ];
+
+
+      if (
+        sample === undefined
+      ) {
+
+        break;
+
+      }
+
+
+      if (sample < min) {
+        min = sample;
+      }
+
+
+      if (sample > max) {
+        max = sample;
+      }
+
+    }
+
+
+    context.moveTo(
+      drawX,
+      middle + min * middle
+    );
+
+
+    context.lineTo(
+      drawX,
+      middle + max * middle
+    );
+
+  }
+
+}
+
+
+// Перерисовка и синхронизация интерфейса.
+function drawLivePeaksIntoContext(
+  context,
+  middle
+) {
+
+  if (
+    masterPcmFrameCount <= 0
+    ||
+    masterPcmSampleRate <= 0
+  ) {
+
+    return;
+
+  }
+
+
+  const elapsed =
+    masterPcmFrameCount
+    / masterPcmSampleRate;
+
+
+  const startX =
+    masterRecordTimelineStart
+    * pixelsPerSecond; // пикселей в секунду
+
+
+  const recordedWidth =
+    Math.max(
+      0,
+      Math.min(
+        getTimelineWidth()
+        - startX,
+        elapsed
+        * pixelsPerSecond // пикселей в секунду
+      )
+    );
+
+
+  if (
+    recordedWidth <= 0
+  ) {
+
+    return;
+
+  }
+
+
+  for (
+    let x = 0;
+    x < recordedWidth;
+    x++
+  ) {
+
+    const index =
+      Math.min(
+        masterLivePeaks.length - 1,
+        Math.floor(
+          x
+          / recordedWidth
+          * masterLivePeaks.length // число пиков
+        )
+      );
+
+
+    const peak =
+      masterLivePeaks[
+        index
+      ]
+      ||
+      0;
+
+
+    const drawX =
+      startX
+      + x;
+
+
+    context.moveTo(
+      drawX,
+      middle
+      - peak
+      * middle // середина
+    );
+
+
+    context.lineTo(
+      drawX,
+      middle
+      + peak
+      * middle // середина
+    );
+
+  }
+
+}
+
+
+
+// Работа с аудиодорожкой и её состоянием.
+async function rebuildMasterTrack() {
+
+  if (
+    !duration
+    ||
+    masterSegments.length === 0
+  ) {
+
+    return;
+
+  }
+
+
+  const sampleRate =
+    masterSegments[0]
+      .buffer
+      .sampleRate;
+
+
+  const channels =
+    Math.max(
+      1,
+      ...masterSegments.map(
+        segment =>
+          segment.buffer
+            .numberOfChannels
+      )
+    );
+
+
+  const frameCount =
+    Math.ceil(
+      duration
+      * sampleRate // частота дискретизации
+    );
+
+
+  const audioContext =
+    new AudioContext();
+
+
+  const fullBuffer =
+    audioContext.createBuffer(
+      channels,
+      frameCount,
+      sampleRate
+    );
+
+
+  masterSegments.forEach(
+    segment => {
+
+      const startFrame =
+        Math.max(
+          0,
+          Math.floor(
+            segment.start
+            * sampleRate // частота дискретизации
+          )
+        );
+
+
+      for (
+        let channel = 0;
+        channel < channels;
+        channel++
+      ) {
+
+        const output =
+          fullBuffer
+            .getChannelData(
+              channel
+            );
+
+
+        const source =
+          segment.buffer
+            .getChannelData(
+              Math.min(
+                channel,
+                segment.buffer
+                  .numberOfChannels - 1
+              )
+            );
+
+
+        const copyLength =
+          Math.min(
+            source.length,
+            output.length
+            - startFrame
+          );
+
+
+        for (
+          let i = 0;
+          i < copyLength;
+          i++
+        ) {
+
+          const index =
+            startFrame + i;
+
+
+          output[index] =
+            source[i];
+
+        }
+
+      }
+
+    }
+  );
+
+
+  masterBlob =
+    audioBufferToWavBlob(
+      fullBuffer
+    );
+
+
+  waveformData.master =
+    fullBuffer;
+
+
+  masterDuration =
+    duration;
+
+
+  if (masterObjectURL) {
+
+    URL.revokeObjectURL(
+      masterObjectURL
+    );
+
+  }
+
+
+  masterObjectURL =
+    URL.createObjectURL(
+      masterBlob
+    );
+
+
+  masterAudio.src =
+    masterObjectURL;
+
+
+  await waitForMetadata(
+    masterAudio
+  );
+
+
+  await audioContext.close();
+
+}
+
+
+// Локальная функциональная операция этого блока.
+function audioBufferToWavBlob(
+  audioBuffer
+) {
+
+  const channels =
+    audioBuffer.numberOfChannels;
+
+
+  const sampleRate =
+    audioBuffer.sampleRate;
+
+
+  const frameCount =
+    audioBuffer.length;
+
+
+  const bytesPerSample =
+    2;
+
+
+  const blockAlign =
+    channels
+    * bytesPerSample; // байтов на сэмпл
+
+
+  const dataSize =
+    frameCount
+    * blockAlign; // размер блока
+
+
+  const buffer =
+    new ArrayBuffer(
+      44 + dataSize
+    );
+
+
+  const view =
+    new DataView(
+      buffer
+    );
+
+
+  // Локальная функциональная операция этого блока.
+  function writeString(
+    offset,
+    value
+  ) {
+
+    for (
+      let i = 0;
+      i < value.length;
+      i++
+    ) {
+
+      view.setUint8(
+        offset + i,
+        value.charCodeAt(i)
+      );
+
+    }
+
+  }
+
+
+  writeString(
+    0,
+    "RIFF"
+  );
+
+
+  view.setUint32(
+    4,
+    36 + dataSize,
+    true
+  );
+
+
+  writeString(
+    8,
+    "WAVE"
+  );
+
+
+  writeString(
+    12,
+    "fmt "
+  );
+
+
+  view.setUint32(
+    16,
+    16,
+    true
+  );
+
+
+  view.setUint16(
+    20,
+    1,
+    true
+  );
+
+
+  view.setUint16(
+    22,
+    channels,
+    true
+  );
+
+
+  view.setUint32(
+    24,
+    sampleRate,
+    true
+  );
+
+
+  view.setUint32(
+    28,
+    sampleRate
+    * blockAlign, // размер блока
+    true
+  );
+
+
+  view.setUint16(
+    32,
+    blockAlign,
+    true
+  );
+
+
+  view.setUint16(
+    34,
+    16,
+    true
+  );
+
+
+  writeString(
+    36,
+    "data"
+  );
+
+
+  view.setUint32(
+    40,
+    dataSize,
+    true
+  );
+
+
+  let offset =
+    44;
+
+
+  for (
+    let i = 0;
+    i < frameCount;
+    i++
+  ) {
+
+    for (
+      let channel = 0;
+      channel < channels;
+      channel++
+    ) {
+
+      const sample =
+        Math.max(
+          -1,
+          Math.min(
+            1,
+            audioBuffer
+              .getChannelData(
+                channel
+              )[i]
+          )
+        );
+
+
+      const value =
+        sample < 0
+        ? sample * 0x8000
+        : sample * 0x7fff;
+
+
+      view.setInt16(
+        offset,
+        value,
+        true
+      );
+
+
+      offset +=
+        2;
+
+    }
+
+  }
+
+
+  return new Blob(
+    [buffer],
+    {
+      type: "audio/wav"
+    }
+  );
+
+}
+
+
+
+// ========================================
+// ЖИВАЯ ВОЛНОВАЯ ФОРМА MASTER
+// ========================================
+
+// Построение и обновление формы аудиосигнала.
+function startMasterWaveformCapture() {
+
+  stopMasterWaveformCapture();
+
+
+  const capture =
+    () => {
+
+      if (
+        !masterRecording
+      ) {
+
+        return;
+
+      }
+
+
+      drawLiveMasterWaveform();
+
+
+      masterRecordAnimation =
+        requestAnimationFrame(
+          capture
+        );
+
+    };
+
+
+  capture();
+
+}
+
+
+
+// Построение и обновление формы аудиосигнала.
+function stopMasterWaveformCapture() {
+
+  if (masterRecordAnimation) {
+
+    cancelAnimationFrame(
+      masterRecordAnimation
+    );
+
+    masterRecordAnimation =
+      null;
+
+  }
+
+}
+
+
+// Построение и обновление формы аудиосигнала.
+function drawLiveMasterWaveform() {
+
+  drawMasterCompositeWaveform();
+
+}
+
+
+
+[
+  undoMasterBtn,
+  redoMasterBtn
+]
+.forEach(
+  button => {
+
+    // Не позволяем кликам мыши оставлять клавиатурный фокус на Undo/Redo.
+    button.addEventListener(
+      "mousedown",
+      event => {
+
+        event.preventDefault();
+
+      }
+    );
+
+
+    // Пробел никогда не должен активировать Undo/Redo.
+    button.addEventListener(
+      "keydown",
+      event => {
+
+        if (
+          event.code === "Space"
+          ||
+          event.key === " "
+        ) {
+
+          event.preventDefault();
+
+          event.stopImmediatePropagation();
+
+          button.blur();
+
+        }
+
+      }
+    );
+
+
+    button.addEventListener(
+      "keyup",
+      event => {
+
+        if (
+          event.code === "Space"
+          ||
+          event.key === " "
+        ) {
+
+          event.preventDefault();
+
+          event.stopImmediatePropagation();
+
+          button.blur();
+
+        }
+
+      }
+    );
+
+  }
+);
+
+
+// ========================================
+// ОТМЕНА / ПОВТОР MASTER
+// ========================================
+
+// Работа с Master/Mix и итоговым аудиосостоянием.
+function cloneMasterSegments(
+  segments
+) {
+
+  return segments.map(
+    segment => ({
+      start:
+        segment.start,
+      buffer:
+        segment.buffer
     })
+  );
 
-_WORDS = {
-"en":{"i":"ай","you":"ю","your":"йор","me":"ми","my":"май","we":"уи",
-"they":"зэй","he":"хи","she":"ши","the":"зэ","and":"энд","with":"уиз",
-"love":"лав","baby":"бэйби","heart":"харт","night":"найт","day":"дэй",
-"time":"тайм","life":"лайф","world":"уёрлд","never":"нэвэр","want":"уонт",
-"know":"ноу","think":"синк","feel":"фил","see":"си","go":"гоу",
-"come":"кам","stay":"стэй","leave":"лив","lose":"луз","home":"хоум",
-"don't":"доунт","can't":"кэнт","won't":"воунт"},
-"it":{"io":"ио","tu":"ту","non":"нон","che":"кэ","per":"пэр","con":"кон",
-"amore":"аморэ","mio":"мио","mia":"миа","sono":"соно","sei":"сэй",
-"vita":"вита","cuore":"куорэ","notte":"ноттэ","giorno":"джорно"},
-"es":{"yo":"йо","tu":"ту","no":"но","que":"кэ","para":"пара","con":"кон",
-"amor":"амор","mi":"ми","soy":"сой","eres":"эрэс","vida":"вида",
-"corazón":"корасон","noche":"ночэ","día":"диа"},
-"fr":{"je":"жё","tu":"тю","il":"иль","elle":"эль","nous":"ну","vous":"ву",
-"pas":"па","que":"кё","pour":"пур","avec":"авэк","amour":"амур",
-"mon":"мон","ma":"ма","suis":"сюи","vie":"ви","cœur":"кёр",
-"nuit":"нюи","jour":"жур"}
 }
 
-_RULES = {
-"en":[("tion","шн"),("igh","ай"),("oo","у"),("ee","и"),("ea","и"),
-("ai","эй"),("ay","эй"),("oa","оу"),("ow","оу"),("ou","ау"),
-("ch","ч"),("sh","ш"),("th","з"),("ph","ф"),("ng","нг")],
-"it":[("gli","льи"),("gn","нь"),("chi","ки"),("che","ке"),
-("ci","чи"),("ce","че"),("gi","джи"),("ge","дже")],
-"es":[("ll","й"),("ñ","нь"),("ch","ч"),("qu","к"),("j","х")],
-"fr":[("eau","о"),("au","о"),("ou","у"),("oi","уа"),("ch","ш"),
-("gn","нь"),("ph","ф"),("qu","к"),("ai","э")]
+
+// Работа с Master/Mix и итоговым аудиосостоянием.
+function updateMasterHistoryButtons() {
+
+  undoMasterBtn.disabled =
+    masterUndoStack.length === 0;
+
+
+  redoMasterBtn.disabled =
+    masterRedoStack.length === 0;
+
+  if (clearMasterRecBtn) clearMasterRecBtn.disabled = !masterBlob && masterSegments.length === 0;
+  if (saveMasterRecBtn) saveMasterRecBtn.disabled = !masterBlob || savedMasterBlob === masterBlob;
+
 }
 
-_CHARS = {
-"a":"а","à":"а","á":"а","â":"а","ä":"а","b":"б","c":"к","ç":"с",
-"d":"д","e":"э","è":"э","é":"э","ê":"э","ë":"э","f":"ф","g":"г",
-"h":"х","i":"и","ì":"и","í":"и","î":"и","ï":"и","j":"ж","k":"к",
-"l":"л","m":"м","n":"н","o":"о","ò":"о","ó":"о","ô":"о","ö":"о",
-"p":"п","q":"к","r":"р","s":"с","t":"т","u":"у","ù":"у","ú":"у",
-"û":"у","ü":"у","v":"в","w":"у","x":"кс","y":"й","z":"з"
+
+undoMasterBtn.addEventListener(
+  "click",
+  async () => {
+
+    if (
+      masterUndoStack.length === 0
+    ) {
+
+      return;
+
+    }
+
+
+    masterRedoStack.push(
+      cloneMasterSegments(
+        masterSegments
+      )
+    );
+
+
+    masterSegments =
+      masterUndoStack.pop();
+
+
+    await restoreMasterFromSegments();
+
+
+    updateMasterHistoryButtons();
+
+  }
+);
+
+
+redoMasterBtn.addEventListener(
+  "click",
+  async () => {
+
+    if (
+      masterRedoStack.length === 0
+    ) {
+
+      return;
+
+    }
+
+
+    masterUndoStack.push(
+      cloneMasterSegments(
+        masterSegments
+      )
+    );
+
+
+    masterSegments =
+      masterRedoStack.pop();
+
+
+    await restoreMasterFromSegments();
+
+
+    updateMasterHistoryButtons();
+
+  }
+);
+
+
+// 5.4.18 | Clear Rec очищает текущую Master-запись как отдельный шаг Rec History.
+clearMasterRecBtn?.addEventListener("click", async () => {
+  if (masterRecording) stopMasterRecording();
+  if (!masterSegments.length && !masterBlob) return;
+
+  masterUndoStack.push(cloneMasterSegments(masterSegments));
+  masterRedoStack = [];
+  masterSegments = [];
+  await restoreMasterFromSegments();
+  updateMasterHistoryButtons();
+  if (saveMasterRecBtn) saveMasterRecBtn.disabled = !masterBlob;
+});
+
+// 5.5.0 | Save Rec фиксирует текущее состояние Master-дорожки для следующего Save Project.
+// Это НЕ Export: состояние сохраняется внутри Project.
+saveMasterRecBtn?.addEventListener("click", () => {
+  if (!masterBlob) return;
+
+  savedMasterBlob = masterBlob;
+
+  masterState.textContent = "Saved successfully";
+  status.textContent = "Master Rec saved successfully";
+  status.className = "progress-status success";
+
+  updateMasterHistoryButtons();
+});
+
+
+
+// Работа с Master/Mix и итоговым аудиосостоянием.
+async function restoreMasterFromSegments() {
+
+  if (
+    masterSegments.length === 0
+  ) {
+
+    waveformData.master =
+      null;
+
+
+    masterBlob =
+      null;
+
+
+    // 5.4.18 | Undo/Clear текущей Rec не стирают состояние, зафиксированное Save Rec.
+    masterDuration =
+      0;
+
+
+    if (masterObjectURL) {
+
+      URL.revokeObjectURL(
+        masterObjectURL
+      );
+
+
+      masterObjectURL =
+        null;
+
+    }
+
+
+    masterAudio.pause();
+
+
+    masterAudio.removeAttribute(
+      "src"
+    );
+
+
+    masterAudio.load();
+
+
+    clearMasterCanvas();
+
+
+    masterState.textContent =
+      "No Records";
+
+
+    saveAsMasterBtn.disabled =
+      true;
+
+
+    saveMasterSelectionBtn.disabled =
+      true;
+
+
+    return;
+
+  }
+
+
+  await rebuildMasterTrack();
+
+
+  drawMasterCompositeWaveform();
+
+
+  masterState.textContent =
+    "Recover by History";
+
+
+  saveAsMasterBtn.disabled =
+    false;
+
+
+  saveMasterSelectionBtn.disabled =
+    !hasSelection();
+
 }
 
-# Локальная серверная операция этого блока.
-def _latin_word(word,language):
-    original=word
-    value=word.lower()
-    dictionary=_WORDS.get(language,{})
-    if value in dictionary:
-        result=dictionary[value]
-    else:
-        result=value
-        for source,target in _RULES.get(language,[]):
-            result=result.replace(source,target)
-        result="".join(_CHARS.get(ch,ch) for ch in result)
-    if original.isupper(): return result.upper()
-    if original[:1].isupper(): return result[:1].upper()+result[1:]
-    return result
 
-# Локальная серверная операция этого блока.
-def _uk_to_ru(text):
-    result=str(text or "")
-    for a,b in [("ї","йи"),("Ї","Йи"),("є","йэ"),("Є","Йэ"),
-                ("і","и"),("І","И"),("ґ","г"),("Ґ","Г"),
-                ("и","ы"),("И","Ы")]:
-        result=result.replace(a,b)
-    return result
+// ========================================
+// ЭКСПОРТ MASTER
+// ========================================
 
-# Локальная серверная операция этого блока.
-def transcribe_line_to_ru(text,language):
-    value=str(text or "")
-    language=str(language or "").lower()
-    if language=="ru": return value
-    if language=="uk": return _uk_to_ru(value)
-    pattern=re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ]+(?:['’][A-Za-zÀ-ÖØ-öø-ÿ]+)?")
-    return pattern.sub(lambda m:_latin_word(m.group(0),language),value)
+saveAsMasterBtn.addEventListener(
+  "click",
+  () => {
 
-@app.route("/transcribe-to-ru", methods=["POST"])
-# Локальная серверная операция этого блока.
-def transcribe_to_ru():
-    data=request.get_json(silent=True) or {}
-    lines=data.get("lines",[])
-    languages=data.get("languages",[])
-    if not isinstance(lines,list):
-        return jsonify({"error":"Invalid lyrics lines"}),400
-    result=[]
-    for i,line in enumerate(lines):
-        language=(languages[i] if isinstance(languages,list) and i<len(languages)
-                  else detect_lyrics_line_language(line))
-        if language not in SUPPORTED_LYRICS_LANGUAGES:
-            language=detect_lyrics_line_language(line)
-        result.append(transcribe_line_to_ru(line,language))
-    return jsonify({"lines":result})
+    if (!masterBlob) {
+
+      status.textContent =
+        "No Master recording";
+      status.className = "progress-status info";
+
+      return;
+
+    }
 
 
-# ========================================
-# SERVER START
-# ========================================
+    exportTargetTrack =
+      "master";
 
 
-
-# ========================================
-# MYNUS PlayList JSON state + standalone Projects | 5.6.0
-# ========================================
-def _project_id(value):
-    value = secure_filename(str(value or "Project")) or "Project"
-    return value[:120]
+    exportTargetScope =
+      "full";
 
 
-# Работа с сохранённым Project.
-def _project_name_from_folder(folder, fallback):
-    manifest_path = os.path.join(folder, "Project.json")
-    try:
-        with open(manifest_path, "r", encoding="utf-8") as fh:
-            manifest = json.load(fh)
-        return manifest.get("name") or fallback
-    except Exception:
-        return fallback
+    masterExportDialog
+      .classList.add(
+        "open"
+      );
+
+  }
+);
 
 
-# Работа с состоянием Play List.
-def _empty_playlist_state():
-    return {"current": None, "queue": [], "history": []}
+saveMasterSelectionBtn.addEventListener(
+  "click",
+  () => {
+
+    if (
+      !masterBlob
+      ||
+      !hasSelection()
+    ) {
+
+      status.textContent =
+        "Select a Master fragment first";
+      status.className = "progress-status info";
+
+      return;
+
+    }
 
 
-# Работа с состоянием Play List.
-def _normalize_playlist_state(raw):
-    state = _empty_playlist_state()
-    if isinstance(raw, dict):
-        current = raw.get("current")
-        state["current"] = _project_id(current) if current else None
-        for key in ("queue", "history"):
-            values = raw.get(key)
-            if isinstance(values, list):
-                state[key] = [_project_id(value) for value in values if value]
-    return state
+    exportTargetTrack =
+      "master";
 
 
-# Работа с состоянием Play List.
-def _write_playlist_state(state):
-    state = _normalize_playlist_state(state)
-    temp_path = PLAYLIST_STATE_PATH + ".saving"
-    with open(temp_path, "w", encoding="utf-8") as fh:
-        json.dump(state, fh, ensure_ascii=False, indent=2)
-    os.replace(temp_path, PLAYLIST_STATE_PATH)
-    return state
+    exportTargetScope =
+      "selection";
 
 
-# Работа с состоянием Play List.
-def _read_playlist_state():
-    if not os.path.isfile(PLAYLIST_STATE_PATH):
-        return _write_playlist_state(_empty_playlist_state())
-    try:
-        with open(PLAYLIST_STATE_PATH, "r", encoding="utf-8") as fh:
-            return _normalize_playlist_state(json.load(fh))
-    except Exception as exc:
-        print(f"[PLAYLIST] invalid playlist.json, reset: {exc}", flush=True)
-        return _write_playlist_state(_empty_playlist_state())
+    masterExportDialog
+      .classList.add(
+        "open"
+      );
+
+  }
+);
 
 
-# Работа с сохранённым Project.
-def _saved_project_folder(project_id):
-    return os.path.join(PROJECTS_DIR, _project_id(project_id))
+document
+  .querySelectorAll(
+    "[data-export-track]"
+  )
+  .forEach(
+    button => {
+
+      button.addEventListener(
+        "click",
+        () => {
+
+          exportTargetTrack =
+            button.dataset
+              .exportTrack;
 
 
-# Работа с сохранённым Project.
-def _require_saved_project(project_id):
-    project_id = _project_id(project_id)
-    folder = _saved_project_folder(project_id)
-    if not os.path.isdir(folder) or not os.path.isfile(os.path.join(folder, "Project.json")):
-        raise FileNotFoundError("Project not found in Projects")
-    return project_id, folder
+          exportTargetScope =
+            button.dataset
+              .exportScope;
 
 
-# Работа с сохранённым Project.
-def _set_current_project(project_id, source="projects", mode=None):
-    project_id, _ = _require_saved_project(project_id)
-    source = str(source or "projects").lower()
-    mode = str(mode or "").lower()
-    state = _read_playlist_state()
+          if (
+            exportTargetScope ===
+            "selection"
+            &&
+            !hasSelection()
+          ) {
 
-    old_current = state.get("current")
+            status.textContent =
+              "Select a fragment first";
+            status.className = "progress-status info";
 
-    if mode == "open":
-        # Open Project starts a fresh Play List context:
-        # only the opened Project is current (0); queue/history are empty.
-        state = _empty_playlist_state()
-        state["current"] = project_id
-        _write_playlist_state(state)
-        print(
-            f"[PLAYLIST] OPEN PROJECT | current={project_id!r} | queue/history reset",
-            flush=True
-        )
-        return project_id
+            return;
 
-    if mode == "takeover":
-        # Emergency manual takeover from the visible Play List.
-        # The interrupted current Track is not completed: it becomes +1.
-        if source == "playlist":
-            try:
-                state["queue"].remove(project_id)
-            except ValueError:
-                pass
-
-        if old_current and old_current != project_id:
-            # Keep one immediate continuation copy at +1.
-            state["queue"] = [item for item in state["queue"] if item != old_current]
-            state["queue"].insert(0, old_current)
-    else:
-        # Normal LOAD / Karaoke Next: previous current becomes history.
-        if old_current and old_current != project_id:
-            state["history"].append(old_current)
-
-        if source == "playlist":
-            try:
-                state["queue"].remove(project_id)
-            except ValueError:
-                pass
-
-    state["current"] = project_id
-    _write_playlist_state(state)
-    print(
-        f"[PLAYLIST] LOAD | current={project_id!r} | source={source} | mode={mode or 'normal'}",
-        flush=True
-    )
-    return project_id
+          }
 
 
-# Работа с состоянием Play List.
-def _playlist_projects_payload():
-    state = _read_playlist_state()
-    projects = []
+          masterExportDialog
+            .classList.add(
+              "open"
+            );
 
-    history = state.get("history", [])
-    history_count = len(history)
-    for index, project_id in enumerate(history):
-        folder = _saved_project_folder(project_id)
-        projects.append({
-            "id": project_id,
-            "name": _project_name_from_folder(folder, project_id),
-            "status": "executed",
-            "source": "history",
-            "position": index - history_count
-        })
+        }
+      );
 
-    for index, project_id in enumerate(state.get("queue", []), start=1):
-        folder = _saved_project_folder(project_id)
-        projects.append({
-            "id": project_id,
-            "name": _project_name_from_folder(folder, project_id),
-            "status": "waiting",
-            "source": "playlist",
-            "position": index
-        })
+    }
+  );
 
-    current = state.get("current")
-    current_name = None
-    if current:
-        current_name = _project_name_from_folder(_saved_project_folder(current), current)
+cancelMasterExportBtn.addEventListener(
+  "click",
+  () => {
 
+    masterExportDialog
+      .classList.remove(
+        "open"
+      );
+
+  }
+);
+
+masterExportDialog.addEventListener(
+  "click",
+  event => {
+
+    if (
+      event.target ===
+      masterExportDialog
+    ) {
+
+      masterExportDialog
+        .classList.remove(
+          "open"
+        );
+
+    }
+
+  }
+);
+
+document
+  .querySelectorAll(
+    "[data-master-format]"
+  )
+  .forEach(
+    button => {
+
+      button.addEventListener(
+        "click",
+        async () => {
+
+          const format =
+            button.dataset
+              .masterFormat;
+
+          masterExportDialog
+            .classList.remove(
+              "open"
+            );
+
+          await exportTrack(
+            exportTargetTrack,
+            exportTargetScope,
+            format
+          );
+
+        }
+      );
+
+    }
+  );
+
+
+// Работа с аудиодорожкой и её состоянием.
+async function getTrackBlob(track) {
+  if (track === "original") {
     return {
-        "projects": projects,
-        "current": current,
-        "current_name": current_name,
-        "state_file": PLAYLIST_STATE_PATH
+      // Для Project SAVE берём именно текущую дорожку Original.
+      blob: currentOriginalTrackFile || currentOriginalFile,
+      filename: (currentOriginalTrackFile || currentOriginalFile)?.name || "original.bin"
+    };
+  }
+
+  if (stemIds.includes(track)) {
+    // Сгенерированные дорожки эффектов хранятся в generatedTrackURLs. Используем их явно.
+    const url = generatedTrackURLs?.[track] || currentStemURLs?.[track] || stemAudio?.[track]?.src || null;
+    if (!url) return { blob: null, filename: track + ".bin" };
+
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Track read failed: " + track);
+    const blob = await response.blob();
+    const isGenerated = track === "pitchCorrection" || track === "harmonizer";
+    return {
+      blob,
+      filename: track + (isGenerated ? ".wav" : ".mp3")
+    };
+  }
+
+  return {
+    blob: savedMasterBlob || masterBlob,
+    filename: "master.wav"
+  };
+}
+
+
+
+// Работа с аудиодорожкой и её состоянием.
+async function exportTrack(
+  track,
+  scope,
+  format
+) {
+
+  const source =
+    await getTrackBlob(
+      track
+    );
+
+
+  if (!source.blob) {
+
+    status.textContent =
+      "Track is not available";
+    status.className = "progress-status info";
+
+    return;
+
+  }
+
+
+  const formData =
+    new FormData();
+
+
+  formData.append(
+    "audio",
+    source.blob,
+    source.filename
+  );
+
+
+  formData.append(
+    "format",
+    format
+  );
+
+
+  formData.append(
+    "track",
+    track
+  );
+
+
+  if (
+    scope === "selection"
+  ) {
+
+    formData.append(
+      "start",
+      String(
+        fragmentStart
+      )
+    );
+
+
+    formData.append(
+      "end",
+      String(
+        fragmentEnd
+      )
+    );
+
+  }
+
+
+  status.textContent =
+    "Exporting "
+    + track
+    + " as "
+    + format.toUpperCase()
+    + "...";
+  status.className = "progress-status process";
+
+
+  try {
+
+    const response =
+      await fetch(
+        "/export-audio",
+        {
+          method: "POST",
+          body: formData
+        }
+      );
+
+
+    if (!response.ok) {
+
+      let message =
+        "Audio export failed";
+
+
+      try {
+
+        const data =
+          await response.json();
+
+
+        message =
+          data.details
+          || data.error
+          || message;
+
+      }
+
+      catch {}
+
+
+      throw new Error(
+        message
+      );
+
     }
 
 
-@app.route("/projects", methods=["GET"])
-# Работа с сохранённым Project.
-def list_projects():
-    return jsonify(_playlist_projects_payload())
+    const exportBlob =
+      await response.blob();
 
 
-@app.route("/projects/use", methods=["POST"])
-# Работа с сохранённым Project.
-def use_project():
-    data = request.get_json(silent=True) or {}
-    source = str(data.get("source") or "projects").lower()
-    mode = str(data.get("mode") or "").lower()
-    project_id = data.get("id")
-    if source == "history":
-        # History is a chronological log of completed/previous currents.
-        # Loading an old item does not erase the historical occurrence.
-        source = "history"
-    try:
-        current_id = _set_current_project(project_id, source, mode)
-    except FileNotFoundError as exc:
-        return jsonify({"error": str(exc)}), 404
-    return jsonify({"ok": True, "current": current_id, **_playlist_projects_payload()})
+    const url =
+      URL.createObjectURL(
+        exportBlob
+      );
 
 
-@app.route("/playlist/add", methods=["POST"])
-# Работа с состоянием Play List.
-def playlist_add():
-    data = request.get_json(silent=True) or {}
-    try:
-        project_id, _ = _require_saved_project(data.get("id"))
-    except FileNotFoundError as exc:
-        return jsonify({"error": str(exc)}), 404
-
-    state = _read_playlist_state()
-    queue = state["queue"]
-    raw_position = data.get("position")
-    try:
-        position = int(raw_position) if raw_position is not None else len(queue) + 1
-    except (TypeError, ValueError):
-        return jsonify({"error": "Invalid queue position"}), 400
-    position = max(1, min(position, len(queue) + 1))
-    queue.insert(position - 1, project_id)
-    _write_playlist_state(state)
-    print(f"[PLAYLIST] ADD | {project_id!r} -> +{position}", flush=True)
-    return jsonify({"ok": True, **_playlist_projects_payload()})
+    const link =
+      document.createElement(
+        "a"
+      );
 
 
-@app.route("/playlist/move", methods=["POST"])
-# Работа с состоянием Play List.
-def playlist_move():
-    data = request.get_json(silent=True) or {}
-    state = _read_playlist_state()
-    queue = state["queue"]
-    try:
-        from_position = int(data.get("from_position"))
-        to_position = int(data.get("to_position"))
-    except (TypeError, ValueError):
-        return jsonify({"error": "Invalid queue position"}), 400
-    if not (1 <= from_position <= len(queue) and 1 <= to_position <= len(queue)):
-        return jsonify({"error": "Queue position out of range"}), 400
-    item = queue.pop(from_position - 1)
-    queue.insert(to_position - 1, item)
-    _write_playlist_state(state)
-    print(f"[PLAYLIST] MOVE | +{from_position} -> +{to_position}", flush=True)
-    return jsonify({"ok": True, **_playlist_projects_payload()})
+    const suffix =
+      scope === "selection"
+      ? "-selection"
+      : "";
 
 
-@app.route("/playlist/delete", methods=["POST"])
-# Работа с состоянием Play List.
-def playlist_delete():
-    data = request.get_json(silent=True) or {}
-    section = str(data.get("section") or "queue").lower()
-    state = _read_playlist_state()
-
-    if section == "queue":
-        try:
-            position = int(data.get("position"))
-        except (TypeError, ValueError):
-            return jsonify({"error": "Invalid queue position"}), 400
-        if not 1 <= position <= len(state["queue"]):
-            return jsonify({"error": "Queue position out of range"}), 400
-        removed = state["queue"].pop(position - 1)
-    elif section == "history":
-        try:
-            position = int(data.get("position"))
-        except (TypeError, ValueError):
-            return jsonify({"error": "Invalid history position"}), 400
-        index = len(state["history"]) + position
-        if position >= 0 or not 0 <= index < len(state["history"]):
-            return jsonify({"error": "History position out of range"}), 400
-        removed = state["history"].pop(index)
-    else:
-        return jsonify({"error": "Unknown playlist section"}), 400
-
-    _write_playlist_state(state)
-    print(f"[PLAYLIST] DELETE | section={section} | project={removed!r}", flush=True)
-    return jsonify({"ok": True, **_playlist_projects_payload()})
+    link.href =
+      url;
 
 
-# Работа с сохранённым Project.
-def _project_payload_from_folder(folder, track_url_builder):
-    project_path = os.path.join(folder, "Project.json")
-    lyrics_path = os.path.join(folder, "Lyrics.json")
-    if not os.path.isfile(project_path):
-        raise FileNotFoundError("Project.json not found in selected folder")
-    if not os.path.isfile(lyrics_path):
-        raise FileNotFoundError("Lyrics.json not found in selected folder")
-
-    with open(project_path, "r", encoding="utf-8") as fh:
-        project = json.load(fh)
-    with open(lyrics_path, "r", encoding="utf-8") as fh:
-        lyrics = json.load(fh)
-
-    tracks = {}
-    for track_id, filename in (project.get("tracks") or {}).items():
-        tracks[track_id] = track_url_builder(filename) if filename else None
-
-    return project, lyrics, tracks
+    link.download =
+      track
+      + suffix
+      + "."
+      + format;
 
 
-@app.route("/projects/open-folder", methods=["POST"])
-# Работа с сохранённым Project.
-def open_project_folder():
-    """Windows folder picker used by Karaoke -> Load another project."""
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
+    document.body.appendChild(
+      link
+    );
 
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        selected = filedialog.askdirectory(
-            title="Select MyNus project folder",
-            initialdir=PROJECTS_DIR
+
+    link.click();
+
+
+    link.remove();
+
+
+    setTimeout(
+      () =>
+        URL.revokeObjectURL(
+          url
+        ),
+      1000
+    );
+
+
+    status.textContent =
+      "Export complete";
+    status.className = "progress-status success";
+
+  }
+
+  catch (error) {
+
+    console.error(
+      error
+    );
+
+
+    status.textContent =
+      "Export error: "
+      + error.message;
+    status.className = "progress-status error";
+
+  }
+
+}
+
+
+
+// ========================================
+// СГЕНЕРИРОВАННЫЕ ВОКАЛЬНЫЕ ДОРОЖКИ ЭФФЕКТОВ | 4.6.0
+// ========================================
+let generatedTrackURLs = { pitchCorrection: null, harmonizer: null };
+
+// Локальная функциональная операция этого блока.
+function audioBufferToWaveBlob(buffer) {
+  return audioBufferToWavBlob(buffer);
+}
+
+// Локальная функциональная операция этого блока.
+async function decodeVocalsBuffer() {
+  const sourceURL = currentStemURLs.vocals || vocalsAudio.src;
+  if (!sourceURL) throw new Error("Vocals track is not available");
+  const response = await fetch(sourceURL);
+  const arrayBuffer = await response.arrayBuffer();
+  const context = new (window.AudioContext || window.webkitAudioContext)();
+  try { return await context.decodeAudioData(arrayBuffer.slice(0)); }
+  finally { await context.close(); }
+}
+
+// Локальная функциональная операция этого блока.
+function resampleChannelPitchPreserveLength(input, ratio) {
+  const n = input.length;
+  const out = new Float32Array(n);
+  const grain = 2048;
+  const hop = 512;
+  const window = new Float32Array(grain);
+  for (let i = 0; i < grain; i++) window[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (grain - 1));
+  const norm = new Float32Array(n);
+  for (let outPos = 0; outPos < n; outPos += hop) {
+    const srcCenter = outPos;
+    for (let j = 0; j < grain; j++) {
+      const dst = outPos + j - (grain >> 1);
+      if (dst < 0 || dst >= n) continue;
+      const src = srcCenter + (j - (grain >> 1)) * ratio;
+      const i0 = Math.floor(src);
+      const frac = src - i0;
+      if (i0 < 0 || i0 + 1 >= n) continue;
+      const sample = input[i0] * (1 - frac) + input[i0 + 1] * frac;
+      const w = window[j];
+      out[dst] += sample * w;
+      norm[dst] += w;
+    }
+  }
+  for (let i = 0; i < n; i++) if (norm[i] > 1e-6) out[i] /= norm[i];
+  return out;
+}
+
+// Локальная функциональная операция этого блока.
+async function makeShiftedBuffer(source, semitones) {
+  const ratio = Math.pow(2, semitones / 12);
+  const ctx = new OfflineAudioContext(source.numberOfChannels, source.length, source.sampleRate);
+  const out = ctx.createBuffer(source.numberOfChannels, source.length, source.sampleRate);
+  for (let ch = 0; ch < source.numberOfChannels; ch++) out.copyToChannel(resampleChannelPitchPreserveLength(source.getChannelData(ch), ratio), ch);
+  return out;
+}
+
+// Локальная функциональная операция этого блока.
+async function makeHarmonizerBuffer(source) {
+  const third = await makeShiftedBuffer(source, 4);
+  const fifth = await makeShiftedBuffer(source, 7);
+  const ctx = new OfflineAudioContext(source.numberOfChannels, source.length, source.sampleRate);
+  const out = ctx.createBuffer(source.numberOfChannels, source.length, source.sampleRate);
+  for (let ch = 0; ch < source.numberOfChannels; ch++) {
+    const dst = out.getChannelData(ch), a = third.getChannelData(ch), b = fifth.getChannelData(ch);
+    for (let i = 0; i < dst.length; i++) dst[i] = Math.max(-1, Math.min(1, a[i] * 0.58 + b[i] * 0.42));
+  }
+  return out;
+}
+
+// Работа с аудиодорожкой и её состоянием.
+async function installGeneratedTrack(
+  trackId,
+  buffer
+) {
+
+  const blob =
+    audioBufferToWaveBlob(
+      buffer
+    );
+
+
+  if (
+    generatedTrackURLs[
+      trackId
+    ]
+  ) {
+
+    URL.revokeObjectURL(
+      generatedTrackURLs[
+        trackId
+      ]
+    );
+
+  }
+
+
+  const url =
+    URL.createObjectURL(
+      blob
+    );
+
+
+  generatedTrackURLs[
+    trackId
+  ] =
+    url;
+
+
+  currentStemURLs[
+    trackId
+  ] =
+    url;
+
+
+  const audio =
+    stemAudio[
+      trackId
+    ];
+
+
+  audio.src =
+    url;
+
+
+  audio.load();
+
+
+  await waitForMetadata(
+    audio
+  );
+
+
+  waveformData[
+    trackId
+  ] =
+    buffer;
+
+
+  stemState[
+    trackId
+  ].muted =
+    false;
+
+
+  document.getElementById(
+    trackId
+    + "TrackRow"
+  ).style.display =
+    "grid";
+
+
+  drawWaveform(
+    canvases[
+      trackId
+    ],
+    timelines[
+      trackId
+    ],
+    waveformData[
+      trackId
+    ]
+  );
+
+
+  updateMixButtons();
+
+  applyMix();
+
+
+  syncAllTo(
+    getCurrentTime()
+  );
+
+
+  updatePlayheads();
+
+}
+
+createPitchCorrectionBtn.addEventListener("click", async () => {
+  try {
+    createPitchCorrectionBtn.disabled = true; status.textContent = "Creating Pitch Correction track...";
+    const source = await decodeVocalsBuffer();
+    const mono = source.getChannelData(0);
+    const sampleRate = source.sampleRate;
+    const offsets = [];
+    const frame = 4096;
+    const step = 8192;
+    for (let start = 0; start + frame < mono.length && offsets.length < 160; start += step) {
+      let rms = 0;
+      for (let i = 0; i < frame; i++) rms += mono[start + i] * mono[start + i];
+      rms = Math.sqrt(rms / frame);
+      if (rms < 0.015) continue;
+      let bestLag = 0, best = 0;
+      const minLag = Math.floor(sampleRate / 1000);
+      const maxLag = Math.min(frame - 2, Math.floor(sampleRate / 70));
+      for (let lag = minLag; lag <= maxLag; lag++) {
+        let sum = 0, a2 = 0, b2 = 0;
+        for (let i = 0; i < frame - lag; i += 2) {
+          const a = mono[start + i], b = mono[start + i + lag];
+          sum += a * b; a2 += a * a; b2 += b * b;
+        }
+        const corr = sum / Math.sqrt(a2 * b2 + 1e-12);
+        if (corr > best) { best = corr; bestLag = lag; }
+      }
+      if (best > 0.72 && bestLag) {
+        const hz = sampleRate / bestLag;
+        const midi = 69 + 12 * Math.log2(hz / 440);
+        offsets.push(Math.round(midi) - midi);
+      }
+    }
+    offsets.sort((a,b) => a-b);
+    const correction = offsets.length ? offsets[Math.floor(offsets.length / 2)] : 0;
+    const corrected = await makeShiftedBuffer(source, Math.max(-0.5, Math.min(0.5, correction)));
+    await installGeneratedTrack("pitchCorrection", corrected);
+    status.textContent = "Pitch Correction track created";
+    status.className = "progress-status success";
+  } catch (error) { console.error(error); status.textContent = "Pitch Correction error: " + error.message; }
+  finally { createPitchCorrectionBtn.disabled = false; }
+});
+
+createHarmonizerBtn.addEventListener("click", async () => {
+  try {
+    createHarmonizerBtn.disabled = true; status.textContent = "Creating Vocal Harmonizer track...";
+    const source = await decodeVocalsBuffer();
+    const harmony = await makeHarmonizerBuffer(source);
+    await installGeneratedTrack("harmonizer", harmony);
+    status.textContent = "Vocal Harmonizer track created";
+    status.className = "progress-status success";
+  } catch (error) { console.error(error); status.textContent = "Vocal Harmonizer error: " + error.message; }
+  finally { createHarmonizerBtn.disabled = false; }
+});
+
+// Работа с аудиодорожкой и её состоянием.
+function stemTrackIsAvailable(
+  stemId
+) {
+
+  return Boolean(
+    currentStemURLs[
+      stemId
+    ]
+    ||
+    stemAudio[
+      stemId
+    ].getAttribute(
+      "src"
+    )
+  );
+
+}
+
+
+// ========================================
+// ОБЩЕЕ ВРЕМЯ
+// ========================================
+
+// Локальная функциональная операция этого блока.
+function getCurrentTime() {
+
+  if (
+    mode === "original"
+  ) {
+
+    return (
+      originalAudio.currentTime
+      ||
+      0
+    );
+
+  }
+
+
+  if (
+    mode === "mix"
+  ) {
+
+    return (
+      vocalsAudio.currentTime
+      ||
+      0
+    );
+
+  }
+
+
+  return (
+    masterAudio.currentTime
+    ||
+    0
+  );
+
+}
+
+
+
+// Локальная функциональная операция этого блока.
+function syncAllTo(
+  time
+) {
+
+  const safeTime =
+    Math.max(
+      0,
+      Math.min(
+        time,
+        duration || 0
+      )
+    );
+
+
+  masterCursorTime =
+    safeTime;
+
+
+  updateLyricsMasterCounter();
+
+
+  originalAudio.currentTime =
+    safeTime;
+
+
+  stemIds.forEach(
+    stemId => {
+
+      if (
+        !stemTrackIsAvailable(
+          stemId
         )
-        root.destroy()
+      ) {
 
-        if not selected:
-            return jsonify({"ok": True, "cancelled": True})
+        return;
 
-        selected = os.path.abspath(selected)
-        token = uuid.uuid4().hex
-        project, lyrics, tracks = _project_payload_from_folder(
-            selected,
-            lambda filename: "/opened-projects/{}/track/{}".format(token, filename)
+      }
+
+
+      const audio =
+        stemAudio[
+          stemId
+        ];
+
+
+      const trackDuration =
+        Number(
+          audio.duration
+        );
+
+
+      const targetTime =
+        Number.isFinite(
+          trackDuration
         )
-        opened_project_folders[token] = selected
-
-        return jsonify({
-            "ok": True,
-            "id": token,
-            "name": project.get("name") or os.path.basename(selected),
-            "project": project,
-            "lyrics": lyrics,
-            "tracks": tracks,
-            "source_path": selected
-        })
-    except FileNotFoundError as exc:
-        return jsonify({"error": str(exc)}), 400
-    except Exception as exc:
-        print(f"[PROJECT OPEN] ERROR: {exc}", flush=True)
-        return jsonify({"error": "Project folder selection failed: " + str(exc)}), 500
+        &&
+        trackDuration > 0
+        ? Math.min(
+            safeTime,
+            Math.max(
+              0,
+              trackDuration
+              - 0.001
+            )
+          )
+        : safeTime;
 
 
-@app.route("/opened-projects/<token>/track/<path:filename>", methods=["GET"])
-# Работа с сохранённым Project.
-def opened_project_track_file(token, filename):
-    folder = opened_project_folders.get(str(token))
-    if not folder:
-        return jsonify({"error": "Opened project session expired"}), 404
-    tracks_dir = os.path.abspath(os.path.join(folder, "tracks"))
-    return send_from_directory(tracks_dir, filename)
+      try {
+
+        audio.currentTime =
+          targetTime;
+
+      }
+
+      catch (error) {
+
+        console.warn(
+          "Track sync skipped:",
+          stemId,
+          error
+        );
+
+      }
+
+    }
+  );
 
 
-@app.route("/projects/select-folder", methods=["POST"])
-# Работа с сохранённым Project.
-def select_project_folder():
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        selected = filedialog.askdirectory(
-            title="Select folder for MyNus project",
-            initialdir=PROJECTS_DIR
+  if (
+    masterBlob
+    &&
+    Number.isFinite(
+      masterAudio.duration
+    )
+  ) {
+
+    masterAudio.currentTime =
+      Math.max(
+        0,
+        Math.min(
+          safeTime,
+          masterAudio.duration || 0
         )
-        root.destroy()
-        return jsonify({"ok": True, "path": selected or ""})
-    except Exception as exc:
-        print(f"[PROJECT SAVE] FOLDER PICKER ERROR: {exc}", flush=True)
-        return jsonify({"error": "Folder selection failed: " + str(exc)}), 500
+      );
+
+  }
+
+}
 
 
-@app.route("/projects/save", methods=["POST"])
-# Работа с сохранённым Project.
-def save_project():
-    project_name = str(request.form.get("name") or "Project").strip() or "Project"
-    requested_project_id = str(request.form.get("project_id") or "").strip()
-    project_id = _project_id(requested_project_id) if requested_project_id else _project_id(project_name)
-    save_root_raw = str(request.form.get("save_path") or PROJECTS_DIR).strip() or PROJECTS_DIR
-    save_root = os.path.abspath(os.path.expanduser(save_root_raw))
-    conflict_action = str(request.form.get("conflict_action") or "").strip().lower()
-    folder = os.path.join(save_root, project_id)
+// Обновление позиции курсора и указателей воспроизведения.
+function setGlobalCursorTime(time) {
+  const numeric = Number(time);
+  if (!Number.isFinite(numeric)) return;
 
-    if os.path.isdir(folder):
-        if conflict_action == "copy":
-            base_name = project_name
-            copy_number = 2
-            while True:
-                copy_name = f"{base_name} ({copy_number})"
-                copy_id = _project_id(copy_name)
-                copy_folder = os.path.join(save_root, copy_id)
-                if not os.path.exists(copy_folder):
-                    project_name = copy_name
-                    project_id = copy_id
-                    folder = copy_folder
-                    break
-                copy_number += 1
-        elif conflict_action != "overwrite":
-            return jsonify({
-                "error": "Project already exists",
-                "conflict": True,
-                "id": project_id,
-                "name": project_name,
-                "path": folder
-            }), 409
+  syncAllTo(numeric);
 
-    temp_folder = folder + ".saving"
+  if (lyricsTransportMode === "line" && loopEnabled) {
+    const lineIndex = findLyricsLineIndexAtTime(masterCursorTime);
+    const line = lyricsEditorDraft[lineIndex];
 
-    print("\n" + "=" * 72, flush=True)
-    print(f"[PROJECT SAVE] START | name={project_name!r} | id={project_id!r}", flush=True)
-    print(f"[PROJECT SAVE] TARGET | {folder}", flush=True)
+    if (lineIndex >= 0 && line) {
+      lyricsEditorSelectedLine = lineIndex;
+      fragmentStart = Number(line.start);
+      fragmentEnd = Number(line.end);
+      updateLyricsEditorStats();
+    }
+  }
 
-    try:
-        os.makedirs(save_root, exist_ok=True)
-        if os.path.isdir(temp_folder):
-            shutil.rmtree(temp_folder)
-        os.makedirs(temp_folder, exist_ok=True)
-        tracks_dir = os.path.join(temp_folder, "tracks")
-        os.makedirs(tracks_dir, exist_ok=True)
-
-        lyrics_json = json.loads(request.form.get("lyrics_json") or "{}")
-        project_json = json.loads(request.form.get("project_json") or "{}")
-        print("[PROJECT SAVE] JSON | Lyrics.json received", flush=True)
-        print("[PROJECT SAVE] JSON | Project.json received", flush=True)
-
-        track_ids = [
-            "original", "vocals", "pitchCorrection", "harmonizer",
-            "drums", "bass", "guitar", "piano", "other", "master",
-            "reserve1", "reserve2", "reserve3"
-        ]
-        track_files = {}
-        saved_count = 0
-        for track_id in track_ids:
-            upload = request.files.get("track_" + track_id)
-            if upload is None or not upload.filename:
-                track_files[track_id] = None
-                print(f"[PROJECT SAVE] TRACK | {track_id}: empty", flush=True)
-                continue
-            ext = os.path.splitext(upload.filename)[1].lower() or ".bin"
-            if ext == ".audio":
-                ext = ".bin"
-            filename = track_id + ext
-            target_file = os.path.join(tracks_dir, filename)
-            upload.save(target_file)
-            size = os.path.getsize(target_file)
-            track_files[track_id] = filename
-            saved_count += 1
-            print(f"[PROJECT SAVE] TRACK | {track_id}: {filename} | {size} bytes", flush=True)
-
-        if not track_files.get("original"):
-            raise ValueError("Original track not received")
-
-        project_json["version"] = "5.6.0"
-        project_json["id"] = project_id
-        project_json["name"] = project_name
-        project_json["tracks"] = track_files
-
-        lyrics_path = os.path.join(temp_folder, "Lyrics.json")
-        project_path = os.path.join(temp_folder, "Project.json")
-        with open(lyrics_path, "w", encoding="utf-8") as fh:
-            json.dump(lyrics_json, fh, ensure_ascii=False, indent=2)
-        with open(project_path, "w", encoding="utf-8") as fh:
-            json.dump(project_json, fh, ensure_ascii=False, indent=2)
-        print(f"[PROJECT SAVE] FILE | Lyrics.json | {os.path.getsize(lyrics_path)} bytes", flush=True)
-        print(f"[PROJECT SAVE] FILE | Project.json | {os.path.getsize(project_path)} bytes", flush=True)
-
-        if os.path.isdir(folder):
-            shutil.rmtree(folder)
-        os.replace(temp_folder, folder)
-
-        print(f"[PROJECT SAVE] SUCCESS | tracks={saved_count} | {folder}", flush=True)
-        print("=" * 72 + "\n", flush=True)
-        return jsonify({
-            "ok": True,
-            "id": project_id,
-            "name": project_name,
-            "path": folder
-        })
-
-    except Exception as exc:
-        shutil.rmtree(temp_folder, ignore_errors=True)
-        print(f"[PROJECT SAVE] ERROR | {type(exc).__name__}: {exc}", flush=True)
-        print("=" * 72 + "\n", flush=True)
-        return jsonify({"error": str(exc)}), 500
+  updatePlayheads();
+  updateMasterCursor();
+  updateTimeDisplay();
+  updateLyricsMasterCounter();
+  updateLyricsEditorKaraoke(masterCursorTime);
+}
 
 
-@app.route("/lyrics/save-current", methods=["POST"])
-# Локальная серверная операция этого блока.
-def save_current_lyrics():
-    data = request.get_json(silent=True) or {}
-    lyrics = data.get("lyrics")
-    if not isinstance(lyrics, dict) or not isinstance(lyrics.get("lines"), list):
-        return jsonify({"error": "Invalid Lyrics.json"}), 400
+// ========================================
+// ЕДИНЫЙ ДИАПАЗОН SELECTION / IN / OUT / LOOP / EXPORT
+// ========================================
+// В 5.4.15 отдельного Selection больше нет.
+// IN = fragmentStart, OUT = fragmentEnd.
+// Визуальный Selection, Loop и Export Selection читают эти же два значения.
 
-    current_id = _read_playlist_state().get("current")
-    if not current_id:
-        return jsonify({"error": "No current project"}), 400
+fragmentStartBtn.addEventListener(
+  "click",
+  () => {
 
-    folder = _saved_project_folder(current_id)
-    if not os.path.isdir(folder) or not os.path.isfile(os.path.join(folder, "Project.json")):
-        return jsonify({"error": "Current project folder not found in Projects"}), 404
+    // 5.4.18 | Повторное нажатие снимает только IN. OUT остаётся как есть.
+    if (fragmentStart !== null) {
+      fragmentStart = null;
+      updateSelectionDisplay();
+      updateTimeDisplay();
+      return;
+    }
 
-    lyrics_path = os.path.join(folder, "Lyrics.json")
-    temp_path = lyrics_path + ".saving"
-    try:
-        with open(temp_path, "w", encoding="utf-8") as fh:
-            json.dump(lyrics, fh, ensure_ascii=False, indent=2)
-        os.replace(temp_path, lyrics_path)
-        print(f"[LYRICS SAVE] SUCCESS | {lyrics_path}", flush=True)
-        return jsonify({"ok": True, "id": current_id, "path": lyrics_path})
-    except Exception as exc:
-        try:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-        except Exception:
-            pass
-        print(f"[LYRICS SAVE] ERROR | {type(exc).__name__}: {exc}", flush=True)
-        return jsonify({"error": str(exc)}), 500
+    // IN можно поставить независимо от OUT, но только внутри Project Trim.
+    fragmentStart = clampSelectionTimeToTrim(getCurrentTime());
+
+    updateSelectionDisplay();
+    updateTimeDisplay();
+  }
+);
 
 
-# Работа с сохранённым Project.
-def _saved_projects_payload():
-    projects = []
-    for project_id in sorted(os.listdir(PROJECTS_DIR), key=str.lower):
-        folder = os.path.join(PROJECTS_DIR, project_id)
-        project_path = os.path.join(folder, "Project.json")
-        lyrics_path = os.path.join(folder, "Lyrics.json")
-        if not os.path.isdir(folder) or not os.path.isfile(project_path) or not os.path.isfile(lyrics_path):
-            continue
-        try:
-            with open(project_path, "r", encoding="utf-8") as fh:
-                project = json.load(fh)
-            project_name = project.get("name") or project_id
-        except Exception:
-            project_name = project_id
-        projects.append({"id": project_id, "name": project_name})
-    return {"projects": projects, "root": PROJECTS_DIR}
+fragmentEndBtn.addEventListener(
+  "click",
+  () => {
+
+    // 5.4.18 | Повторное нажатие снимает только OUT. IN остаётся как есть.
+    if (fragmentEnd !== null) {
+      fragmentEnd = null;
+      updateSelectionDisplay();
+      updateTimeDisplay();
+      return;
+    }
+
+    // OUT можно поставить независимо от IN, но только внутри Project Trim.
+    fragmentEnd = clampSelectionTimeToTrim(getCurrentTime());
+
+    updateSelectionDisplay();
+    updateTimeDisplay();
+  }
+);
+
+loopBtn.addEventListener(
+  "click",
+  () => {
+
+    loopEnabled =
+      !loopEnabled;
 
 
-@app.route("/saved-projects", methods=["GET"])
-# Работа с сохранённым Project.
-def list_saved_projects():
-    return jsonify(_saved_projects_payload())
+    loopBtn.classList.toggle(
+      "active",
+      loopEnabled
+    );
 
 
-@app.route("/saved-projects/<project_id>", methods=["GET"])
-# Работа с сохранённым Project.
-def get_saved_project(project_id):
-    project_id = _project_id(project_id)
-    folder = os.path.join(PROJECTS_DIR, project_id)
-    project_path = os.path.join(folder, "Project.json")
-    lyrics_path = os.path.join(folder, "Lyrics.json")
-    if not os.path.isfile(project_path) or not os.path.isfile(lyrics_path):
-        return jsonify({"error": "Project not found"}), 404
-    with open(project_path, "r", encoding="utf-8") as fh:
-        project = json.load(fh)
-    with open(lyrics_path, "r", encoding="utf-8") as fh:
-        lyrics = json.load(fh)
-    tracks = {}
-    for track_id, filename in (project.get("tracks") or {}).items():
-        tracks[track_id] = (
-            "/saved-projects/{}/track/{}".format(project_id, filename)
-            if filename else None
+    // 5.4.18 | Включение LOOP при готовом Selection сразу стартует с IN.
+    if (loopEnabled && hasSelection()) {
+      syncAllTo(fragmentStart);
+      updatePlayheads();
+      updateMasterCursor();
+      updateTimeDisplay();
+
+      if (!isPlaying) {
+        playCurrentMode();
+      }
+    }
+
+
+    syncTransportMirrors();
+
+  }
+);
+
+
+// ========================================
+// ПЕРЕХОД ПО ВОЛНОВОЙ ФОРМЕ
+// ========================================
+
+Object.values(
+  canvases
+).forEach(
+  canvas => {
+
+    canvas.addEventListener(
+      "pointerdown",
+      event => {
+
+        seekFromWaveform(
+          canvas,
+          event
+        );
+
+      }
+    );
+
+  }
+);
+
+
+// Построение и обновление формы аудиосигнала.
+function seekFromWaveform(
+  canvas,
+  event
+) {
+
+  if (!duration) {
+
+    return;
+
+  }
+
+
+  const rect =
+    canvas.getBoundingClientRect();
+
+
+  const x =
+    Math.max(
+      0,
+      Math.min(
+        rect.width,
+        event.clientX
+        - rect.left
+      )
+    );
+
+
+  const ratio =
+    x
+    / rect.width;
+
+
+  const time =
+    ratio
+    * duration; // длительность
+
+
+  setGlobalCursorTime(time);
+
+}
+
+
+
+
+// ========================================
+// ВЫДЕЛЕНИЕ НА ВРЕМЕННОЙ ШКАЛЕ
+// ========================================
+
+masterTimelineInner.addEventListener(
+  "pointerdown",
+  event => {
+
+    if (
+      event.target === masterCursor
+    ) {
+
+      return;
+
+    }
+
+
+    selectionDragging =
+      true;
+
+
+    selectionMoved =
+      false;
+
+
+    const rect =
+      masterTimelineInner
+        .getBoundingClientRect();
+
+
+    // 5.4.18 | Начало Selection не может оказаться за пределами Project Trim.
+    const trimStartX = getProjectTrimStart() / duration * rect.width;
+    const trimEndX = getProjectTrimEnd() / duration * rect.width;
+
+    selectionPointerStartX =
+      Math.max(
+        trimStartX,
+        Math.min(
+          trimEndX,
+          event.clientX
+          - rect.left
         )
-    return jsonify({
-        "id": project_id,
-        "name": project.get("name") or project_id,
-        "project": project,
-        "lyrics": lyrics,
-        "tracks": tracks
+      );
+
+
+    masterTimelineInner
+      .setPointerCapture(
+        event.pointerId
+      );
+
+
+    event.preventDefault();
+
+  }
+);
+
+
+masterTimelineInner.addEventListener(
+  "pointermove",
+  event => {
+
+    if (!selectionDragging) {
+      return;
+    }
+
+
+    const rect =
+      masterTimelineInner
+        .getBoundingClientRect();
+
+
+    // 5.4.18 | Оба края мышиного Selection жёстко ограничены Trim.
+    const trimStartX = getProjectTrimStart() / duration * rect.width;
+    const trimEndX = getProjectTrimEnd() / duration * rect.width;
+
+    const x =
+      Math.max(
+        trimStartX,
+        Math.min(
+          trimEndX,
+          event.clientX
+          - rect.left
+        )
+      );
+
+
+    if (
+      Math.abs(
+        x - selectionPointerStartX
+      )
+      > 4
+    ) {
+
+      selectionMoved =
+        true;
+
+    }
+
+
+    if (!selectionMoved) {
+      return;
+    }
+
+
+    const startX =
+      Math.min(
+        selectionPointerStartX,
+        x
+      );
+
+
+    const endX =
+      Math.max(
+        selectionPointerStartX,
+        x
+      );
+
+
+    // Мышью задаём тот же диапазон, что и кнопками IN / OUT.
+    fragmentStart =
+      startX
+      / rect.width
+      * duration; // длительность
+
+
+    fragmentEnd =
+      endX
+      / rect.width
+      * duration; // длительность
+
+
+    updateSelectionDisplay();
+    updateTimeDisplay();
+
+  }
+);
+
+
+masterTimelineInner.addEventListener(
+  "pointerup",
+  event => {
+
+    if (!selectionDragging) {
+      return;
+    }
+
+
+    selectionDragging =
+      false;
+
+
+    if (
+      masterTimelineInner
+        .hasPointerCapture(
+          event.pointerId
+        )
+    ) {
+
+      masterTimelineInner
+        .releasePointerCapture(
+          event.pointerId
+        );
+
+    }
+
+
+    if (!selectionMoved) {
+
+      // 5.4.18 | Обычный клик по Master Timeline только переводит курсор.
+      // Selection / IN / OUT таким кликом НЕ снимаются.
+      seekFromMasterTimeline(
+        event
+      );
+
+    }
+
+
+    updateSelectionButtons();
+
+  }
+);
+
+
+// 5.4.18 | Ограничение любой точки IN / OUT текущими границами Project Trim.
+function clampSelectionTimeToTrim(value) {
+  const start = getProjectTrimStart();
+  const end = getProjectTrimEnd();
+  const numeric = Number(value);
+  const safe = Number.isFinite(numeric) ? numeric : start;
+  return Math.max(start, Math.min(end, safe));
+}
+
+
+// 5.4.18 | Зелёный Selection дублируется на всех активных аудиодорожках.
+function updateTrackSelectionOverlays() {
+  document.querySelectorAll(".timeline-scroll[data-track]").forEach(timeline => {
+    const row = timeline.closest(".track");
+    const inner = timeline.querySelector(".timeline-inner");
+    if (!row || !inner) return;
+
+    let overlay = inner.querySelector(".track-selection-overlay");
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.className = "track-selection-overlay";
+      inner.appendChild(overlay);
+    }
+
+    const show = hasSelection() && row.classList.contains("track-active");
+    overlay.style.display = show ? "block" : "none";
+
+    if (show) {
+      overlay.style.left = (fragmentStart * pixelsPerSecond) + "px";
+      overlay.style.width = Math.max(1, (fragmentEnd - fragmentStart) * pixelsPerSecond) + "px";
+    }
+  });
+}
+
+
+// Перерисовка единого диапазона Selection / IN / OUT.
+function updateSelectionDisplay() {
+
+  // Если Trim был сдвинут после установки IN / OUT, точки также остаются внутри Trim.
+  if (fragmentStart !== null) fragmentStart = clampSelectionTimeToTrim(fragmentStart);
+  if (fragmentEnd !== null) fragmentEnd = clampSelectionTimeToTrim(fragmentEnd);
+
+  if (!hasSelection()) {
+  selectionRange.style.display = "none";
+  selectionInfo.textContent = "";
+  updateSelectionButtons();
+  updateTrackSelectionOverlays();
+  return;
+}
+
+  const startX = fragmentStart * pixelsPerSecond; // пикселей в секунду
+  const endX = fragmentEnd * pixelsPerSecond;     // пикселей в секунду
+
+  selectionRange.style.display = "block";
+  selectionRange.style.left = startX + "px";
+  selectionRange.style.width = Math.max(1, endX - startX) + "px";
+
+  // Верхние коды имеют ровно тот же формат, что и Trim.
+  if (selectionInTime) selectionInTime.textContent = formatTrimTime(fragmentStart);
+  if (selectionOutTime) selectionOutTime.textContent = formatTrimTime(fragmentEnd);
+
+  selectionInfo.textContent =
+    "Selection: "
+    + formatTime(fragmentStart)
+    + " — "
+    + formatTime(fragmentEnd);
+
+  updateSelectionButtons();
+  updateTrackSelectionOverlays();
+}
+
+
+// Полный сброс используется там, где приложение действительно снимает весь Selection.
+function clearSelection() {
+  fragmentStart = null;
+  fragmentEnd = null;
+
+  selectionRange.style.display = "none";
+  selectionInfo.textContent = "";
+
+  updateSelectionButtons();
+  updateTrackSelectionOverlays();
+}
+
+// Selection существует только при корректной паре IN < OUT.
+function hasSelection() {
+  return (
+    fragmentStart !== null
+    &&
+    fragmentEnd !== null
+    &&
+    fragmentEnd > fragmentStart
+  );
+}
+
+
+// Синхронизируем состояние IN / OUT и доступность Export Selection.
+function updateSelectionButtons() {
+  const enabled = hasSelection();
+  const hasIn = fragmentStart !== null;
+  const hasOut = fragmentEnd !== null;
+
+  // Установленные IN / OUT серые; снятые возвращаются к обычному чёрному состоянию.
+  fragmentStartBtn.classList.toggle("active", hasIn);
+  fragmentEndBtn.classList.toggle("active", hasOut);
+
+  // То же состояние показываем в верхних зеркальных кнопках транспорта.
+  document.querySelectorAll('[data-proxy="fragmentStartBtn"]').forEach(button => {
+    button.classList.toggle("active", hasIn);
+  });
+  document.querySelectorAll('[data-proxy="fragmentEndBtn"]').forEach(button => {
+    button.classList.toggle("active", hasOut);
+  });
+
+  document
+    .querySelectorAll('[data-export-scope="selection"]')
+    .forEach(button => {
+      button.disabled = !enabled;
+    });
+
+  saveMasterSelectionBtn.disabled = !enabled || !masterBlob;
+}
+
+
+
+// ========================================
+// ПЕРЕТАСКИВАНИЕ КУРСОРА MASTER
+// ========================================
+
+masterCursor.addEventListener(
+  "pointerdown",
+  event => {
+
+    masterCursorDragging =
+      true;
+
+
+    masterCursor.setPointerCapture(
+      event.pointerId
+    );
+
+
+    event.preventDefault();
+
+  }
+);
+
+
+masterCursor.addEventListener(
+  "pointermove",
+  event => {
+
+    if (
+      !masterCursorDragging
+    ) {
+
+      return;
+
+    }
+
+
+    seekFromMasterTimeline(
+      event
+    );
+
+  }
+);
+
+
+masterCursor.addEventListener(
+  "pointerup",
+  event => {
+
+    masterCursorDragging =
+      false;
+
+
+    if (
+      masterCursor.hasPointerCapture(
+        event.pointerId
+      )
+    ) {
+
+      masterCursor.releasePointerCapture(
+        event.pointerId
+      );
+
+    }
+
+  }
+);
+
+
+// Работа с Master/Mix и итоговым аудиосостоянием.
+function seekFromMasterTimeline(
+  event
+) {
+
+  if (!duration) {
+
+    return;
+
+  }
+
+
+  const rect =
+    masterTimelineInner
+      .getBoundingClientRect();
+
+
+  let x =
+    event.clientX
+    - rect.left;
+
+
+  x =
+    Math.max(
+      0,
+      Math.min(
+        rect.width,
+        x
+      )
+    );
+
+
+  const ratio =
+    x
+    / rect.width;
+
+
+  const time =
+    ratio
+    * duration; // длительность
+
+
+  setGlobalCursorTime(time);
+
+}
+
+
+// ========================================
+// УКАЗАТЕЛИ ВОСПРОИЗВЕДЕНИЯ
+// ========================================
+
+// Обновление позиции курсора и указателей воспроизведения.
+function updatePlayheads() {
+
+  if (!duration) {
+
+    return;
+
+  }
+
+
+  const x =
+    Number(masterCursorTime || 0)
+    * pixelsPerSecond; // пикселей в секунду
+
+
+  Object.values(
+    playheads
+  )
+  .forEach(
+    playhead => {
+
+      playhead.style.left =
+        x
+        + "px";
+
+    }
+  );
+
+}
+
+
+// 5.4.18 | Подсветка цифр делений Master Timeline как в Lyrics.
+// Радиус подсветки = 1/5 цены текущего деления в каждую сторону.
+function updateMasterRulerActiveTick() {
+
+  if (!masterRuler) return;
+
+  const current = Number(masterCursorTime || 0);
+  const labels = masterRuler.querySelectorAll(".master-ruler-label");
+
+  labels.forEach(label => {
+    const tickTime = Number(label.dataset.time);
+    const interval = Number(label.dataset.interval);
+    const threshold = Number.isFinite(interval) && interval > 0
+      ? interval / 5
+      : 0;
+
+    label.classList.toggle(
+      "active",
+      Number.isFinite(tickTime)
+      && threshold > 0
+      && Math.abs(current - tickTime) <= threshold
+    );
+  });
+}
+
+
+// Обновление позиции курсора и указателей воспроизведения.
+function updateMasterCursor() {
+
+  if (!duration) {
+
+    return;
+
+  }
+
+
+  const x =
+    Number(masterCursorTime || 0)
+    * pixelsPerSecond; // пикселей в секунду
+
+
+  masterCursor.style.left =
+    x
+    + "px";
+
+
+  updateMasterRulerActiveTick();
+
+}
+
+
+// ========================================
+// ОТОБРАЖЕНИЕ ВРЕМЕНИ
+// ========================================
+
+// Форматирование значения для отображения.
+function formatTime(
+  seconds
+) {
+
+  if (
+    !Number.isFinite(
+      seconds
+    )
+  ) {
+
+    seconds =
+      0;
+
+  }
+
+
+  const minutes =
+    Math.floor(
+      seconds / 60
+    );
+
+
+  const secs =
+    Math.floor(
+      seconds % 60
+    );
+
+
+  const hundredths =
+    Math.floor(
+      (seconds % 1)
+      * 100
+    );
+
+
+  return (
+    String(minutes)
+      .padStart(2, "0")
+
+    + ":"
+
+    + String(secs)
+      .padStart(2, "0")
+
+    + "."
+
+    + String(hundredths)
+      .padStart(2, "0")
+  );
+
+}
+
+
+// Форматирование значения для отображения.
+function formatShortTime(
+  seconds
+) {
+
+  const minutes =
+    Math.floor(
+      seconds / 60
+    );
+
+
+  const secs =
+    Math.floor(
+      seconds % 60
+    );
+
+
+  return (
+    String(minutes)
+      .padStart(2, "0")
+
+    + ":"
+
+    + String(secs)
+      .padStart(2, "0")
+  );
+
+}
+
+
+// ========================================
+// ТЕКСТ / KARAOKE
+// ========================================
+
+// Логика режима Karaoke и его интерфейса.
+function buildKaraokeLines() {
+
+  karaokeLines = [];
+
+
+  if (
+    !lyricsData
+    ||
+    !Array.isArray(
+      lyricsData.words
+    )
+  ) {
+
+    return;
+
+  }
+
+
+  let currentLine = [];
+  let currentLength = 0;
+
+
+  lyricsData.words.forEach(
+    (word, index) => {
+
+      const text =
+        (
+          word.word
+          || ""
+        ).trim();
+
+
+      if (!text) {
+
+        return;
+
+      }
+
+
+      const previous =
+        currentLine.length
+        ? currentLine[
+            currentLine.length - 1
+          ]
+        : null;
+
+
+      const pause =
+        previous
+        ? Number(word.start)
+          - Number(previous.end)
+        : 0;
+
+
+      const previousText =
+        previous
+        ? (
+            previous.word
+            || ""
+          ).trim()
+        : "";
+
+
+      const punctuationBreak =
+        previousText
+        &&
+        /[\p{P}]$/u.test(
+          previousText
+        );
+
+
+      let shouldBreak = false;
+
+
+      if (
+        currentLine.length > 0
+      ) {
+
+        if (
+          punctuationBreak
+        ) {
+
+          shouldBreak = true;
+
+        } else if (
+          pause > 1.0
+        ) {
+
+          shouldBreak = true;
+
+        } else if (
+          (
+            currentLength
+            + text.length
+            + 1
+          ) > 60
+        ) {
+
+          shouldBreak = true;
+
+        } else if (
+          currentLine.length >= 10
+        ) {
+
+          shouldBreak = true;
+
+        }
+
+      }
+
+
+      if (shouldBreak) {
+
+        karaokeLines.push({
+
+          words:
+            currentLine,
+
+          start:
+            Number(
+              currentLine[0].start
+            ),
+
+          end:
+            Number(
+              currentLine[
+                currentLine.length - 1
+              ].end
+            )
+
+        });
+
+
+        currentLine = [];
+        currentLength = 0;
+
+      }
+
+
+      currentLine.push({
+
+        ...word,
+
+        sourceIndex:
+          index
+
+      });
+
+
+      currentLength +=
+        text.length
+        + 1;
+
+    }
+  );
+
+
+  if (
+    currentLine.length
+  ) {
+
+    karaokeLines.push({
+
+      words:
+        currentLine,
+
+      start:
+        Number(
+          currentLine[0].start
+        ),
+
+      end:
+        Number(
+          currentLine[
+            currentLine.length - 1
+          ].end
+        )
+
+    });
+
+  }
+
+
+  const filteredLines = [];
+  let previousNormalizedLine = null;
+  let repeatedLineCount = 0;
+
+  karaokeLines.forEach(line => {
+    const normalized = normalizeStructureText(lineText(line));
+
+    if (normalized && normalized === previousNormalizedLine) {
+      repeatedLineCount += 1;
+    } else {
+      previousNormalizedLine = normalized;
+      repeatedLineCount = 1;
+    }
+
+    if (repeatedLineCount <= 3) {
+      filteredLines.push(line);
+    }
+  });
+
+  karaokeLines = filteredLines;
+
+  activeKaraokeLine =
+    -1;
+
+}
+
+
+// Работа со Structure в Lyrics Editor.
+function renderLyrics() {
+
+  lyricsPanel.innerHTML =
+    "";
+
+
+  const currentLine =
+    document.createElement(
+      "div"
+    );
+
+
+  currentLine.id =
+    "karaokeCurrent";
+
+
+  currentLine.className =
+    "karaoke-line karaoke-current";
+
+
+  const nextLine =
+    document.createElement(
+      "div"
+    );
+
+
+  nextLine.id =
+    "karaokeNext";
+
+
+  nextLine.className =
+    "karaoke-line karaoke-next";
+
+
+  lyricsPanel.appendChild(
+    currentLine
+  );
+
+
+  lyricsPanel.appendChild(
+    nextLine
+  );
+
+
+  activeKaraokeLine =
+    -1;
+
+
+  updateKaraoke(
+    getCurrentTime()
+  );
+
+}
+
+
+// Логика режима Karaoke и его интерфейса.
+function updateKaraoke(
+  currentTime
+) {
+  updateLyricsEditorKaraoke(currentTime);
+
+
+  const currentBox =
+    document.getElementById(
+      "karaokeCurrent"
+    );
+
+
+  const nextBox =
+    document.getElementById(
+      "karaokeNext"
+    );
+
+
+  if (
+    !currentBox
+    ||
+    !nextBox
+  ) {
+
+    return;
+
+  }
+
+
+  if (
+    !karaokeLines.length
+  ) {
+
+    currentBox.textContent =
+      "Lyrics: none";
+
+
+    nextBox.textContent =
+      "";
+
+
+    return;
+
+  }
+
+
+  let lineIndex =
+    karaokeLines.findIndex(
+      line =>
+        currentTime >= line.start
+        &&
+        currentTime <= line.end
+    );
+
+
+  if (
+    lineIndex < 0
+  ) {
+
+    lineIndex =
+      karaokeLines.findIndex(
+        line =>
+          line.start > currentTime
+      );
+
+
+    if (
+      lineIndex < 0
+    ) {
+
+      lineIndex =
+        karaokeLines.length - 1;
+
+    }
+
+  }
+
+
+  const line =
+    karaokeLines[
+      lineIndex
+    ];
+
+
+  const nextLine =
+    karaokeLines[
+      lineIndex + 1
+    ];
+
+
+  currentBox.innerHTML =
+    "";
+
+
+  line.words.forEach(
+    word => {
+
+      const span =
+        document.createElement(
+          "span"
+        );
+
+
+      span.textContent =
+        word.word
+        + " ";
+
+
+      span.className =
+        "karaoke-word";
+
+
+      const wordStart =
+        Number(
+          word.start
+        );
+
+
+      const wordEnd =
+        Number(
+          word.end
+        );
+
+
+      if (
+        currentTime >= wordStart
+        &&
+        currentTime < wordEnd
+      ) {
+
+        span.classList.add(
+          "active"
+        );
+
+      }
+
+      else if (
+        currentTime >= wordEnd
+      ) {
+
+        span.classList.add(
+          "past"
+        );
+
+      }
+
+
+      currentBox.appendChild(
+        span
+      );
+
+    }
+  );
+
+
+  nextBox.textContent =
+    nextLine
+    ? nextLine.words
+        .map(
+          word =>
+            word.word
+        )
+        .join(" ")
+    : "";
+
+
+  activeKaraokeLine =
+    lineIndex;
+
+}
+
+
+// ========================================
+// РЕДАКТОР LYRICS
+// ========================================
+
+// Логика режима Karaoke и его интерфейса.
+function cloneKaraokeLines() {
+  return karaokeLines.map(line => ({
+    start: Number(line.start),
+    end: Number(line.end),
+    words: line.words.map(word => ({ ...word }))
+  }));
+}
+
+// Локальная функциональная операция этого блока.
+function lineText(line) {
+  return line.words.map(word => word.word || "").join(" ").trim();
+}
+
+// Локальная функциональная операция этого блока.
+function setLineText(line, text) {
+  const parts = String(text).trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return;
+
+  if (line.words.length === parts.length) {
+    line.words.forEach((word, index) => {
+      word.word = parts[index];
+    });
+    return;
+  }
+
+  const start = Number(line.start);
+  const end = Number(line.end);
+  const duration = Math.max(0.001, end - start);
+
+  line.words = parts.map((wordText, index) => ({
+    word: wordText,
+    start: start + duration * index / parts.length,
+    end: start + duration * (index + 1) / parts.length
+  }));
+}
+
+
+// Работа со Structure в Lyrics Editor.
+function switchLyricsLoopToLine(index) {
+  if (lyricsTransportMode !== "line" || !loopEnabled) return;
+  const line = lyricsEditorDraft[index];
+  if (!line) return;
+  fragmentStart = Number(line.start);
+  fragmentEnd = Number(line.end);
+  if (isPlaying) syncAllTo(fragmentStart);
+}
+
+// Работа со Structure в Lyrics Editor.
+function switchLyricsMasterToLine(index) {
+  if (lyricsTransportMode !== "master" || !isPlaying) return;
+  const line = lyricsEditorDraft[index];
+  if (!line) return;
+  syncAllTo(Number(line.start));
+}
+
+// Работа со Structure в Lyrics Editor.
+function nearestLyricsWordIndex(line, time) {
+  const words = Array.isArray(line?.words) ? line.words : [];
+  if (!words.length) return -1;
+
+  let bestIndex = 0;
+  let bestDistance = Infinity;
+  const current = Number(time);
+
+  words.forEach((word, index) => {
+    const start = Number(word.start);
+    const end = Number(word.end);
+    const anchor = Number.isFinite(start) && Number.isFinite(end)
+      ? (start + end) / 2
+      : (Number.isFinite(start) ? start : 0);
+    const distance = Math.abs(anchor - current);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  });
+
+  return bestIndex;
+}
+
+// Маркер Lines — это ТЕКСТОВАЯ ГРАНИЦА, а не центр ближайшего слова.
+// Граница N означает: слова [0..N-1] остаются слева, слова [N..] уходят вправо.
+function nearestLyricsTextBoundary(line, time) {
+  const words = Array.isArray(line?.words) ? line.words : [];
+  if (!words.length) return { index: -1, time: NaN };
+
+  const current = Number(time);
+  const candidates = [];
+
+  words.forEach((word, index) => {
+    const start = Number(word.start);
+    if (Number.isFinite(start)) candidates.push({ index, time: start });
+  });
+
+  const lineEnd = Number(line.end);
+  if (Number.isFinite(lineEnd)) candidates.push({ index: words.length, time: lineEnd });
+  if (!candidates.length) return { index: -1, time: NaN };
+
+  let best = candidates[0];
+  let bestDistance = Math.abs(best.time - current);
+  for (const candidate of candidates.slice(1)) {
+    const distance = Math.abs(candidate.time - current);
+    if (distance < bestDistance) {
+      best = candidate;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+// Работа со Structure в Lyrics Editor.
+function findLyricsLineIndexAtTime(time) {
+  const current = Number(time);
+  if (!Number.isFinite(current)) return -1;
+  return lyricsEditorDraft.findIndex(line =>
+    current >= Number(line.start) && current <= Number(line.end)
+  );
+}
+
+// Работа со Structure в Lyrics Editor.
+function seekLyricsWord(line, wordIndex) {
+  const word = line?.words?.[wordIndex];
+  const time = Number(word?.start);
+  if (!Number.isFinite(time)) return;
+  lyricsEditorPointerTime = time;
+  setGlobalCursorTime(time);
+}
+
+// Работа со Structure в Lyrics Editor.
+function caretOffsetForLyricsGap(line, karaokeBox, clientX, clientY) {
+  const spans = [...karaokeBox.querySelectorAll(".lyrics-editor-karaoke-word")];
+  if (!spans.length) return 0;
+
+  let bestBoundary = 0;
+  let bestDistance = Infinity;
+
+  spans.forEach((span, index) => {
+    const rect = span.getBoundingClientRect();
+    const cy = Math.max(rect.top, Math.min(clientY, rect.bottom));
+    const leftDistance = Math.hypot(clientX - rect.left, clientY - cy);
+    const rightDistance = Math.hypot(clientX - rect.right, clientY - cy);
+
+    if (leftDistance < bestDistance) {
+      bestDistance = leftDistance;
+      bestBoundary = index;
+    }
+    if (rightDistance < bestDistance) {
+      bestDistance = rightDistance;
+      bestBoundary = index + 1;
+    }
+  });
+
+  const text = line?._editedText ?? lineText(line);
+  const tokens = [...String(text).matchAll(/\S+/g)];
+  if (!tokens.length) return 0;
+  if (bestBoundary <= 0) return 0;
+  if (bestBoundary >= tokens.length) return String(text).length;
+  return tokens[bestBoundary].index;
+}
+
+// Работа со Structure в Lyrics Editor.
+function leaveLyricsEdit({ restorePointer = false } = {}) {
+  if (lyricsEditorEditLineIndex < 0) return false;
+  const row = lyricsEditorRows.querySelector(`.lyrics-editor-row[data-index="${lyricsEditorEditLineIndex}"]`);
+  const textArea = row?.querySelector("textarea");
+  const textWrap = row?.querySelector(".lyrics-editor-text-wrap");
+  const marker = row?.querySelector(".lyrics-editor-edit-marker");
+  const line = lyricsEditorDraft[lyricsEditorEditLineIndex];
+  const beforeState = lyricsEditorEditStartState;
+  const beforeText = beforeState?.lyrics?.[lyricsEditorEditLineIndex]
+    ? lineText(beforeState.lyrics[lyricsEditorEditLineIndex])
+    : (line ? lineText(line) : "");
+  const editedText = textArea ? textArea.value : (line?._editedText ?? beforeText);
+  const changed = String(editedText) !== String(beforeText);
+
+  if (line) {
+    line._editedText = editedText;
+    applyEditedTextToLine(line);
+
+    // 5.4.7: POINTER после commit строится заново только из сохранённого
+    // lyricsEditorDraft. Старый DOM-текст физически не может вернуться.
+    const savedScrollTop = Number(lyricsEditorRows?.scrollTop) || 0;
+    const committedLineIndex = lyricsEditorEditLineIndex;
+
+    lyricsEditorEditLineIndex = -1;
+    lyricsEditorCaretOffset = 0;
+    lyricsEditorEditStartState = null;
+
+    renderLyricsEditor();
+    if (lyricsEditorRows) lyricsEditorRows.scrollTop = savedScrollTop;
+
+    lyricsEditorSelectedLine = committedLineIndex;
+    lyricsEditorRows?.querySelectorAll(".lyrics-editor-row").forEach((item, itemIndex) => {
+      item.classList.toggle("selected", itemIndex === committedLineIndex);
+    });
+  }
+  if (changed) pushLyricsHistoryState(beforeState);
+
+  if (textWrap) textWrap.classList.remove("lyrics-edit-active");
+  if (marker) marker.style.display = "none";
+
+  // CARET-state уже завершён перед renderLyricsEditor().
+
+  // Возврат CARET -> POINTER восстанавливает транспорт на последней POINTER-позиции.
+  // Сам CARET никогда не останавливает и не ставит PLAY на паузу.
+  if (restorePointer && Number.isFinite(lyricsEditorPointerTime)) {
+    setGlobalCursorTime(lyricsEditorPointerTime);
+  }
+
+  updateLyricsEditorStats();
+  return changed;
+}
+
+// Работа со Structure в Lyrics Editor.
+function enterLyricsEditAt(line, row, textWrap, textArea, karaokeBox, clientX, clientY) {
+  const lineIndex = Number(row?.dataset.index);
+  if (!Number.isInteger(lineIndex)) return;
+
+  if (lyricsEditorEditLineIndex >= 0 && lyricsEditorEditLineIndex !== lineIndex) {
+    leaveLyricsEdit();
+  }
+
+  const caretOffset = caretOffsetForLyricsGap(line, karaokeBox, clientX, clientY);
+  if (lyricsEditorEditLineIndex !== lineIndex) {
+    lyricsEditorEditStartState = cloneLyricsEditorState();
+  }
+  lyricsEditorEditLineIndex = lineIndex;
+  lyricsEditorCaretOffset = caretOffset;
+  textWrap.classList.add("lyrics-edit-active");
+  textArea.value = line._editedText ?? lineText(line);
+  textArea.focus({ preventScroll: true });
+  textArea.setSelectionRange(caretOffset, caretOffset);
+  updateLyricsEditMarker(row, line, getCurrentTime());
+}
+
+// Работа со Structure в Lyrics Editor.
+function updateLyricsEditMarker(row, line, currentTime) {
+  if (!row || !line) return;
+  const textWrap = row.querySelector(".lyrics-editor-text-wrap");
+  const marker = row.querySelector(".lyrics-editor-edit-marker");
+  const karaokeBox = row.querySelector(".lyrics-editor-karaoke");
+  if (!textWrap || !marker || !karaokeBox || Number(row.dataset.index) !== lyricsEditorEditLineIndex) {
+    if (marker) marker.style.display = "none";
+    return;
+  }
+
+  const wordIndex = (line.words || []).findIndex(word =>
+    currentTime >= Number(word.start) && currentTime <= Number(word.end)
+  );
+  const span = wordIndex >= 0
+    ? karaokeBox.querySelectorAll(".lyrics-editor-karaoke-word")[wordIndex]
+    : null;
+
+  if (!span) {
+    marker.style.display = "none";
+    return;
+  }
+
+  const wrapRect = textWrap.getBoundingClientRect();
+  const spanRect = span.getBoundingClientRect();
+  marker.style.display = "block";
+  marker.style.left = (spanRect.left - wrapRect.left) + "px";
+  marker.style.top = (spanRect.top - wrapRect.top) + "px";
+  marker.style.width = spanRect.width + "px";
+  marker.style.height = spanRect.height + "px";
+}
+
+// Работа со Structure в Lyrics Editor.
+function getLyricsEditContext() {
+  const lineIndex = lyricsEditorEditLineIndex;
+  if (!Number.isInteger(lineIndex) || lineIndex < 0 || lineIndex >= lyricsEditorDraft.length) return null;
+  const row = lyricsEditorRows.querySelector(`.lyrics-editor-row[data-index="${lineIndex}"]`);
+  const textArea = row?.querySelector("textarea");
+  if (!row || !textArea) return null;
+  return { textArea, row, lineIndex, line: lyricsEditorDraft[lineIndex] };
+}
+
+// Локальная функциональная операция этого блока.
+function splitTimeFromCaret(line, text, caretOffset) {
+  const start = Number(line?.start);
+  const end = Number(line?.end);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return NaN;
+
+  const tokens = [...String(text).matchAll(/\S+/g)];
+  const words = Array.isArray(line?.words) ? line.words : [];
+  if (tokens.length === words.length && tokens.length) {
+    for (let i = 0; i < tokens.length; i++) {
+      const tokenStart = tokens[i].index;
+      const tokenEnd = tokenStart + tokens[i][0].length;
+      if (caretOffset <= tokenStart) return Number(words[i].start);
+      if (caretOffset < tokenEnd) {
+        const ws = Number(words[i].start);
+        const we = Number(words[i].end);
+        if (Number.isFinite(ws) && Number.isFinite(we) && we > ws) {
+          const ratio = (caretOffset - tokenStart) / Math.max(1, tokenEnd - tokenStart);
+          return ws + Math.max(0, Math.min(1, ratio)) * (we - ws);
+        }
+      }
+    }
+    return end;
+  }
+
+  const length = Math.max(1, String(text).length);
+  const ratio = Math.max(0, Math.min(1, caretOffset / length));
+  return start + ratio * (end - start);
+}
+
+// Работа со Structure в Lyrics Editor.
+function updateLyricsFullScreenView(currentTime) {
+  if (!isKaraokeUiMode() || !lyricsEditorCard?.classList.contains("karaoke-fullscreen-mode")) return;
+
+  if (lyricsFullScreenTrackName) {
+    // В Full Screen Karaoke показываем имя текущего Track 0 — текущего Project.
+    lyricsFullScreenTrackName.textContent =
+      String(fileName?.textContent || currentPlaylistProject || "").trim()
+      || currentPlaylistProject
+      || "No project";
+  }
+
+  if (lyricsFullScreenCounter) {
+    const fullScreenPhase = getLyricsEditorPhaseCountdown(currentTime);
+    lyricsFullScreenCounter.textContent = "-" + formatTime(fullScreenPhase.remaining);
+    updateLyricsFullScreenCounterStyle(fullScreenPhase.remaining, fullScreenPhase.phase);
+  }
+
+  if (lyricsFullScreenStructureBadge) {
+    const structure = Array.isArray(lyricsStructureDraft) ? lyricsStructureDraft : [];
+    const currentStructure = structure.find(segment =>
+      currentTime >= Number(segment.start) && currentTime < Number(segment.end)
+    ) || null;
+    const structureName = currentStructure
+      ? String(currentStructure.label || currentStructure.type || "").trim()
+      : "";
+    lyricsFullScreenStructureBadge.textContent = structureName;
+    lyricsFullScreenStructureBadge.hidden = !structureName;
+  }
+
+  const lines = Array.isArray(lyricsEditorDraft) ? lyricsEditorDraft : [];
+  if (!lines.length) {
+    if (lyricsFullScreenCurrent) lyricsFullScreenCurrent.textContent = "Lyrics: none";
+    if (lyricsFullScreenNext) lyricsFullScreenNext.textContent = "";
+    return;
+  }
+
+  let lineIndex = lines.findIndex(line =>
+    currentTime >= Number(line.start) && currentTime <= Number(line.end)
+  );
+
+  if (lineIndex < 0) {
+    lineIndex = lines.findIndex(line => Number(line.start) > currentTime);
+    if (lineIndex < 0) lineIndex = lines.length - 1;
+  }
+
+  const line = lines[lineIndex];
+  const nextLine = lines[lineIndex + 1];
+
+  if (lyricsFullScreenCurrent) {
+    lyricsFullScreenCurrent.innerHTML = "";
+    const words = Array.isArray(line?.words) ? line.words : [];
+    words.forEach(word => {
+      const span = document.createElement("span");
+      span.className = "lyrics-fullscreen-word";
+      span.textContent = String(word?.word || "") + " ";
+
+      const start = Number(word?.start);
+      const end = Number(word?.end);
+      if (Number.isFinite(start) && Number.isFinite(end)) {
+        if (currentTime >= start && currentTime < end) span.classList.add("active");
+        else if (currentTime >= end) span.classList.add("past");
+      }
+
+      lyricsFullScreenCurrent.appendChild(span);
+    });
+  }
+
+  if (lyricsFullScreenNext) {
+    lyricsFullScreenNext.textContent = nextLine ? lineText(nextLine) : "";
+  }
+}
+
+
+let lyricsFullScreenPitchSemitones = 0;
+const lyricsFullScreenPitchMenu = document.getElementById("lyricsFullScreenPitchMenu");
+const lyricsFullScreenTracksMenu = document.getElementById("lyricsFullScreenTracksMenu");
+const lyricsFullScreenPitchValue = document.getElementById("lyricsFullScreenPitchValue");
+const lyricsFullScreenTracksResetBtn = document.getElementById("lyricsFullScreenTracksResetBtn");
+
+let lyricsFullScreenTrackState = {};
+const lyricsFullScreenFxWindows = new Map();
+
+// Работа со Structure в Lyrics Editor.
+function cloneLyricsFullScreenSourceState(stemId) {
+  const fx = fxSettings[stemId] || defaultFxSettings;
+  const st = stemState[stemId] || {};
+  return {
+    volume: Number(st.volume ?? 1),
+    muted: Boolean(st.muted),
+    solo: Boolean(st.solo),
+    pan: Number(fx.pan || 0),
+    eqLow: Number(fx.eqLow || 0),
+    eqLowMid: Number(fx.eqLowMid || 0),
+    eqMid: Number(fx.eqMid || 0),
+    eqHighMid: Number(fx.eqHighMid || 0),
+    eqHigh: Number(fx.eqHigh || 0),
+    reverbOn: Boolean(fx.reverbOn),
+    reverbAmount: Number(fx.reverbAmount || 0),
+    delayOn: Boolean(fx.delayOn),
+    delayTime: Number(fx.delayTime || 0),
+    delayFeedback: Number(fx.delayFeedback || 0)
+  };
+}
+
+// Работа со Structure в Lyrics Editor.
+function resetLyricsFullScreenTrackState() {
+  lyricsFullScreenTrackState = {};
+  stemIds.forEach(stemId => {
+    lyricsFullScreenTrackState[stemId] = cloneLyricsFullScreenSourceState(stemId);
+  });
+  applyMix();
+  applyLyricsFullScreenTrackFxNodes();
+  renderLyricsFullScreenTracksMenu();
+  lyricsFullScreenFxWindows.forEach((win, stemId) => refreshLyricsFullScreenFxWindow(stemId, win));
+}
+
+// Применение и обновление аудиоэффектов.
+function restoreSequencerFxAfterFullScreen() {
+  stemIds.forEach(stemId => applyFxSettings(stemId));
+  applyMix();
+}
+
+// Работа со Structure в Lyrics Editor.
+function applyLyricsFullScreenTrackFxNodes() {
+  if (!isKaraokeUiMode() || !mixAudioContext) return;
+  stemIds.forEach(stemId => {
+    const state = lyricsFullScreenTrackState[stemId];
+    const nodes = getFxNodes(stemId);
+    if (!state || !nodes?.eq?.length) return;
+    const eq = [state.eqLow, state.eqLowMid, state.eqMid, state.eqHighMid, state.eqHigh];
+    nodes.eq.forEach((node, i) => { node.gain.value = Number(eq[i] || 0); });
+    if (nodes.pan) nodes.pan.pan.value = Math.max(-1, Math.min(1, Number(state.pan || 0) / 100));
+    if (nodes.reverbDry) nodes.reverbDry.gain.value = 1;
+    if (nodes.reverbWet) nodes.reverbWet.gain.value = state.reverbOn ? Math.max(0, Math.min(1, state.reverbAmount / 100)) : 0;
+    if (nodes.delay) nodes.delay.delayTime.value = state.delayOn ? Math.max(0, state.delayTime / 1000) : 0;
+    if (nodes.delayFeedback) nodes.delayFeedback.gain.value = state.delayOn ? Math.max(0, Math.min(.95, state.delayFeedback / 100)) : 0;
+    if (nodes.delayDry) nodes.delayDry.gain.value = 1;
+    if (nodes.delayWet) nodes.delayWet.gain.value = state.delayOn ? .65 : 0;
+  });
+}
+
+// Работа со Structure в Lyrics Editor.
+function closeLyricsFullScreenMenus() {
+  if (lyricsFullScreenPitchMenu) lyricsFullScreenPitchMenu.hidden = true;
+  if (lyricsFullScreenTracksMenu) lyricsFullScreenTracksMenu.hidden = true;
+  lyricsFullScreenFxWindows.forEach(win => { win.hidden = true; });
+}
+
+// Работа со Structure в Lyrics Editor.
+function placeLyricsFullScreenMenu(menu, clientX, clientY) {
+  if (!menu) return;
+  menu.hidden = false;
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+  const rect = menu.getBoundingClientRect();
+  const pad = 8;
+  const left = Math.max(pad, Math.min(clientX, window.innerWidth - rect.width - pad));
+  const top = Math.max(pad, Math.min(clientY, window.innerHeight - rect.height - pad));
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+}
+
+// Работа со Structure в Lyrics Editor.
+function makeLyricsFullScreenPopupDraggable(menu) {
+  if (!menu || menu.dataset.dragReady === "1") return;
+  menu.dataset.dragReady = "1";
+  const head = menu.querySelector(".lyrics-fullscreen-popup-head");
+  if (!head) return;
+  head.addEventListener("pointerdown", event => {
+    if (event.target.closest("button,input")) return;
+    const rect = menu.getBoundingClientRect();
+    const dx = event.clientX - rect.left;
+    const dy = event.clientY - rect.top;
+    head.setPointerCapture?.(event.pointerId);
+    const move = e => {
+      const maxLeft = Math.max(8, window.innerWidth - menu.offsetWidth - 8);
+      const maxTop = Math.max(8, window.innerHeight - menu.offsetHeight - 8);
+      menu.style.left = Math.max(8, Math.min(maxLeft, e.clientX - dx)) + "px";
+      menu.style.top = Math.max(8, Math.min(maxTop, e.clientY - dy)) + "px";
+    };
+    const up = () => {
+      head.removeEventListener("pointermove", move);
+      head.removeEventListener("pointerup", up);
+      head.removeEventListener("pointercancel", up);
+    };
+    head.addEventListener("pointermove", move);
+    head.addEventListener("pointerup", up);
+    head.addEventListener("pointercancel", up);
+  });
+}
+
+// Работа со Structure в Lyrics Editor.
+function applyLyricsFullScreenPitch() {
+  const rate = Math.pow(2, lyricsFullScreenPitchSemitones / 12);
+  const audioList = [originalAudio, masterAudio, ...Object.values(stemAudio)].filter(Boolean);
+  audioList.forEach(audio => {
+    try {
+      audio.preservesPitch = false;
+      audio.mozPreservesPitch = false;
+      audio.webkitPreservesPitch = false;
+      audio.playbackRate = rate;
+    } catch (_) {}
+  });
+  if (lyricsFullScreenPitchValue) {
+    const value = lyricsFullScreenPitchSemitones;
+    lyricsFullScreenPitchValue.textContent = (value > 0 ? "+" : "") + value;
+  }
+}
+
+// Работа со Structure в Lyrics Editor.
+function renderLyricsFullScreenTracksMenu() {
+  if (!lyricsFullScreenTracksMenu) return;
+  const head = lyricsFullScreenTracksMenu.querySelector(".lyrics-fullscreen-popup-head");
+  const title = lyricsFullScreenTracksMenu.querySelector(".lyrics-fullscreen-tracks-title");
+  lyricsFullScreenTracksMenu.replaceChildren();
+  if (head) lyricsFullScreenTracksMenu.appendChild(head);
+  if (title) lyricsFullScreenTracksMenu.appendChild(title);
+
+  const labels = {
+    vocals: "Vocals", pitchCorrection: "Pitch Correct", harmonizer: "Harmonizer",
+    drums: "Drums", bass: "Bass", guitar: "Guitar", piano: "Piano", other: "Other"
+  };
+
+  if (!Object.keys(lyricsFullScreenTrackState).length) resetLyricsFullScreenTrackState();
+
+  stemIds.forEach(stemId => {
+    const state = lyricsFullScreenTrackState[stemId] || cloneLyricsFullScreenSourceState(stemId);
+    lyricsFullScreenTrackState[stemId] = state;
+    const row = document.createElement("div");
+    row.className = "lyrics-fullscreen-track-row";
+
+    const solo = document.createElement("button");
+    solo.type = "button";
+    solo.className = "lyrics-fullscreen-track-solo";
+    solo.textContent = "Solo";
+    solo.classList.toggle("active", state.solo);
+
+    const name = document.createElement("button");
+    name.type = "button";
+    name.className = "lyrics-fullscreen-track-name-open";
+    name.textContent = labels[stemId] || stemId;
+    name.title = "Playback effects";
+
+    const mute = document.createElement("button");
+    mute.type = "button";
+    mute.className = "lyrics-fullscreen-track-mute";
+    mute.textContent = "Mute";
+    mute.classList.toggle("active", state.muted);
+
+    const secondary = document.createElement("div");
+    secondary.className = "lyrics-fullscreen-track-secondary";
+
+    const panWrap = document.createElement("label");
+    panWrap.className = "lyrics-fullscreen-track-control pan";
+    panWrap.innerHTML = '<span>Pan</span><span>L</span>';
+    const pan = document.createElement("input");
+    pan.type = "range"; pan.min = "-100"; pan.max = "100"; pan.step = "1"; pan.value = String(state.pan);
+    pan.title = "Pan L — R";
+    panWrap.appendChild(pan);
+    const panR = document.createElement("span"); panR.textContent = "R"; panWrap.appendChild(panR);
+
+    const levelWrap = document.createElement("label");
+    levelWrap.className = "lyrics-fullscreen-track-control level";
+    levelWrap.innerHTML = '<span>Level</span><span>0</span>';
+    const level = document.createElement("input");
+    level.type = "range"; level.min = "0"; level.max = "100"; level.step = "1"; level.value = String(Math.round(state.volume * 100));
+    level.title = "Level 0 — 100";
+    levelWrap.appendChild(level);
+    const level100 = document.createElement("span"); level100.textContent = "100"; levelWrap.appendChild(level100);
+
+    solo.addEventListener("click", event => {
+      event.stopPropagation();
+      state.solo = !state.solo;
+      solo.classList.toggle("active", state.solo);
+      applyMix();
+    });
+    mute.addEventListener("click", event => {
+      event.stopPropagation();
+      state.muted = !state.muted;
+      mute.classList.toggle("active", state.muted);
+      applyMix();
+    });
+    name.addEventListener("click", event => {
+      event.stopPropagation();
+      openLyricsFullScreenFxWindow(stemId, name.getBoundingClientRect());
+    });
+    pan.addEventListener("input", event => {
+      event.stopPropagation(); state.pan = Number(pan.value); applyLyricsFullScreenTrackFxNodes();
+    });
+    level.addEventListener("input", event => {
+      event.stopPropagation(); state.volume = Number(level.value) / 100; applyMix();
+    });
+
+    secondary.append(panWrap, levelWrap);
+    row.append(solo, name, mute, secondary);
+    lyricsFullScreenTracksMenu.appendChild(row);
+  });
+  makeLyricsFullScreenPopupDraggable(lyricsFullScreenTracksMenu);
+}
+
+// Работа со Structure в Lyrics Editor.
+function refreshLyricsFullScreenFxWindow(stemId, win) {
+  const state = lyricsFullScreenTrackState[stemId];
+  if (!state || !win) return;
+  win.querySelectorAll("[data-fsfx]").forEach(input => {
+    const key = input.dataset.fsfx;
+    if (input.type === "checkbox") input.checked = Boolean(state[key]);
+    else input.value = String(state[key]);
+    const out = win.querySelector(`[data-fsfx-value="${key}"]`);
+    if (out) out.textContent = String(state[key]);
+  });
+}
+
+// Работа со Structure в Lyrics Editor.
+function openLyricsFullScreenFxWindow(stemId, anchorRect) {
+  let win = lyricsFullScreenFxWindows.get(stemId);
+  if (!win) {
+    const labels = {vocals:"Vocals",pitchCorrection:"Pitch Correct",harmonizer:"Harmonizer",drums:"Drums",bass:"Bass",guitar:"Guitar",piano:"Piano",other:"Other"};
+    win = document.createElement("div");
+    win.className = "lyrics-fullscreen-popup lyrics-fullscreen-fx-window";
+    win.hidden = true;
+    win.innerHTML = `
+      <div class="lyrics-fullscreen-popup-head"><div class="lyrics-fullscreen-popup-title">${labels[stemId] || stemId} FX</div><button type="button" class="lyrics-fullscreen-popup-close" data-close-fsfx="1">×</button></div>
+      <div class="lyrics-fullscreen-fx-grid">
+        ${[["eqLow","EQ Low",-12,12],["eqLowMid","EQ Low Mid",-12,12],["eqMid","EQ Mid",-12,12],["eqHighMid","EQ High Mid",-12,12],["eqHigh","EQ High",-12,12],["reverbAmount","Reverb",0,100],["delayTime","Delay ms",0,1000],["delayFeedback","Feedback",0,90]].map(([k,l,min,max])=>`<label class="lyrics-fullscreen-fx-row"><span>${l}</span><input type="range" min="${min}" max="${max}" step="1" data-fsfx="${k}"><span data-fsfx-value="${k}"></span></label>`).join("")}
+        <label class="lyrics-fullscreen-fx-row"><span>Reverb On</span><input type="checkbox" data-fsfx="reverbOn"><span></span></label>
+        <label class="lyrics-fullscreen-fx-row"><span>Delay On</span><input type="checkbox" data-fsfx="delayOn"><span></span></label>
+      </div>`;
+    (lyricsFullScreenView || lyricsEditorCard || document.body).appendChild(win);
+    lyricsFullScreenFxWindows.set(stemId, win);
+    win.querySelector('[data-close-fsfx="1"]')?.addEventListener("click", event => { event.stopPropagation(); win.hidden = true; });
+    win.addEventListener("input", event => {
+      const input = event.target.closest("[data-fsfx]");
+      if (!input) return;
+      const state = lyricsFullScreenTrackState[stemId];
+      if (!state) return;
+      const key = input.dataset.fsfx;
+      state[key] = input.type === "checkbox" ? input.checked : Number(input.value);
+      const out = win.querySelector(`[data-fsfx-value="${key}"]`);
+      if (out) out.textContent = String(state[key]);
+      applyLyricsFullScreenTrackFxNodes();
+    });
+    makeLyricsFullScreenPopupDraggable(win);
+  }
+  refreshLyricsFullScreenFxWindow(stemId, win);
+  win.hidden = false;
+  placeLyricsFullScreenMenu(win, (anchorRect?.right || window.innerWidth/2) + 8, anchorRect?.top || 100);
+}
+
+makeLyricsFullScreenPopupDraggable(lyricsFullScreenPitchMenu);
+makeLyricsFullScreenPopupDraggable(lyricsFullScreenTracksMenu);
+lyricsFullScreenPitchMenu?.addEventListener("click", event => {
+  const close = event.target.closest('[data-close-fullscreen-menu="pitch"]');
+  if (close) {
+    event.stopPropagation();
+    lyricsFullScreenPitchMenu.hidden = true;
+    return;
+  }
+  const button = event.target.closest("[data-fullscreen-pitch]");
+  if (!button) return;
+  event.stopPropagation();
+  const action = button.dataset.fullscreenPitch;
+  if (action === "down") lyricsFullScreenPitchSemitones = Math.max(-12, lyricsFullScreenPitchSemitones - 1);
+  if (action === "up") lyricsFullScreenPitchSemitones = Math.min(12, lyricsFullScreenPitchSemitones + 1);
+  if (action === "reset") lyricsFullScreenPitchSemitones = 0;
+  applyLyricsFullScreenPitch();
+});
+
+lyricsFullScreenTracksMenu?.addEventListener("click", event => {
+  const reset = event.target.closest("#lyricsFullScreenTracksResetBtn");
+  if (reset) {
+    event.stopPropagation();
+    resetLyricsFullScreenTrackState();
+    return;
+  }
+  const close = event.target.closest('[data-close-fullscreen-menu="tracks"]');
+  if (!close) return;
+  event.stopPropagation();
+  lyricsFullScreenTracksMenu.hidden = true;
+});
+
+lyricsFullScreenView?.addEventListener("click", event => {
+  if (!isKaraokeUiMode()) return;
+  if (event.target.closest("button, input, .lyrics-fullscreen-popup, .lyrics-fullscreen-keys-menu")) return;
+  placeLyricsFullScreenMenu(lyricsFullScreenPitchMenu, event.clientX, event.clientY);
+});
+
+lyricsFullScreenView?.addEventListener("contextmenu", event => {
+  if (!isKaraokeUiMode()) return;
+  if (event.target.closest(".lyrics-fullscreen-side-icon")) return;
+  if (event.target.closest("button, input, .lyrics-fullscreen-popup, .lyrics-fullscreen-keys-menu")) return;
+  event.preventDefault();
+  renderLyricsFullScreenTracksMenu();
+  placeLyricsFullScreenMenu(lyricsFullScreenTracksMenu, event.clientX, event.clientY);
+});
+
+// Работа со Structure в Lyrics Editor.
+function setLyricsFullScreenMeters(opened) {
+  if (lyricsFullScreenMicScale) lyricsFullScreenMicScale.hidden = !opened;
+  if (lyricsFullScreenVolumeScale) lyricsFullScreenVolumeScale.hidden = !opened;
+}
+
+// Работа со Structure в Lyrics Editor.
+function toggleLyricsFullScreenScale(scale) {
+  if (!scale) return;
+  scale.hidden = !scale.hidden;
+}
+
+lyricsFullScreenMicBtn?.addEventListener("contextmenu", event => {
+  if (!isKaraokeUiMode()) return;
+  event.preventDefault();
+  event.stopPropagation();
+  toggleLyricsFullScreenScale(lyricsFullScreenMicScale);
+});
+
+lyricsFullScreenVolumeBtn?.addEventListener("contextmenu", event => {
+  if (!isKaraokeUiMode()) return;
+  event.preventDefault();
+  event.stopPropagation();
+  toggleLyricsFullScreenScale(lyricsFullScreenVolumeScale);
+});
+
+let lyricsFullScreenInputLevel = 100;
+lyricsFullScreenMicRange?.addEventListener("input", () => {
+  lyricsFullScreenInputLevel = Number(lyricsFullScreenMicRange.value) || 0;
+  if (lyricsFullScreenMicValue) lyricsFullScreenMicValue.textContent = String(lyricsFullScreenInputLevel);
+});
+
+let lyricsFullScreenMasterLevel = 1;
+
+// Работа со Structure в Lyrics Editor.
+function applyLyricsFullScreenMasterLevel() {
+  const level = Math.max(0, Math.min(1, Number(lyricsFullScreenMasterLevel) || 0));
+  if (originalAudio && originalVolume) originalAudio.volume = Math.max(0, Math.min(1, (Number(originalVolume.value) || 0) / 100 * level));
+  if (masterAudio && masterVolume) masterAudio.volume = Math.max(0, Math.min(1, (Number(masterVolume.value) || 0) / 100 * level));
+  Object.values(stemAudio || {}).forEach(audio => { if (audio && !mixAudioContext) audio.volume = level; });
+  applyMix();
+}
+
+lyricsFullScreenVolumeRange?.addEventListener("input", () => {
+  const value = Math.max(0, Math.min(100, Number(lyricsFullScreenVolumeRange.value) || 0));
+  lyricsFullScreenMasterLevel = value / 100;
+  if (lyricsFullScreenVolumeValue) lyricsFullScreenVolumeValue.textContent = String(value);
+  applyLyricsFullScreenMasterLevel();
+});
+
+const lyricsFullScreenKeysWrap = lyricsFullScreenKeysBtn?.closest(".lyrics-fullscreen-keys-wrap");
+lyricsFullScreenKeysWrap?.addEventListener("mouseenter", () => {
+  if (lyricsFullScreenKeysMenu) lyricsFullScreenKeysMenu.hidden = false;
+});
+lyricsFullScreenKeysWrap?.addEventListener("mouseleave", () => {
+  if (lyricsFullScreenKeysMenu) lyricsFullScreenKeysMenu.hidden = true;
+});
+
+lyricsFullScreenPlayBtn?.addEventListener("click", event => {
+  event.stopPropagation();
+  if (!isPlaying) playCurrentMode();
+  updateLyricsTransportButtons();
+});
+lyricsFullScreenRecBtn?.addEventListener("click", event => {
+  event.stopPropagation();
+  if (masterRecording) stopMasterRecording(); else startMasterRecording();
+});
+lyricsFullScreenBackTransportBtn?.addEventListener("click", event => {
+  event.stopPropagation();
+  startBtn?.click();
+});
+lyricsFullScreenStopBtn?.addEventListener("click", event => {
+  event.stopPropagation();
+
+  // STOP в Full Screen означает: закончить песню прямо сейчас.
+  // Stop Sequencer здесь намеренно не используется, потому что он возвращает позицию в 0.
+  pauseAll();
+
+  const endTime = Math.max(
+    0,
+    getProjectPlaybackEnd()
+  );
+
+  syncAllTo(endTime);
+  updatePlayheads();
+  updateMasterCursor();
+  updateTimeDisplay();
+  syncScrollTo(getTimelineWidth());
+
+  karaokeFinishTriggered = true;
+  openKaraokeFinishedDialog();
+});
+lyricsFullScreenPauseBtn?.addEventListener("click", event => {
+  event.stopPropagation();
+  if (isPlaying) pauseAll(); else playCurrentMode();
+  updateLyricsTransportButtons();
+});
+
+window.addEventListener("resize", () => {
+  closeLyricsFullScreenMenus();
+  if (lyricsFullScreenKeysMenu) lyricsFullScreenKeysMenu.hidden = true;
+});
+
+let lyricsEditorWindowGeometryBeforeKaraoke = null;
+
+function captureLyricsEditorWindowGeometry() {
+  if (!lyricsEditorCard) return null;
+  return {
+    left: lyricsEditorCard.style.left,
+    top: lyricsEditorCard.style.top,
+    right: lyricsEditorCard.style.right,
+    bottom: lyricsEditorCard.style.bottom,
+    width: lyricsEditorCard.style.width,
+    height: lyricsEditorCard.style.height
+  };
+}
+
+function applyLyricsEditorWindowGeometry(geometry) {
+  if (!lyricsEditorCard || !geometry) return;
+  Object.entries(geometry).forEach(([key, value]) => {
+    lyricsEditorCard.style[key] = value || "";
+  });
+}
+
+let lyricsKaraokeRestoreGeometry = null;
+
+function maximizeLyricsKaraokeWindow({ rememberRestore = false } = {}) {
+  if (!lyricsEditorCard) return;
+  if (rememberRestore && lyricsEditorCard.dataset.karaokeMaximized !== "1") {
+    const rect = lyricsEditorCard.getBoundingClientRect();
+    lyricsKaraokeRestoreGeometry = {
+      left: rect.left + "px",
+      top: rect.top + "px",
+      right: "auto",
+      bottom: "auto",
+      width: rect.width + "px",
+      height: rect.height + "px"
+    };
+  }
+  lyricsEditorCard.style.left = "0px";
+  lyricsEditorCard.style.top = "0px";
+  lyricsEditorCard.style.right = "auto";
+  lyricsEditorCard.style.bottom = "auto";
+  lyricsEditorCard.style.width = "100vw";
+  lyricsEditorCard.style.height = "100vh";
+  lyricsEditorCard.dataset.karaokeMaximized = "1";
+  if (lyricsFullScreenWindowBtn) {
+    lyricsFullScreenWindowBtn.textContent = "▫";
+    lyricsFullScreenWindowBtn.title = "Window mode";
+    lyricsFullScreenWindowBtn.setAttribute("aria-label", "Switch to window mode");
+  }
+}
+
+function restoreLyricsKaraokeWindow() {
+  if (!lyricsEditorCard) return;
+  const geometry = lyricsKaraokeRestoreGeometry || {
+    left: "8vw", top: "6vh", right: "auto", bottom: "auto", width: "84vw", height: "86vh"
+  };
+  applyLyricsEditorWindowGeometry(geometry);
+  lyricsEditorCard.dataset.karaokeMaximized = "0";
+  if (lyricsFullScreenWindowBtn) {
+    lyricsFullScreenWindowBtn.textContent = "□";
+    lyricsFullScreenWindowBtn.title = "Full Screen";
+    lyricsFullScreenWindowBtn.setAttribute("aria-label", "Switch to Full Screen");
+  }
+}
+
+function toggleLyricsKaraokeWindowSize() {
+  if (!lyricsEditorCard) return;
+  if (lyricsEditorCard.dataset.karaokeMaximized === "1") restoreLyricsKaraokeWindow();
+  else maximizeLyricsKaraokeWindow({ rememberRestore: true });
+}
+
+lyricsFullScreenWindowBtn?.addEventListener("click", event => {
+  event.preventDefault();
+  event.stopPropagation();
+  toggleLyricsKaraokeWindowSize();
+});
+
+function initLyricsFullScreenWindowMovement() {
+  const topbar = lyricsFullScreenView?.querySelector(".lyrics-fullscreen-topbar");
+  if (!topbar || !lyricsEditorCard || topbar.dataset.windowDragReady === "1") return;
+  topbar.dataset.windowDragReady = "1";
+
+  let drag = null;
+  topbar.addEventListener("pointerdown", event => {
+    if (!isKaraokeUiMode() || event.button !== 0) return;
+    if (lyricsEditorCard.dataset.karaokeMaximized === "1") return;
+    if (event.target.closest("button, input, select, a, .lyrics-fullscreen-playlist-wrap")) return;
+    const rect = lyricsEditorCard.getBoundingClientRect();
+    drag = {
+      pointerId: event.pointerId,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top
+    };
+    topbar.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  });
+
+  topbar.addEventListener("pointermove", event => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const maxLeft = Math.max(0, window.innerWidth - lyricsEditorCard.offsetWidth);
+    const maxTop = Math.max(0, window.innerHeight - lyricsEditorCard.offsetHeight);
+    lyricsEditorCard.style.left = Math.max(0, Math.min(maxLeft, event.clientX - drag.offsetX)) + "px";
+    lyricsEditorCard.style.top = Math.max(0, Math.min(maxTop, event.clientY - drag.offsetY)) + "px";
+  });
+
+  const stop = event => {
+    if (drag && event.pointerId === drag.pointerId) drag = null;
+  };
+  topbar.addEventListener("pointerup", stop);
+  topbar.addEventListener("pointercancel", stop);
+}
+
+initLyricsFullScreenWindowMovement();
+
+// Локальная функциональная операция этого блока.
+function setUiMode(nextMode) {
+  if (!Object.values(UI_MODE).includes(nextMode)) {
+    throw new Error("Invalid uiMode: " + nextMode);
+  }
+
+  const previousMode = uiMode;
+  uiMode = nextMode;
+
+  const lyricsOpen = isLyricsUiOpen();
+  const karaokeOpen = isKaraokeUiMode();
+
+  lyricsEditorDialog?.classList.toggle("open", lyricsOpen);
+  lyricsEditorCard?.classList.toggle("karaoke-fullscreen-mode", karaokeOpen);
+  lyricsFullScreenView?.setAttribute("aria-hidden", karaokeOpen ? "false" : "true");
+
+  if (lyricsModeSwitchBtn) lyricsModeSwitchBtn.textContent = "Full Screen";
+  if (lyricsFullScreenBackBtn) lyricsFullScreenBackBtn.textContent = "Lyrics Editor";
+
+  if (previousMode === UI_MODE.KARAOKE && nextMode !== UI_MODE.KARAOKE) {
+    restoreSequencerFxAfterFullScreen();
+    applyLyricsEditorWindowGeometry(lyricsEditorWindowGeometryBeforeKaraoke);
+    lyricsEditorWindowGeometryBeforeKaraoke = null;
+  }
+
+  if (nextMode === UI_MODE.KARAOKE && previousMode !== UI_MODE.KARAOKE) {
+    lyricsEditorWindowGeometryBeforeKaraoke = captureLyricsEditorWindowGeometry();
+    lyricsKaraokeRestoreGeometry = null;
+    maximizeLyricsKaraokeWindow();
+    void reportProjectLoadTrace("FULL SCREEN INIT START", { previous_mode: previousMode, next_mode: nextMode });
+    lyricsFullScreenMasterLevel = 1;
+    if (lyricsFullScreenVolumeRange) lyricsFullScreenVolumeRange.value = "100";
+    if (lyricsFullScreenVolumeValue) lyricsFullScreenVolumeValue.textContent = "100";
+    resetLyricsFullScreenTrackState();
+    applyLyricsFullScreenMasterLevel();
+    void reportProjectLoadTrace("FULL SCREEN INIT READY", { previous_mode: previousMode, next_mode: nextMode });
+  }
+
+  if (lyricsOpen) {
+    renderLyricsStructure();
+    updateLyricsMasterCounter();
+    if (karaokeOpen) updateLyricsFullScreenView(getCurrentTime());
+    else updateLyricsEditorKaraoke(getCurrentTime());
+  }
+}
+
+lyricsModeSwitchBtn?.addEventListener("click", () => setUiMode(UI_MODE.KARAOKE));
+lyricsFullScreenBackBtn?.addEventListener("click", () => setUiMode(UI_MODE.LYRICS));
+
+// Работа со Structure в Lyrics Editor.
+function updateLyricsEditorKaraoke(currentTime) {
+  if (!isLyricsUiOpen()) return;
+  updateLyricsFullScreenView(currentTime);
+
+  const currentLineIndex = lyricsEditorDraft.findIndex(
+    line => currentTime >= Number(line.start) && currentTime <= Number(line.end)
+  );
+  if (currentLineIndex < 0) return;
+
+  const rows = lyricsEditorRows.querySelectorAll(".lyrics-editor-row");
+
+  rows.forEach((row, rowIndex) => {
+    row.classList.toggle("karaoke-current-row", rowIndex === currentLineIndex);
+
+    const line = lyricsEditorDraft[rowIndex];
+    const wordSpans = row.querySelectorAll(".lyrics-editor-karaoke-word");
+
+    wordSpans.forEach((span, wordIndex) => {
+      const word = line && line.words && line.words[wordIndex];
+      if (!word) return;
+
+      const start = Number(word.start);
+      const end = Number(word.end);
+
+      span.classList.toggle("active", currentTime >= start && currentTime <= end);
+      span.classList.toggle("past", currentTime > end);
+    });
+
+    updateLyricsEditMarker(row, line, currentTime);
+  });
+
+  if (
+    lyricsEditorEditLineIndex < 0
+    && lyricsTransportMode === "master"
+    && lyricsStructureSelectedIndex < 0
+    && !lyricsStructureSelectedIndices.size
+    && lyricsEditorSelectedLine !== currentLineIndex
+  ) {
+    lyricsEditorSelectedLine = currentLineIndex;
+
+    rows.forEach((row, rowIndex) => {
+      row.classList.toggle("selected", rowIndex === currentLineIndex);
+    });
+
+    updateLyricsEditorStats();
+
+    const currentRow = rows[currentLineIndex];
+    if (currentRow) currentRow.scrollIntoView({ block: "nearest" });
+  }
+}
+
+
+// Работа со Structure в Lyrics Editor.
+function detectLyricsLanguage(text) {
+  const supported = ["ru", "en", "it", "es", "fr", "uk"];
+
+  const whisperLanguage =
+    (
+      lyricsData
+      &&
+      lyricsData.language
+    )
+    ? String(lyricsData.language)
+        .toLowerCase()
+        .split("-")[0]
+    : "";
+
+  if (supported.includes(whisperLanguage)) {
+    return whisperLanguage;
+  }
+
+  const value = String(text || "");
+
+  if (/[ІіЇїЄєҐґ]/.test(value)) {
+    return "uk";
+  }
+
+  if (/[А-Яа-яЁё]/.test(value)) {
+    return "ru";
+  }
+
+  return "en";
+}
+
+// Локальная функциональная операция этого блока.
+function languageLabel(language) {
+  const code =
+    String(language || "ru")
+      .toLowerCase()
+      .split("-")[0];
+
+  return ["ru","en","it","es","fr","uk"].includes(code)
+    ? code.toUpperCase()
+    : "EN";
+}
+
+// Работа со Structure в Lyrics Editor.
+async function requestLyricsSpellcheck(text) {
+  const language = detectLyricsLanguage(text);
+
+  const response = await fetch("/spellcheck", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, language })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Spellcheck failed");
+  }
+
+  if (lyricsLanguageInfo) {
+    lyricsLanguageInfo.textContent =
+      "Language: " + languageLabel(data.language || language);
+  }
+
+  return Array.isArray(data.matches) ? data.matches : [];
+}
+
+
+// Работа со Structure в Lyrics Editor.
+function closeLyricsSpellPopup() {
+  if (!lyricsSpellPopup) return;
+  lyricsSpellPopup.classList.remove("open");
+  lyricsSpellPopup.innerHTML = "";
+}
+
+
+// Работа со Structure в Lyrics Editor.
+function replaceLyricsWordFromSuggestion(lineIndex, wordIndex, replacement) {
+  const line = lyricsEditorDraft[lineIndex];
+  if (!line || !line.words || !line.words[wordIndex]) return;
+
+  pushLyricsHistory();
+
+  line.words[wordIndex].word = String(replacement);
+  delete line._editedText;
+
+  closeLyricsSpellPopup();
+  renderLyricsEditor();
+}
+
+
+// Работа со Structure в Lyrics Editor.
+function showLyricsSpellPopup(span, lineIndex, wordIndex, replacements) {
+  closeLyricsSpellPopup();
+
+  const list = Array.isArray(replacements) ? replacements.slice(0, 8) : [];
+  if (!list.length) return;
+
+  list.forEach(replacement => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = replacement;
+
+    button.addEventListener("click", event => {
+      event.stopPropagation();
+      replaceLyricsWordFromSuggestion(
+        lineIndex,
+        wordIndex,
+        replacement
+      );
+    });
+
+    lyricsSpellPopup.appendChild(button);
+  });
+
+  const spanRect = span.getBoundingClientRect();
+  const editorRect = lyricsEditorDialog.getBoundingClientRect();
+
+  lyricsSpellPopup.style.left =
+    Math.max(8, spanRect.left - editorRect.left) + "px";
+
+  lyricsSpellPopup.style.top =
+    Math.max(8, spanRect.bottom - editorRect.top + 4) + "px";
+
+  lyricsSpellPopup.classList.add("open");
+}
+
+
+// Работа со Structure в Lyrics Editor.
+async function updateLyricsLineSpellcheck(line, lineIndex, karaokeBox) {
+  if (!line || !karaokeBox) return;
+  if (lyricsTranscriptionMode) return;
+
+  const text = line._editedText ?? lineText(line);
+
+  let matches;
+
+  try {
+    matches = await requestLyricsSpellcheck(text);
+  }
+  catch (error) {
+    return;
+  }
+
+  const spans = Array.from(
+    karaokeBox.querySelectorAll(".lyrics-editor-karaoke-word")
+  );
+
+  spans.forEach(span => {
+    span.classList.remove("spell-error");
+    span.removeAttribute("title");
+    span.oncontextmenu = null;
+  });
+
+  let cursor = 0;
+
+  const wordRanges = line.words.map((word, wordIndex) => {
+    const wordText = String(word.word ?? "");
+    const found = text.indexOf(wordText, cursor);
+    const start = found >= 0 ? found : cursor;
+    const end = start + wordText.length;
+    cursor = end;
+
+    return { wordIndex, start, end };
+  });
+
+  matches.forEach(match => {
+    const errorStart = Number(match.offset);
+    const errorEnd = errorStart + Number(match.length);
+    const replacements = Array.isArray(match.replacements)
+      ? match.replacements
+      : [];
+
+    wordRanges.forEach(range => {
+      if (range.end > errorStart && range.start < errorEnd) {
+        const span = spans[range.wordIndex];
+        if (!span) return;
+
+        span.classList.add("spell-error");
+        span.title = replacements.length
+          ? replacements.join(" / ")
+          : String(match.message || "LanguageTool");
+
+        span.oncontextmenu = event => {
+          event.preventDefault();
+          showLyricsSpellPopup(
+            span,
+            lineIndex,
+            range.wordIndex,
+            replacements
+          );
+        };
+      }
+    });
+  });
+}
+
+
+
+let lyricsTranscriptionMode = false;
+let lyricsOriginalDraftForTranscription = null;
+
+// Работа со Structure в Lyrics Editor.
+function updateLyricsTranscriptionButton() {
+  if (!lyricsTranscriptionBtn) return;
+
+  const sourceDraft =
+    lyricsTranscriptionMode
+    &&
+    lyricsOriginalDraftForTranscription
+    ? lyricsOriginalDraftForTranscription
+    : lyricsEditorDraft;
+
+  const language =
+    detectLyricsLanguage(
+      sourceDraft
+        .map(
+          line =>
+            line._editedText
+            ??
+            lineText(line)
+        )
+        .join("\n")
+    );
+
+  const transcribable =
+    ["en","it","es","fr","uk"]
+      .includes(language);
+
+  lyricsTranscriptionBtn.disabled =
+    !lyricsTranscriptionMode
+    &&
+    !transcribable;
+
+  lyricsTranscriptionBtn.textContent =
+    lyricsTranscriptionMode
+    ? "Original"
+    : "RU Transcription";
+}
+
+// Работа со Structure в Lyrics Editor.
+async function requestLyricsTranscription(lines) {
+  const language =
+    detectLyricsLanguage(
+      lines.join("\n")
+    );
+
+  const response = await fetch("/transcribe-to-ru", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      lines,
+      language
     })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Transcription failed");
+  }
+
+  return Array.isArray(data.lines) ? data.lines : [];
+}
+
+lyricsTranscriptionBtn.addEventListener("click", async () => {
+  if (lyricsTranscriptionMode) {
+    lyricsEditorDraft =
+      JSON.parse(JSON.stringify(lyricsOriginalDraftForTranscription || []));
+
+    lyricsTranscriptionMode = false;
+    renderLyricsEditor();
+    setLyricsEditorMessage("Original");
+    return;
+  }
+
+  const originalDraft = cloneLyricsEditorDraft();
+  const originalLines =
+    originalDraft.map(line => line._editedText ?? lineText(line));
+
+  try {
+    lyricsTranscriptionBtn.disabled = true;
+
+    const transcribedLines =
+      await requestLyricsTranscription(originalLines);
+
+    lyricsOriginalDraftForTranscription = originalDraft;
+
+    lyricsEditorDraft =
+      originalDraft.map((line, index) => {
+        const clone = JSON.parse(JSON.stringify(line));
+        setLineText(clone, String(transcribedLines[index] ?? lineText(line)));
+        delete clone._editedText;
+        return clone;
+      });
+
+    lyricsTranscriptionMode = true;
+    renderLyricsEditor();
+    setLyricsEditorMessage("RU Transcription");
+  }
+  catch (error) {
+    setLyricsEditorError(error, "Transcription error: ");
+  }
+  finally {
+    updateLyricsTranscriptionButton();
+  }
+});
 
 
-@app.route("/saved-projects/<project_id>/track/<path:filename>", methods=["GET"])
-# Работа с сохранённым Project.
-def saved_project_track_file(project_id, filename):
-    return send_from_directory(
-        os.path.join(PROJECTS_DIR, _project_id(project_id), "tracks"),
-        filename
+const MIN_AUTO_STRUCTURE_BLOCK_DURATION = 10;
+
+// Работа со Structure в Lyrics Editor.
+function normalizeStructureText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Работа со Structure в Lyrics Editor.
+function detectLyricsStructure(lines) {
+  const cleanLines = (lines || [])
+    .map((line, index) => ({
+      index,
+      start: Number(line.start),
+      end: Number(line.end),
+      text: normalizeStructureText(line._editedText ?? lineText(line))
+    }))
+    .filter(line =>
+      Number.isFinite(line.start)
+      && Number.isFinite(line.end)
+      && line.end > line.start
+      && line.text
+    );
+
+  if (!cleanLines.length) return [];
+
+  const songEnd = Math.max(
+    Number(duration) || 0,
+    cleanLines[cleanLines.length - 1].end
+  );
+
+  const MIN_INSTRUMENTAL_GAP = 8;
+  const repeated = new Array(cleanLines.length).fill(false);
+
+  // Chorus: повторяющиеся непрерывные фрагменты текста. Сначала предпочитаем более длинные повторы.
+  const maxChunk = Math.min(8, Math.floor(cleanLines.length / 2));
+  for (let size = maxChunk; size >= 2; size--) {
+    const occurrences = new Map();
+
+    for (let i = 0; i <= cleanLines.length - size; i++) {
+      const key = cleanLines
+        .slice(i, i + size)
+        .map(line => line.text)
+        .join(" || ");
+
+      if (!occurrences.has(key)) occurrences.set(key, []);
+      occurrences.get(key).push(i);
+    }
+
+    for (const starts of occurrences.values()) {
+      if (starts.length < 2) continue;
+
+      for (const startIndex of starts) {
+        for (let offset = 0; offset < size; offset++) {
+          repeated[startIndex + offset] = true;
+        }
+      }
+    }
+  }
+
+  const segments = [];
+  let cursor = 0;
+
+  if (cleanLines[0].start >= MIN_INSTRUMENTAL_GAP) {
+    segments.push({ type: "Intro", start: 0, end: cleanLines[0].start });
+  }
+
+  while (cursor < cleanLines.length) {
+    const isChorus = repeated[cursor];
+    let endIndex = cursor;
+
+    while (
+      endIndex + 1 < cleanLines.length
+      && repeated[endIndex + 1] === isChorus
+      && cleanLines[endIndex + 1].start - cleanLines[endIndex].end < MIN_INSTRUMENTAL_GAP
+    ) {
+      endIndex++;
+    }
+
+    segments.push({
+      type: isChorus ? "Chorus" : "Pending",
+      start: cleanLines[cursor].start,
+      end: cleanLines[endIndex].end,
+      firstLine: cursor,
+      lastLine: endIndex
+    });
+
+    if (endIndex + 1 < cleanLines.length) {
+      const gapStart = cleanLines[endIndex].end;
+      const gapEnd = cleanLines[endIndex + 1].start;
+      if (gapEnd - gapStart >= MIN_INSTRUMENTAL_GAP) {
+        segments.push({ type: "Solo", start: gapStart, end: gapEnd });
+      }
+    }
+
+    cursor = endIndex + 1;
+  }
+
+  const pending = segments.filter(segment => segment.type === "Pending");
+
+  // База Verse T: длительность, общая минимум для двух не-Chorus вокальных фрагментов с допуском ±1 секунда.
+  let verseBase = null;
+  let bestMatches = 0;
+
+  for (const candidate of pending) {
+    const candidateDuration = candidate.end - candidate.start;
+    let matches = 0;
+
+    for (const other of pending) {
+      const otherDuration = other.end - other.start;
+      const ratio = otherDuration / candidateDuration;
+      const multiple = Math.max(1, Math.round(ratio));
+      if (Math.abs(otherDuration - candidateDuration * multiple) <= 1) matches++;
+    }
+
+    if (matches > bestMatches) {
+      bestMatches = matches;
+      verseBase = candidateDuration;
+    }
+  }
+
+  let verseNumber = 0;
+  const classified = [];
+
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+
+    if (segment.type !== "Pending") {
+      classified.push(segment);
+      continue;
+    }
+
+    const segmentDuration = segment.end - segment.start;
+    let verseParts = 0;
+
+    if (verseBase && bestMatches >= 2) {
+      const multiple = Math.max(1, Math.round(segmentDuration / verseBase));
+      if (Math.abs(segmentDuration - verseBase * multiple) <= 1) {
+        verseParts = multiple;
+      }
+    }
+
+    if (verseParts > 0) {
+      for (let part = 0; part < verseParts; part++) {
+        verseNumber++;
+        classified.push({
+          type: "Verse",
+          label: "Verse " + verseNumber,
+          start: segment.start + segmentDuration * part / verseParts,
+          end: segment.start + segmentDuration * (part + 1) / verseParts
+        });
+      }
+      continue;
+    }
+
+    const laterVocalSegment = segments
+      .slice(i + 1)
+      .some(item => item.type === "Pending" || item.type === "Chorus");
+
+    classified.push({
+      type: laterVocalSegment ? "Bridge" : "Coda",
+      start: segment.start,
+      end: segment.end
+    });
+  }
+
+  // ========================================
+// OUTRO
+//
+// Если после Coda остаётся любое место
+// до конца песни, всё это место является
+// одним-единственным Outro.
+//
+// Любые другие блоки после Coda
+// не сохраняются отдельно, а поглощаются Outro.
+// ========================================
+
+let lastCodaIndex =
+  -1;
+
+for (
+  let index = 0;
+  index < classified.length;
+  index++
+) {
+  if (
+    classified[index].type
+    === "Coda"
+  ) {
+    lastCodaIndex =
+      index;
+  }
+}
+
+
+if (
+  lastCodaIndex >= 0
+) {
+  const codaEnd =
+    Number(
+      classified[
+        lastCodaIndex
+      ].end
+    );
+
+  if (
+    Number.isFinite(codaEnd)
+    &&
+    codaEnd < songEnd
+  ) {
+    // Удаляем абсолютно всё,
+    // что система создала после Coda.
+    classified.splice(
+      lastCodaIndex + 1
+    );
+
+    // Всё оставшееся пространство
+    // до конца песни — один Outro.
+    classified.push({
+      type: "Outro",
+      label: "Outro",
+      start: codaEnd,
+      end: songEnd
+    });
+  }
+}
+
+  return normalizeStructureCoverage(
+    classified
+      .filter(segment => segment.end > segment.start)
+      .sort((a, b) => a.start - b.start),
+    songEnd
+  );
+}
+
+// Работа со Structure в Lyrics Editor.
+function normalizeStructureCoverage(structure, requestedSongEnd = null) {
+  let items = Array.isArray(structure)
+    ? structure
+        .map(item => ({ ...item }))
+        .filter(item =>
+          Number.isFinite(Number(item.start))
+          && Number.isFinite(Number(item.end))
+          && Number(item.end) > Number(item.start)
+        )
+        .sort((a, b) => Number(a.start) - Number(b.start))
+    : [];
+
+  if (!items.length) return items;
+
+  const total = Math.max(
+    0.001,
+    Number(requestedSongEnd) || 0,
+    Number(duration) || 0,
+    ...items.map(item => Number(item.end) || 0)
+  );
+
+  // Structure — непрерывное разбиение песни: никаких невидимых промежутков.
+  items[0].start = 0;
+  for (let i = 1; i < items.length; i++) {
+    const boundary = Math.max(0, Math.min(total, Number(items[i].start) || 0));
+    items[i - 1].end = boundary;
+    items[i].start = boundary;
+  }
+  items[items.length - 1].end = total;
+
+  items = enforceMinimumAutoStructureDuration(items);
+
+  // Объединение коротких блоков может изменить соседей; восстанавливаем точную непрерывность.
+  if (items.length) {
+    items[0].start = 0;
+    for (let i = 1; i < items.length; i++) {
+      items[i].start = Number(items[i - 1].end);
+    }
+    items[items.length - 1].end = total;
+  }
+
+  return items;
+}
+
+// Работа со Structure в Lyrics Editor.
+function enforceMinimumAutoStructureDuration(structure) {
+  const items = Array.isArray(structure)
+    ? structure.map(item => ({ ...item }))
+    : [];
+
+  if (items.length <= 1) return items;
+
+  let changed = true;
+  while (changed && items.length > 1) {
+    changed = false;
+
+    for (let i = 0; i < items.length; i++) {
+      const current = items[i];
+      const length = Number(current.end) - Number(current.start);
+      if (!Number.isFinite(length) || length >= MIN_AUTO_STRUCTURE_BLOCK_DURATION) continue;
+
+      if (i > 0) {
+        items[i - 1].end = Number(current.end);
+        items.splice(i, 1);
+      } else {
+        items[1].start = Number(current.start);
+        items.splice(0, 1);
+      }
+
+      changed = true;
+      break;
+    }
+  }
+
+  return items;
+}
+
+// Работа со Structure в Lyrics Editor.
+function structureSongEnd(structure = lyricsStructureDraft) {
+  const lastEnd = Array.isArray(structure) && structure.length
+    ? Math.max(...structure.map(item => Number(item.end) || 0))
+    : 0;
+  return Math.max(0.001, Number(duration) || 0, lastEnd);
+}
+
+// Работа со Structure в Lyrics Editor.
+function setLyricsStructureSelection(indices) {
+  lyricsStructureSelectedIndices = new Set(
+    (indices || []).filter(index =>
+      Number.isInteger(index)
+      && index >= 0
+      && index < (lyricsStructureDraft?.length || 0)
+    )
+  );
+  const ordered = [...lyricsStructureSelectedIndices].sort((a, b) => a - b);
+  lyricsStructureSelectedIndex = ordered.length ? ordered[ordered.length - 1] : -1;
+}
+
+// Работа со Structure в Lyrics Editor.
+function clearLyricsStructureSelection() {
+  lyricsStructureSelectedIndices.clear();
+  lyricsStructureSelectedIndex = -1;
+}
+
+// Работа со Structure в Lyrics Editor.
+function formatStructureTime(value) {
+  const totalSeconds = Math.max(0, Math.floor(Number(value) || 0));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes + ":" + String(seconds).padStart(2, "0");
+}
+
+// Работа со Structure в Lyrics Editor.
+function closeLyricsStructureNameMenu() {
+  if (!lyricsStructureNameMenu) return;
+  lyricsStructureNameMenu.classList.remove("open");
+}
+
+// Работа со Structure в Lyrics Editor.
+function openLyricsStructureNameMenu(event, index) {
+  if (!isLyricsStructureEditable()) return;
+  if (!lyricsStructureNameMenu || !lyricsStructureDraft?.[index]) return;
+
+  const names = [
+    "Intro",
+    "Verse",
+    "Half Verse",
+    "Short Verse",
+    "Chorus",
+    "Half Chorus",
+    "Short Chorus",
+    "Bridge",
+    "Break",
+    "Riff",
+    "Solo",
+    "Part C",
+    "Coda",
+    "Outro"
+  ];
+
+  lyricsStructureSelectedIndex = index;
+  lyricsStructureNameMenu.innerHTML = "";
+
+  names.forEach(name => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "lyrics-structure-name-item";
+    item.textContent = name;
+
+    item.addEventListener("click", menuEvent => {
+      menuEvent.preventDefault();
+      menuEvent.stopPropagation();
+
+      const segment = lyricsStructureDraft?.[index];
+      if (!segment) return;
+
+      const oldName = segment.label || segment.type;
+      if (oldName !== name) {
+        pushLyricsHistory();
+        segment.label = name;
+      }
+
+      closeLyricsStructureNameMenu();
+      renderLyricsStructure();
+    });
+
+    lyricsStructureNameMenu.appendChild(item);
+  });
+
+  lyricsStructureNameMenu.style.left =
+    Math.max(8, Math.min(event.clientX, window.innerWidth - 170)) + "px";
+
+  // Высота меню следует за содержимым: внутренней прокрутки нет.
+  lyricsStructureNameMenu.style.top = "8px";
+  lyricsStructureNameMenu.classList.add("open");
+
+  const menuRect = lyricsStructureNameMenu.getBoundingClientRect();
+  const menuTop = Math.max(
+    8,
+    Math.min(event.clientY, window.innerHeight - menuRect.height - 8)
+  );
+  lyricsStructureNameMenu.style.top = menuTop + "px";
+}
+
+// Работа со Structure в Lyrics Editor.
+function clearLyricsStructureLoop() {
+  lyricsStructureTransportMode = "play";
+  lyricsStructureLoopStart = null;
+  lyricsStructureLoopEnd = null;
+}
+
+// Работа со Structure в Lyrics Editor.
+function playLyricsStructureSegment(index) {
+  const segment = lyricsStructureDraft?.[index];
+  if (!segment) return;
+
+  setLyricsStructureSelection([index]);
+  lyricsStructureTransportMode = "loop";
+  lyricsStructureLoopStart = Number(segment.start);
+  lyricsStructureLoopEnd = Number(segment.end);
+
+  syncAllTo(lyricsStructureLoopStart);
+  updatePlayheads();
+  updateMasterCursor();
+  updateTimeDisplay();
+  updateLyricsMasterCounter();
+
+  if (!isPlaying) {
+    playCurrentMode();
+  }
+
+  renderLyricsStructure();
+}
+
+// Работа со Structure в Lyrics Editor.
+function playLyricsStructureTimelineAt(event) {
+  if (!lyricsStructureTimeline) return;
+
+  const rect = lyricsStructureTimeline.getBoundingClientRect();
+  if (!rect.width) return;
+
+  const ratio = Math.max(
+    0,
+    Math.min(1, (event.clientX - rect.left) / rect.width)
+  );
+
+  const time = ratio * structureSongEnd();
+
+  // Один общий курсор для Structure, Lines и Sequencer. Состояние транспорта сохраняется.
+  setGlobalCursorTime(time);
+
+  renderLyricsStructure();
+}
+
+// Работа со Structure в Lyrics Editor.
+function splitSelectedLyricsStructure() {
+  if (!isLyricsStructureEditable()) return false;
+  const index = lyricsStructureSelectedIndex;
+  const segment = lyricsStructureDraft?.[index];
+  if (!segment) return false;
+
+  const cursorTime = Number(masterCursorTime);
+  const current = Number.isFinite(cursorTime) ? cursorTime : Number(getCurrentTime());
+  const start = Number(segment.start);
+  const end = Number(segment.end);
+
+  if (
+    !Number.isFinite(current)
+    || current <= start
+    || current >= end
+  ) {
+    setLyricsEditorMessage("Split: cursor outside selected structure block");
+    return true;
+  }
+
+  pushLyricsHistory();
+
+  const first = {
+    ...segment,
+    start,
+    end: current
+  };
+
+  const second = {
+    ...segment,
+    start: current,
+    end
+  };
+
+  lyricsStructureDraft.splice(index, 1, first, second);
+  setLyricsStructureSelection([index + 1]);
+  clearLyricsStructureLoop();
+  renderLyricsStructure();
+  return true;
+}
+
+// Работа со Structure в Lyrics Editor.
+function mergeSelectedLyricsStructureBefore() {
+  if (!isLyricsStructureEditable()) return false;
+  const index = lyricsStructureSelectedIndex;
+  if (!lyricsStructureDraft || index <= 0) return index >= 0;
+
+  const previous = lyricsStructureDraft[index - 1];
+  const current = lyricsStructureDraft[index];
+
+  pushLyricsHistory();
+
+  const merged = {
+    ...previous,
+    start: Number(previous.start),
+    end: Number(current.end)
+  };
+
+  lyricsStructureDraft.splice(index - 1, 2, merged);
+  setLyricsStructureSelection([index - 1]);
+  clearLyricsStructureLoop();
+  renderLyricsStructure();
+  return true;
+}
+
+// Работа со Structure в Lyrics Editor.
+function mergeSelectedLyricsStructureAfter() {
+  if (!isLyricsStructureEditable()) return false;
+  const index = lyricsStructureSelectedIndex;
+  if (
+    !lyricsStructureDraft
+    ||
+    index < 0
+    ||
+    index >= lyricsStructureDraft.length - 1
+  ) {
+    return index >= 0;
+  }
+
+  const current = lyricsStructureDraft[index];
+  const next = lyricsStructureDraft[index + 1];
+
+  pushLyricsHistory();
+
+  const merged = {
+    ...current,
+    start: Number(current.start),
+    end: Number(next.end)
+  };
+
+  lyricsStructureDraft.splice(index, 2, merged);
+  setLyricsStructureSelection([index]);
+  clearLyricsStructureLoop();
+  renderLyricsStructure();
+  return true;
+}
+
+// Работа со Structure в Lyrics Editor.
+function deleteSelectedLyricsStructure() {
+  if (!isLyricsStructureEditable()) return false;
+  if (!lyricsStructureDraft?.length) return false;
+
+  let indices = [...lyricsStructureSelectedIndices].sort((a, b) => a - b);
+  if (!indices.length && lyricsStructureSelectedIndex >= 0) {
+    indices = [lyricsStructureSelectedIndex];
+  }
+  if (!indices.length) return false;
+
+  for (let i = 1; i < indices.length; i++) {
+    if (indices[i] !== indices[i - 1] + 1) return false;
+  }
+
+  const firstIndex = indices[0];
+  const lastIndex = indices[indices.length - 1];
+  const first = lyricsStructureDraft[firstIndex];
+  const last = lyricsStructureDraft[lastIndex];
+  if (!first || !last) return false;
+
+  pushLyricsHistory();
+
+  const emptyBlock = {
+    type: "",
+    label: "",
+    start: Number(first.start),
+    end: Number(last.end)
+  };
+
+  lyricsStructureDraft.splice(
+    firstIndex,
+    lastIndex - firstIndex + 1,
+    emptyBlock
+  );
+
+  setLyricsStructureSelection([firstIndex]);
+  clearLyricsStructureLoop();
+  renderLyricsStructure();
+  return true;
+}
+
+// Работа со Structure в Lyrics Editor.
+function renderLyricsStructureTimeline(songEnd) {
+  if (!lyricsStructureTimeline) return;
+  lyricsStructureTimeline.innerHTML = "";
+  const total = Math.max(0.001, Number(songEnd) || 0.001);
+  const trimStart = Math.max(0, Math.min(getProjectTrimStart(), total));
+  const trimEnd = Math.max(trimStart, Math.min(getProjectTrimEnd(), total));
+  const startPercent = trimStart / total * 100;
+  const endPercent = trimEnd / total * 100;
+
+  // Structure does not own separate start/end values. These are the exact same
+  // global Project Trim boundaries used by Sequencer and playback.
+  if (lyricsStructureStartValue) {
+    lyricsStructureStartValue.textContent = formatStructureTime(trimStart);
+    lyricsStructureStartValue.style.left = startPercent + "%";
+    lyricsStructureStartValue.style.right = "auto";
+    lyricsStructureStartValue.style.transform = trimStart > 0 ? "translateX(-50%)" : "none";
+  }
+  if (lyricsStructureEndValue) {
+    lyricsStructureEndValue.textContent = formatStructureTime(trimEnd);
+    lyricsStructureEndValue.style.left = endPercent + "%";
+    lyricsStructureEndValue.style.right = "auto";
+    lyricsStructureEndValue.style.transform = trimEnd < total ? "translateX(-50%)" : "translateX(-100%)";
+  }
+  let step = 15;
+  if (total > 240) step = 30;
+  if (total > 600) step = 60;
+
+  const times = [];
+  for (let t = 0; t < total; t += step) times.push(t);
+  if (!times.length || Math.abs(times[times.length - 1] - total) > 0.01) times.push(total);
+
+  times.forEach((t, index) => {
+    const tick = document.createElement("span");
+    tick.className = "lyrics-structure-tick";
+    tick.style.left = (t / total * 100) + "%";
+    tick.dataset.time = String(t);
+
+    const isStart = index === 0;
+    const isEnd = index === times.length - 1;
+
+    if (isStart || isEnd) {
+      tick.classList.add(
+        "endpoint",
+        isStart ? "endpoint-start" : "endpoint-end"
+      );
+      // Числовые значения конечных точек выводятся в отдельной верхней строке.
+      // Этот span остаётся только как точная опора шкалы 0% / 100%.
+    } else {
+      tick.textContent = formatStructureTime(t);
+    }
+
+    lyricsStructureTimeline.appendChild(tick);
+  });
+}
+
+// Работа со Structure в Lyrics Editor.
+function renderLyricsStructure() {
+  if (!lyricsStructureTrack) return;
+
+  const editable = isLyricsStructureEditable();
+  lyricsStructureTrack.innerHTML = "";
+  const structure = lyricsStructureDraft || [];
+
+  if (!structure.length) {
+    const empty = document.createElement("span");
+    empty.className = "lyrics-structure-empty";
+    empty.textContent = "—";
+    lyricsStructureTrack.appendChild(empty);
+    if (lyricsStructureTimeline) {
+      lyricsStructureTimeline.innerHTML = "";
+    }
+    return;
+  }
+
+  const songEnd = Math.max(
+    Number(duration) || 0,
+    structure[structure.length - 1].end
+  );
+
+  structure.forEach((segment, index) => {
+    const block = document.createElement("div");
+    block.className = "lyrics-structure-segment";
+    if (
+      editable
+      && (lyricsStructureSelectedIndices.has(index) || index === lyricsStructureSelectedIndex)
+    ) {
+      block.classList.add("selected");
+    }
+
+    const structureName = String(segment.label || segment.type || "").trim();
+    const structureDisplayName = structureName || "[ ]";
+
+    // Trim does NOT split or rename Structure segments. If Trim cuts through a segment,
+    // keep the same segment/name and center its label in the visible in-track portion
+    // so the mask cannot make that remainder look like a separate undefined zone.
+    const trimStartForLabel = Math.max(0, Math.min(getProjectTrimStart(), songEnd));
+    const trimEndForLabel = Math.max(trimStartForLabel, Math.min(getProjectTrimEnd(), songEnd));
+    const segmentStart = Number(segment.start) || 0;
+    const segmentEnd = Number(segment.end) || 0;
+    const visibleStart = Math.max(segmentStart, trimStartForLabel);
+    const visibleEnd = Math.min(segmentEnd, trimEndForLabel);
+
+    const label = document.createElement("span");
+    label.className = "lyrics-structure-segment-label";
+    label.textContent = structureDisplayName;
+    if (visibleEnd > visibleStart && segmentEnd > segmentStart) {
+      const visibleCenter = (visibleStart + visibleEnd) / 2;
+      label.style.position = "absolute";
+      label.style.left = (((visibleCenter - segmentStart) / (segmentEnd - segmentStart)) * 100) + "%";
+      label.style.transform = "translateX(-50%)";
+      label.style.maxWidth = (((visibleEnd - visibleStart) / (segmentEnd - segmentStart)) * 100) + "%";
+    }
+    block.appendChild(label);
+
+    block.title =
+      structureDisplayName
+      + "  "
+      + formatStructureTime(segment.start)
+      + " – "
+      + formatStructureTime(segment.end);
+
+    block.style.position = "absolute";
+    block.style.left =
+      (segment.start / songEnd * 100) + "%";
+    block.style.width =
+      ((segment.end - segment.start) / songEnd * 100) + "%";
+
+    if (editable) {
+      block.addEventListener("click", event => {
+        event.stopPropagation();
+        closeLyricsStructureNameMenu();
+
+        if (event.shiftKey) {
+          const current = [...lyricsStructureSelectedIndices].sort((a, b) => a - b);
+          const anchor = current.length
+            ? (index < current[0] ? current[0] : current[current.length - 1])
+            : (lyricsStructureSelectedIndex >= 0 ? lyricsStructureSelectedIndex : index);
+          const from = Math.min(anchor, index);
+          const to = Math.max(anchor, index);
+          lyricsEditorSelectedLine = -1;
+          document.querySelectorAll(".lyrics-editor-row").forEach(item => item.classList.remove("selected"));
+          setLyricsStructureSelection(
+            Array.from({ length: to - from + 1 }, (_, offset) => from + offset)
+          );
+          clearLyricsStructureLoop();
+          renderLyricsStructure();
+          return;
+        }
+
+        // Structure и Lines никогда не конкурируют за Split: активно только одно выделение.
+        lyricsEditorSelectedLine = -1;
+        document.querySelectorAll(".lyrics-editor-row").forEach(item => item.classList.remove("selected"));
+        setLyricsStructureSelection([index]);
+
+        // Если Structure Loop уже активен, выбор другого блока переносит Loop на него.
+        if (lyricsStructureTransportMode === "loop") {
+          lyricsStructureLoopStart = Number(segment.start);
+          lyricsStructureLoopEnd = Number(segment.end);
+          setGlobalCursorTime(lyricsStructureLoopStart);
+        }
+        renderLyricsStructure();
+        updateLyricsTransportButtons();
+      });
+
+      block.addEventListener("dblclick", event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const oldName = segment.label || segment.type;
+        const nextName = window.prompt("Section name:", oldName);
+        if (nextName === null) return;
+
+        const clean = nextName.trim();
+        if (!clean) return;
+        if (clean === oldName) return;
+
+        pushLyricsHistory();
+
+        segment.label = clean;
+        renderLyricsStructure();
+      });
+
+      block.addEventListener("contextmenu", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        openLyricsStructureNameMenu(event, index);
+        renderLyricsStructure();
+      });
+
+// ========================================
+// MOBILE ONLY | STRUCTURE BLOCK LONG PRESS
+// Long press on the center of a Structure block
+// opens the same section-name menu as right-click on desktop.
+// Desktop mouse/right-click behavior remains unchanged.
+// ========================================
+
+let structureBlockLongPressTimer = null;
+let structureBlockLongPressStartX = 0;
+let structureBlockLongPressStartY = 0;
+
+block.addEventListener("pointerdown", event => {
+
+  if (event.pointerType !== "touch") {
+    return;
+  }
+
+  structureBlockLongPressStartX = event.clientX;
+  structureBlockLongPressStartY = event.clientY;
+
+  clearTimeout(
+    structureBlockLongPressTimer
+  );
+
+  structureBlockLongPressTimer =
+    setTimeout(
+      () => {
+
+        structureBlockLongPressTimer =
+          null;
+
+        openLyricsStructureNameMenu(
+          event,
+          index
+        );
+
+        renderLyricsStructure();
+
+      },
+      500
+    );
+});
+
+block.addEventListener("pointermove", event => {
+
+  if (
+    event.pointerType !== "touch"
+    ||
+    !structureBlockLongPressTimer
+  ) {
+    return;
+  }
+
+  const dx =
+    Math.abs(
+      event.clientX
+      - structureBlockLongPressStartX
+    );
+
+  const dy =
+    Math.abs(
+      event.clientY
+      - structureBlockLongPressStartY
+    );
+
+  if (
+    dx > 10
+    ||
+    dy > 10
+  ) {
+
+    clearTimeout(
+      structureBlockLongPressTimer
+    );
+
+    structureBlockLongPressTimer =
+      null;
+  }
+});
+
+block.addEventListener("pointerup", event => {
+
+  if (event.pointerType !== "touch") {
+    return;
+  }
+
+  clearTimeout(
+    structureBlockLongPressTimer
+  );
+
+  structureBlockLongPressTimer =
+    null;
+});
+
+block.addEventListener("pointercancel", event => {
+
+  if (event.pointerType !== "touch") {
+    return;
+  }
+
+  clearTimeout(
+    structureBlockLongPressTimer
+  );
+
+  structureBlockLongPressTimer =
+    null;
+});
+
+
+    }
+
+    lyricsStructureTrack.appendChild(block);
+  });
+
+  if (editable) {
+    structure.forEach((segment, index) => {
+      if (index >= structure.length - 1) return;
+
+      const next = structure[index + 1];
+      const handle = document.createElement("span");
+      handle.className = "lyrics-structure-boundary";
+      handle.title = "Drag section boundary";
+      handle.style.left = (segment.end / songEnd * 100) + "%";
+
+// ========================================      
+// STRUCTURE BOUNDARY touch support
+// ========================================
+// MOBILE ONLY | Structure boundary long press
+// Touch/mobile: boundary dragging starts only after long press.
+// ========================================
+
+
+if (navigator.maxTouchPoints > 0) {
+  const touchZone = document.createElement("span");
+  touchZone.className = "lyrics-structure-boundary-touch-zone";
+  touchZone.dataset.boundaryIndex = String(index);
+  touchZone.style.left = (segment.end / songEnd * 100) + "%";
+
+
+  const indicator = document.createElement("span");
+  indicator.className = "lyrics-structure-boundary-touch-indicator";
+  indicator.textContent = "← →";
+  touchZone.appendChild(indicator);
+
+  let holdTimer = null;
+  let grabbed = false;
+  let pointerId = null;
+
+  touchZone.addEventListener("pointerdown", event => {
+    if (event.pointerType !== "touch") return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    pointerId = event.pointerId;
+
+    holdTimer = setTimeout(() => {
+      holdTimer = null;
+      grabbed = true;
+
+      pushLyricsHistory();
+
+      touchZone.classList.add("grabbed");
+      handle.classList.add("touch-grabbed");
+
+      touchZone.setPointerCapture?.(pointerId);
+    }, 500);
+  });
+
+  touchZone.addEventListener("pointermove", event => {
+    if (
+      event.pointerType !== "touch" ||
+      event.pointerId !== pointerId ||
+      !grabbed
+    ) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const rect = lyricsStructureTrack.getBoundingClientRect();
+
+    const ratio = Math.max(
+      0,
+      Math.min(1, (event.clientX - rect.left) / rect.width)
+    );
+
+    const min = Number(segment.start);
+    const max = Number(next.end);
+
+    const boundary = Math.max(
+      min,
+      Math.min(max, ratio * songEnd)
+    );
+
+    segment.end = boundary;
+    next.start = boundary;
+
+    const percent = boundary / songEnd * 100;
+
+    handle.style.left = percent + "%";
+    touchZone.style.left = percent + "%";
+  });
+
+  const finishTouchBoundary = event => {
+    if (event.pointerId !== pointerId) return;
+
+    if (holdTimer) {
+      clearTimeout(holdTimer);
+      holdTimer = null;
+    }
+
+    const wasGrabbed = grabbed;
+
+    grabbed = false;
+    pointerId = null;
+
+    touchZone.classList.remove("grabbed");
+    handle.classList.remove("touch-grabbed");
+
+    if (wasGrabbed) {
+      renderLyricsStructure();
+    }
+  };
+
+  touchZone.addEventListener("pointerup", finishTouchBoundary);
+  touchZone.addEventListener("pointercancel", finishTouchBoundary);
+
+  lyricsStructureTrack.appendChild(touchZone);
+}
+
+
+
+// DESKTOP:
+// Mouse drag starts immediately.
+// Desktop mouse behavior remains unchanged.
+
+handle.addEventListener("pointerdown", event => {
+if (event.pointerType === "touch") return;
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  pushLyricsHistory();
+
+  const rect = lyricsStructureTrack.getBoundingClientRect();
+  const min = Number(segment.start);
+  const max = Number(next.end);
+
+  handle.setPointerCapture?.(event.pointerId);
+
+  const move = moveEvent => {
+    const ratio = Math.max(
+      0,
+      Math.min(1, (moveEvent.clientX - rect.left) / rect.width)
+    );
+
+    const boundary = Math.max(
+      min,
+      Math.min(max, ratio * songEnd)
+    );
+
+    segment.end = boundary;
+    next.start = boundary;
+    renderLyricsStructure();
+  };
+
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+  };
+
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+});
+
+
+
+
+      lyricsStructureTrack.appendChild(handle);
+    });
+
+  }
+
+  // Same global Trim as Sequencer: keep the physical Structure visible, but shade
+  // everything outside the working Project range. No duplicate Structure trim state.
+  const trimStart = Math.max(0, Math.min(getProjectTrimStart(), songEnd));
+  const trimEnd = Math.max(trimStart, Math.min(getProjectTrimEnd(), songEnd));
+  const trimStartPercent = trimStart / songEnd * 100;
+  const trimEndPercent = trimEnd / songEnd * 100;
+
+  // OUT OF TRACK is only a visual overlay of the Structure track itself.
+  // Do not append any mask elements: Trim must never create an extra/undefined Structure block.
+  lyricsStructureTrack.style.setProperty("--structure-trim-left-width",
+    trimStart > 0 ? trimStartPercent + "%" : "0%");
+  lyricsStructureTrack.style.setProperty("--structure-trim-right-left",
+    trimEnd < songEnd ? trimEndPercent + "%" : "100%");
+  lyricsStructureTrack.style.setProperty("--structure-trim-right-width",
+    trimEnd < songEnd ? (100 - trimEndPercent) + "%" : "0%");
+
+  const trimStartMarker = document.createElement("div");
+  trimStartMarker.className = "lyrics-structure-trim-marker start";
+  trimStartMarker.style.left = trimStartPercent + "%";
+  lyricsStructureTrack.appendChild(trimStartMarker);
+
+  const trimEndMarker = document.createElement("div");
+  trimEndMarker.className = "lyrics-structure-trim-marker end";
+  trimEndMarker.style.left = trimEndPercent + "%";
+  lyricsStructureTrack.appendChild(trimEndMarker);
+
+  const playhead = document.createElement("div");
+  playhead.className = "lyrics-structure-playhead";
+  playhead.dataset.role = "lyrics-structure-playhead";
+  lyricsStructureTrack.appendChild(playhead);
+
+  renderLyricsStructureTimeline(songEnd);
+  updateLyricsStructurePlayhead(songEnd);
+}
+
+// Работа со Structure в Lyrics Editor.
+function updateLyricsStructurePlayhead(songEnd = null) {
+  if (!lyricsStructureTrack) return;
+  const playhead = lyricsStructureTrack.querySelector('[data-role="lyrics-structure-playhead"]');
+  if (!playhead) return;
+
+  const total = Math.max(
+    0.001,
+    Number(songEnd) || Number(duration) || 0.001
+  );
+
+  const current = Math.max(
+    0,
+    Math.min(
+      total,
+      Number(masterCursorTime) || 0
+    )
+  );
+
+  playhead.style.left =
+    (current / total * 100) + "%";
+
+  if (lyricsStructureTimeline) {
+    const ticks =
+      lyricsStructureTimeline.querySelectorAll(
+        ".lyrics-structure-tick"
+      );
+
+    ticks.forEach(tick => {
+      const tickTime =
+        Number(tick.dataset.time);
+
+      tick.classList.toggle(
+        "active",
+        Number.isFinite(tickTime)
+        &&
+        Math.abs(current - tickTime) <= 5
+      );
+    });
+  }
+}
+
+
+lyricsStructureTimeline?.addEventListener("click", event => {
+  event.preventDefault();
+  event.stopPropagation();
+  closeLyricsStructureNameMenu();
+  playLyricsStructureTimelineAt(event);
+});
+
+document.addEventListener("click", event => {
+  if (
+    lyricsStructureNameMenu
+    &&
+    !lyricsStructureNameMenu.contains(event.target)
+  ) {
+    closeLyricsStructureNameMenu();
+  }
+});
+
+lyricsStructureTrack?.addEventListener("click", event => {
+  if (event.target !== lyricsStructureTrack) return;
+
+  const rect = lyricsStructureTrack.getBoundingClientRect();
+  if (!rect.width) return;
+
+  const ratio = Math.max(
+    0,
+    Math.min(1, (event.clientX - rect.left) / rect.width)
+  );
+
+  // Один общий курсор для Structure, Lines и Sequencer. Состояние транспорта сохраняется.
+  setGlobalCursorTime(ratio * structureSongEnd());
+
+  renderLyricsStructure();
+});
+
+document.addEventListener("keydown", event => {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+  const key = String(event.key || "").toLowerCase();
+  if (key !== "z" && key !== "y") return;
+
+  const active = document.activeElement;
+  if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) return;
+
+  if (isLyricsStructureEditable()) {
+    event.preventDefault();
+    if (key === "y" || (key === "z" && event.shiftKey)) lyricsRedoBtn?.click();
+    else lyricsUndoBtn?.click();
+    return;
+  }
+
+  if (!isLyricsUiOpen()) {
+    event.preventDefault();
+    if (key === "y" || (key === "z" && event.shiftKey)) redoSequencer();
+    else undoSequencer();
+  }
+});
+
+document.addEventListener("keydown", event => {
+  if (!isLyricsUiOpen()) return;
+  if (!isLyricsStructureEditable()) return;
+  if (event.key !== "Delete") return;
+  if (!lyricsStructureSelectedIndices.size && lyricsStructureSelectedIndex < 0 || !lyricsStructureDraft?.length) return;
+  const active = document.activeElement;
+  if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) return;
+  event.preventDefault();
+  deleteSelectedLyricsStructure();
+});
+
+
+// 5.4.18 | Delete снимает Selection только в главном Sequencer.
+// В Lyrics/Structure и полях ввода Delete сохраняет их собственное назначение.
+document.addEventListener("keydown", event => {
+  if (event.key !== "Delete") return;
+  if (isLyricsUiOpen()) return;
+  const active = document.activeElement;
+  if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) return;
+  if (!fragmentStart && fragmentStart !== 0 && !fragmentEnd && fragmentEnd !== 0) return;
+
+  event.preventDefault();
+  clearSelection();
+  updateTimeDisplay();
+});
+
+// Работа со Structure в Lyrics Editor.
+function initLyricsEditorWindowMovement() {
+  if (!lyricsEditorCard || !lyricsEditorHeader) return;
+  let drag = null;
+
+  lyricsEditorHeader.addEventListener("pointerdown", event => {
+    if (event.target.closest("button, textarea, input, select")) return;
+    const rect = lyricsEditorCard.getBoundingClientRect();
+    lyricsEditorCard.style.position = "fixed";
+    lyricsEditorCard.style.left = rect.left + "px";
+    lyricsEditorCard.style.top = rect.top + "px";
+    lyricsEditorCard.style.margin = "0";
+    drag = {
+      pointerId: event.pointerId,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top
+    };
+    lyricsEditorHeader.setPointerCapture(event.pointerId);
+  });
+
+  lyricsEditorHeader.addEventListener("pointermove", event => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const maxLeft = Math.max(0, window.innerWidth - lyricsEditorCard.offsetWidth);
+    const maxTop = Math.max(0, window.innerHeight - lyricsEditorCard.offsetHeight);
+    lyricsEditorCard.style.left = Math.max(0, Math.min(maxLeft, event.clientX - drag.offsetX)) + "px";
+    lyricsEditorCard.style.top = Math.max(0, Math.min(maxTop, event.clientY - drag.offsetY)) + "px";
+  });
+
+  const stop = event => {
+    if (drag && event.pointerId === drag.pointerId) drag = null;
+  };
+  lyricsEditorHeader.addEventListener("pointerup", stop);
+  lyricsEditorHeader.addEventListener("pointercancel", stop);
+}
+
+initLyricsEditorWindowMovement();
+
+// Работа со Structure в Lyrics Editor.
+function renderLyricsEditor() {
+  lyricsEditorRows.innerHTML = "";
+
+  if (lyricsLanguageInfo) {
+    const languageSource =
+      lyricsTranscriptionMode
+      &&
+      lyricsOriginalDraftForTranscription
+      ? lyricsOriginalDraftForTranscription
+      : lyricsEditorDraft;
+
+    const sourceLanguage =
+      detectLyricsLanguage(
+        languageSource
+          .map(
+            line =>
+              line._editedText
+              ??
+              lineText(line)
+          )
+          .join("\n")
+      );
+
+    lyricsLanguageInfo.textContent =
+      lyricsTranscriptionMode
+      ? "Language: "
+        + languageLabel(sourceLanguage)
+        + " → RU"
+      : "Language: "
+        + languageLabel(sourceLanguage);
+  }
+
+  lyricsEditorDraft.forEach((line, index) => {
+    const row = document.createElement("div");
+    row.className = "lyrics-editor-row";
+    if (index === lyricsEditorSelectedLine) row.classList.add("selected");
+    row.dataset.index = String(index);
+
+    const startInput = document.createElement("input");
+    startInput.type = "text";
+    startInput.value = formatLyricsTime(line.start);
+
+    const endInput = document.createElement("input");
+    endInput.type = "text";
+    endInput.value = formatLyricsTime(line.end);
+
+    const textWrap = document.createElement("div");
+    textWrap.className = "lyrics-editor-text-wrap";
+    if (index === lyricsEditorEditLineIndex) textWrap.classList.add("lyrics-edit-active");
+
+    const karaokeBox = document.createElement("div");
+    karaokeBox.className = "lyrics-editor-karaoke";
+
+    line.words.forEach((word, wordIndex) => {
+      const span = document.createElement("span");
+      span.className = "lyrics-editor-karaoke-word";
+      span.dataset.wordIndex = String(wordIndex);
+      span.textContent = word.word;
+      karaokeBox.appendChild(span);
+      if (wordIndex < line.words.length - 1) karaokeBox.appendChild(document.createTextNode(" "));
+    });
+
+    const editMarker = document.createElement("div");
+    editMarker.className = "lyrics-editor-edit-marker";
+
+    const textArea = document.createElement("textarea");
+    textArea.value = line._editedText ?? lineText(line);
+    textArea.spellcheck = true;
+    textArea.lang =
+      detectLyricsLanguage(
+        textArea.value
+      );
+
+    updateLyricsLineSpellcheck(
+      line,
+      index,
+      karaokeBox
+    );
+
+    const bindLyricsTimeEditor = (input, key) => {
+      let startState = null;
+      let startValue = Number(line[key]);
+      let committed = false;
+
+      const begin = () => {
+        startState = cloneLyricsEditorState();
+        startValue = Number(line[key]);
+        committed = false;
+      };
+
+      const commit = () => {
+        if (committed) return;
+        committed = true;
+        const value = parseLyricsTime(input.value);
+        if (Number.isFinite(value)) line[key] = value;
+        input.value = formatLyricsTime(line[key]);
+        if (Number(line[key]) !== startValue) pushLyricsHistoryState(startState);
+      };
+
+      input.addEventListener("focus", begin);
+      input.addEventListener("keydown", event => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        event.stopPropagation();
+        commit();
+        input.blur();
+      });
+      input.addEventListener("blur", commit);
+    };
+
+    bindLyricsTimeEditor(startInput, "start");
+    bindLyricsTimeEditor(endInput, "end");
+
+    karaokeBox.tabIndex = 0;
+    karaokeBox.addEventListener("click", event => {
+      event.stopPropagation();
+      clearLyricsStructureSelection();
+      clearLyricsStructureLoop();
+      lyricsEditorSelectedLine = index;
+
+      document.querySelectorAll(".lyrics-editor-row").forEach((item, itemIndex) => {
+        item.classList.toggle("selected", itemIndex === index);
+      });
+
+      const wordSpan = event.target.closest?.(".lyrics-editor-karaoke-word");
+      if (wordSpan) {
+        // POINTER: клик по слову управляет только транспортом.
+        if (lyricsEditorEditLineIndex >= 0) leaveLyricsEdit({ restorePointer: false });
+        seekLyricsWord(line, Number(wordSpan.dataset.wordIndex));
+      } else {
+        // CARET: клик между словами включает только редактирование текста; время транспорта не меняется.
+        enterLyricsEditAt(line, row, textWrap, textArea, karaokeBox, event.clientX, event.clientY);
+      }
+      updateLyricsEditorStats();
+    });
+
+    const rememberLyricsCaret = () => {
+      if (lyricsEditorEditLineIndex !== index) return;
+      lyricsEditorCaretOffset = Number(textArea.selectionStart) || 0;
+    };
+
+    textArea.addEventListener("input", event => {
+      line._editedText = event.target.value;
+      rememberLyricsCaret();
+    });
+    textArea.addEventListener("keydown", event => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      event.stopPropagation();
+      leaveLyricsEdit({ restorePointer: true });
+      textArea.blur();
+    });
+    textArea.addEventListener("click", rememberLyricsCaret);
+    textArea.addEventListener("keyup", rememberLyricsCaret);
+    textArea.addEventListener("select", rememberLyricsCaret);
+
+    row.addEventListener("click", event => {
+      if (lyricsEditorEditLineIndex >= 0 && lyricsEditorEditLineIndex !== index) {
+        leaveLyricsEdit({ restorePointer: false });
+      }
+      if (event.target === startInput || event.target === endInput || event.target === textArea) return;
+
+      clearLyricsStructureSelection();
+      clearLyricsStructureLoop();
+      lyricsEditorSelectedLine = index;
+
+      document.querySelectorAll(".lyrics-editor-row").forEach((item, itemIndex) => {
+        item.classList.toggle("selected", itemIndex === index);
+      });
+
+      updateLyricsEditorStats();
+    });
+
+    const lineTools = document.createElement("div");
+    lineTools.className = "lyrics-line-tools";
+
+    const lineNumber = document.createElement("span");
+    lineNumber.className = "lyrics-line-number";
+    lineNumber.textContent = String(index + 1);
+
+    const copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "lyrics-line-tool-btn";
+    copyBtn.textContent = "Copy";
+    copyBtn.title = "Copy line";
+
+    const pasteBtn = document.createElement("button");
+    pasteBtn.type = "button";
+    pasteBtn.className = "lyrics-line-tool-btn";
+    pasteBtn.textContent = "Paste";
+    pasteBtn.title = "Paste into line";
+
+    // Preserve textarea selection/caret when the explicit Paste button is used in CARET mode.
+    pasteBtn.addEventListener("pointerdown", event => event.preventDefault());
+
+    copyBtn.addEventListener("click", async event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const text = index === lyricsEditorEditLineIndex
+        ? textArea.value
+        : (line._editedText ?? lineText(line));
+      try {
+        await navigator.clipboard.writeText(String(text));
+        setLyricsEditorMessage("Line " + (index + 1) + ": copied");
+      } catch (error) {
+        console.error("Lyrics line copy failed:", error);
+        setLyricsEditorMessage("Copy failed: clipboard permission denied");
+      }
+    });
+
+    pasteBtn.addEventListener("click", async event => {
+      event.preventDefault();
+      event.stopPropagation();
+      let pasted = "";
+      try {
+        pasted = await navigator.clipboard.readText();
+      } catch (error) {
+        console.error("Lyrics line paste failed:", error);
+        setLyricsEditorMessage("Paste failed: clipboard permission denied");
+        return;
+      }
+      if (!pasted) return;
+
+      if (index === lyricsEditorEditLineIndex) {
+        const value = textArea.value;
+        const start = Math.max(0, Number(textArea.selectionStart) || 0);
+        const end = Math.max(start, Number(textArea.selectionEnd) || start);
+        const next = value.slice(0, start) + pasted + value.slice(end);
+        if (next === value) return;
+        textArea.value = next;
+        line._editedText = next;
+        lyricsEditorCaretOffset = start + pasted.length;
+        textArea.focus({ preventScroll: true });
+        textArea.setSelectionRange(lyricsEditorCaretOffset, lyricsEditorCaretOffset);
+        updateLyricsEditMarker(row, line, getCurrentTime());
+        return;
+      }
+
+      const before = cloneLyricsEditorState();
+      const currentText = line._editedText ?? lineText(line);
+      const separator = currentText && !/\s$/.test(currentText) && !/^\s/.test(pasted) ? " " : "";
+      const nextText = currentText + separator + pasted;
+      if (nextText === currentText) return;
+      setLineText(line, nextText);
+      delete line._editedText;
+      pushLyricsHistoryState(before);
+      renderLyricsEditor();
+      setLyricsEditorMessage("Line " + (index + 1) + ": pasted");
+    });
+
+    lineTools.appendChild(lineNumber);
+    lineTools.appendChild(copyBtn);
+    lineTools.appendChild(pasteBtn);
+
+    textWrap.appendChild(karaokeBox);
+    textWrap.appendChild(textArea);
+    textWrap.appendChild(editMarker);
+    row.appendChild(startInput);
+    row.appendChild(endInput);
+    row.appendChild(textWrap);
+    row.appendChild(lineTools);
+    lyricsEditorRows.appendChild(row);
+  });
+
+  updateLyricsEditorStats();
+
+  updateLyricsEditorKaraoke(getCurrentTime());
+  renderLyricsStructure();
+  updateLyricsTranscriptionButton();
+}
+
+// Работа со Structure в Lyrics Editor.
+function formatLyricsTime(
+  seconds
+) {
+
+  const safe =
+    Math.max(
+      0,
+      Number(seconds) || 0
+    );
+
+
+  const minutes =
+    Math.floor(
+      safe / 60
+    );
+
+
+  const secs =
+    Math.floor(
+      safe % 60
+    );
+
+
+  const hundredths =
+    Math.floor(
+      (
+        safe
+        -
+        Math.floor(safe)
+      )
+      * 100
+    );
+
+
+  return (
+    String(minutes)
+      .padStart(2, "0")
+    + ":"
+    + String(secs)
+      .padStart(2, "0")
+    + "."
+    + String(hundredths)
+      .padStart(2, "0")
+  );
+
+}
+
+
+// Работа со Structure в Lyrics Editor.
+function parseLyricsTime(
+  value
+) {
+
+  const text =
+    String(value)
+      .trim();
+
+
+  const match =
+    text.match(
+      /^(\d+):(\d{1,2})(?:\.(\d{1,2}))?$/
+    );
+
+
+  if (!match) {
+
+    return NaN;
+
+  }
+
+
+  const minutes =
+    Number(match[1]);
+
+
+  const seconds =
+    Number(match[2]);
+
+
+  const hundredths =
+    Number(
+      (
+        match[3]
+        || "0"
+      )
+      .padEnd(2, "0")
+      .slice(0, 2)
+    );
+
+
+  if (
+    seconds < 0
+    ||
+    seconds >= 60
+  ) {
+
+    return NaN;
+
+  }
+
+
+  return (
+    minutes * 60
+    + seconds
+    + hundredths / 100
+  );
+
+}
+
+
+// Работа со Structure в Lyrics Editor.
+function updateLyricsTransportButtons() {
+  if (!lyricsEditorDialog || !isLyricsUiOpen()) return;
+
+  const structureLoopActive =
+    lyricsStructureTransportMode === "loop"
+    && Number.isFinite(lyricsStructureLoopStart)
+    && Number.isFinite(lyricsStructureLoopEnd)
+    && lyricsStructureLoopEnd > lyricsStructureLoopStart;
+
+  const lineLoopActive = lyricsTransportMode === "line" && loopEnabled;
+
+  lyricsPlayMasterBtn.textContent =
+    isPlaying && !structureLoopActive && !lineLoopActive ? "Pause" : "Play";
+
+  lyricsPlayLineBtn.textContent =
+    isPlaying && (structureLoopActive || lineLoopActive) ? "Pause" : "Loop";
+}
+
+
+// Работа со Structure в Lyrics Editor.
+function updateLyricsFullScreenCounterStyle(remaining, phase) {
+  if (!lyricsFullScreenCounter) return;
+
+  lyricsFullScreenCounter.classList.remove(
+    "pre-vocal",
+    "post-vocal",
+    "countdown-gray",
+    "countdown-3",
+    "countdown-2",
+    "countdown-1",
+    "phase-final"
+  );
+
+  const value = Math.max(0, Number(remaining) || 0);
+
+  // Phase 1 keeps the existing large Full Screen pre-vocal styling and its 3/2/1 colors.
+  if (phase === 1) {
+    lyricsFullScreenCounter.classList.add("pre-vocal");
+    if (value > 3) {
+      lyricsFullScreenCounter.classList.add("countdown-gray");
+    } else if (value > 2) {
+      lyricsFullScreenCounter.classList.add("countdown-3");
+    } else if (value > 1) {
+      lyricsFullScreenCounter.classList.add("countdown-2");
+    } else if (value > 0) {
+      lyricsFullScreenCounter.classList.add("countdown-1");
+    }
+    return;
+  }
+
+  // Phase 2 keeps the current Full Screen active/post-vocal look.
+  lyricsFullScreenCounter.classList.add("post-vocal");
+
+  // Phase 3 uses the same Full Screen size/position/font but is gray.
+  if (phase === 3) {
+    lyricsFullScreenCounter.classList.add("phase-final");
+  }
+}
+
+// Работа со Structure в Lyrics Editor.
+function getLyricsEditorPhaseCountdown(currentTime) {
+  const current = Math.max(0, Number(currentTime) || 0);
+  const firstLine = lyricsEditorDraft?.length ? lyricsEditorDraft[0] : null;
+  const lastLine = lyricsEditorDraft?.length ? lyricsEditorDraft[lyricsEditorDraft.length - 1] : null;
+  const vocalStart = firstLine ? Number(firstLine.start) : NaN;
+  const vocalEnd = lastLine ? Number(lastLine.end) : NaN;
+  const trackEnd = Math.max(0, Number(duration) || 0);
+
+  if (Number.isFinite(vocalStart) && current < vocalStart) {
+    return { remaining: vocalStart - current, phase: 1 };
+  }
+  if (Number.isFinite(vocalEnd) && current < vocalEnd) {
+    return { remaining: vocalEnd - current, phase: 2 };
+  }
+  return { remaining: Math.max(0, trackEnd - current), phase: 3 };
+}
+
+function updateLyricsMasterCounter() {
+  const current = Math.max(0, Number(getCurrentTime()) || 0);
+
+  // Upper MASTER above Structure is a normal forward transport counter.
+  if (lyricsStructureMasterCounter) {
+    lyricsStructureMasterCounter.textContent = formatTime(current);
+  }
+
+  // Lower Lyrics counter is a dedicated three-phase reverse counter.
+  if (lyricsMasterCounter) {
+    const phase = getLyricsEditorPhaseCountdown(current);
+    lyricsMasterCounter.textContent = "-" + formatTime(phase.remaining);
+    lyricsMasterCounter.dataset.phase = String(phase.phase);
+  }
+
+  // Full Screen mirrors the same three reverse-countdown phases as the lower Lyrics counter.
+  if (lyricsFullScreenCounter) {
+    const fullScreenPhase = getLyricsEditorPhaseCountdown(current);
+    lyricsFullScreenCounter.textContent = "-" + formatTime(fullScreenPhase.remaining);
+    updateLyricsFullScreenCounterStyle(fullScreenPhase.remaining, fullScreenPhase.phase);
+  }
+
+  updateLyricsStructurePlayhead();
+}
+
+
+// Работа со Structure в Lyrics Editor.
+function cloneLyricsEditorDraft() {
+  return JSON.parse(JSON.stringify(lyricsEditorDraft));
+}
+
+// Работа со Structure в Lyrics Editor.
+function cloneLyricsEditorState() {
+  return {
+    lyrics: JSON.parse(
+      JSON.stringify(lyricsEditorDraft)
+    ),
+    structure: JSON.parse(
+      JSON.stringify(lyricsStructureDraft)
+    )
+  };
+}
+
+// Работа со Structure в Lyrics Editor.
+function pushLyricsHistory() {
+  lyricsUndoStack.push(
+    cloneLyricsEditorState()
+  );
+
+  if (lyricsUndoStack.length > 100) {
+    lyricsUndoStack.shift();
+  }
+
+  lyricsRedoStack = [];
+  updateLyricsUndoRedoButtons();
+}
+
+// Добавляет в History заранее сохранённое состояние до начала одной сессии редактирования.
+function pushLyricsHistoryState(state) {
+  if (!state) return;
+  lyricsUndoStack.push(JSON.parse(JSON.stringify(state)));
+  if (lyricsUndoStack.length > 100) lyricsUndoStack.shift();
+  lyricsRedoStack = [];
+  updateLyricsUndoRedoButtons();
+}
+
+// Работа со Structure в Lyrics Editor.
+function updateLyricsUndoRedoButtons() {
+  lyricsUndoBtn.disabled =
+    lyricsUndoStack.length === 0;
+
+  lyricsRedoBtn.disabled =
+    lyricsRedoStack.length === 0;
+}
+
+// Работа со Structure в Lyrics Editor.
+function openLyricsEditor() {
+  lyricsStructureSelectedIndex = -1;
+  lyricsTranscriptionMode = false;
+  lyricsOriginalDraftForTranscription = null;
+  lyricsEditorDraft = cloneKaraokeLines();
+  lyricsEditorSelectedLine =
+    lyricsEditorDraft.length ? 0 : -1;
+
+  lyricsUndoStack = [];
+  lyricsRedoStack = [];
+
+  updateLyricsUndoRedoButtons();
+  renderLyricsEditor();
+  updateTimeDisplay();
+  updateLyricsMasterCounter();
+
+  lyricsTransportMode =
+    "master";
+
+
+  lyricsLoopPaused =
+    false;
+
+
+  lyricsPlayMasterBtn.textContent =
+    "Play";
+
+
+  lyricsPlayLineBtn.textContent =
+    "Loop";
+
+  setUiMode(UI_MODE.LYRICS);
+}
+
+// Работа со Structure в Lyrics Editor.
+function closeLyricsEditor() {
+
+  setUiMode(UI_MODE.SEQUENCER);
+
+  const current =
+    getCurrentTime();
+
+
+  fragmentStart =
+    null;
+
+
+  fragmentEnd =
+    null;
+
+
+  loopEnabled =
+    false;
+
+
+  lyricsTransportMode =
+    "master";
+
+
+  lyricsLoopPaused =
+    false;
+
+
+  syncAllTo(
+    current
+  );
+
+
+  masterCursorTime =
+    current;
+
+
+  updatePlayheads();
+
+  updateMasterCursor();
+
+  updateTimeDisplay();
+
+
+  lyricsPlayMasterBtn.textContent =
+    "Play";
+
+
+  lyricsPlayLineBtn.textContent =
+    "Loop";
+
+
+}
+
+// Локальная функциональная операция этого блока.
+function applyEditedTextToLine(
+  line
+) {
+
+  if (!line) {
+
+    return;
+
+  }
+
+
+  if (
+    typeof line._editedText ===
+    "string"
+  ) {
+
+    setLineText(
+      line,
+      line._editedText
+    );
+
+
+    delete line._editedText;
+
+  }
+
+}
+
+
+// Работа со Structure в Lyrics Editor.
+function getSelectedLyricsLine() {
+  if (lyricsEditorSelectedLine < 0 || lyricsEditorSelectedLine >= lyricsEditorDraft.length) return null;
+  return lyricsEditorDraft[lyricsEditorSelectedLine];
+}
+
+editLyricsBtn.addEventListener("click", openLyricsEditor);
+openLyricsFullScreenBtn?.addEventListener("click", () => {
+  void reportProjectLoadTrace("FULL SCREEN BUTTON CLICK", { project_active: Boolean(activeProjectId) });
+  openLyricsEditor();
+  void reportProjectLoadTrace("FULL SCREEN LYRICS EDITOR PREPARED");
+  setUiMode(UI_MODE.KARAOKE);
+});
+closeLyricsEditorBtn.addEventListener("click", closeLyricsEditor);
+cancelLyricsEditBtn.addEventListener("click", closeLyricsEditor);
+
+document.addEventListener("click", event => {
+  if (
+    lyricsSpellPopup
+    &&
+    !lyricsSpellPopup.contains(event.target)
+  ) {
+    closeLyricsSpellPopup();
+  }
+});
+
+
+lyricsEditorDialog.addEventListener("click", event => {
+  if (event.target === lyricsEditorDialog) closeLyricsEditor();
+});
+
+lyricsSplitLineBtn.addEventListener(
+  "click",
+  () => {
+
+    if (lyricsStructureSelectedIndex >= 0) {
+      splitSelectedLyricsStructure();
+      return;
+    }
+
+    const edit = getLyricsEditContext();
+    if (!edit) {
+      setLyricsEditorMessage("Split: available only in Edit");
+      return;
+    }
+
+    const { textArea, lineIndex, line } = edit;
+    const fullText = textArea.value;
+    const caret = Math.max(0, Math.min(fullText.length, Number(lyricsEditorCaretOffset) || 0));
+    const leftText = fullText.slice(0, caret).trim();
+    const rightText = fullText.slice(caret).trim();
+
+    if (!leftText || !rightText) {
+      setLyricsEditorMessage("Split: text is required on both sides of the caret");
+      return;
+    }
+
+    const splitTime = splitTimeFromCaret(line, fullText, caret);
+    if (
+      !Number.isFinite(splitTime)
+      || splitTime <= Number(line.start)
+      || splitTime >= Number(line.end)
+    ) {
+      setLyricsEditorMessage("Split: caret cannot create two text lines here");
+      return;
+    }
+
+    pushLyricsHistory();
+
+    const leftLine = {
+      start: Number(line.start),
+      end: splitTime,
+      words: []
+    };
+    const rightLine = {
+      start: splitTime,
+      end: Number(line.end),
+      words: []
+    };
+
+    setLineText(leftLine, leftText);
+    setLineText(rightLine, rightText);
+
+    lyricsEditorDraft.splice(lineIndex, 1, leftLine, rightLine);
+    lyricsEditorSelectedLine = lineIndex + 1;
+    lyricsEditorEditLineIndex = lineIndex + 1;
+    lyricsEditorCaretOffset = 0;
+
+    if (lyricsTransportMode === "line" && loopEnabled) {
+      fragmentStart = Number(lyricsEditorDraft[lyricsEditorSelectedLine].start);
+      fragmentEnd = Number(lyricsEditorDraft[lyricsEditorSelectedLine].end);
+    }
+
+    renderLyricsEditor();
+    updateLyricsUndoRedoButtons();
+    updateLyricsTransportButtons();
+  }
+);
+
+lyricsMergeUpBtn.addEventListener(
+  "click",
+  () => {
+
+    if (lyricsStructureSelectedIndex >= 0) { mergeSelectedLyricsStructureBefore(); return; }
+
+    const index =
+      lyricsEditorEditLineIndex;
+
+
+    if (
+      index <= 0
+    ) {
+
+      return;
+
+    }
+
+
+    const previous =
+      lyricsEditorDraft[
+        index - 1
+      ];
+
+
+    const current =
+      lyricsEditorDraft[
+        index
+      ];
+
+
+    applyEditedTextToLine(
+      previous
+    );
+
+
+    applyEditedTextToLine(
+      current
+    );
+
+
+    pushLyricsHistory();
+
+
+    const merged = {
+
+      start:
+        Number(
+          previous.start
+        ),
+
+      end:
+        Number(
+          current.end
+        ),
+
+      words:
+        previous.words
+          .map(
+            word => ({
+              ...word
+            })
+          )
+          .concat(
+            current.words.map(
+              word => ({
+                ...word
+              })
+            )
+          )
+
+    };
+
+
+    lyricsEditorDraft.splice(
+      index - 1,
+      2,
+      merged
+    );
+
+
+    lyricsEditorSelectedLine =
+      index - 1;
+    lyricsEditorEditLineIndex =
+      index - 1;
+
+
+    renderLyricsEditor();
+
+    updateLyricsUndoRedoButtons();
+
+  }
+);
+
+lyricsMergeDownBtn.addEventListener(
+  "click",
+  () => {
+
+    if (lyricsStructureSelectedIndex >= 0) { mergeSelectedLyricsStructureAfter(); return; }
+
+    const index =
+      lyricsEditorEditLineIndex;
+
+
+    if (
+      index < 0
+      ||
+      index >=
+        lyricsEditorDraft.length - 1
+    ) {
+
+      return;
+
+    }
+
+
+    const current =
+      lyricsEditorDraft[
+        index
+      ];
+
+
+    const next =
+      lyricsEditorDraft[
+        index + 1
+      ];
+
+
+    applyEditedTextToLine(
+      current
+    );
+
+
+    applyEditedTextToLine(
+      next
+    );
+
+
+    pushLyricsHistory();
+
+
+    const merged = {
+
+      start:
+        Number(
+          current.start
+        ),
+
+      end:
+        Number(
+          next.end
+        ),
+
+      words:
+        current.words
+          .map(
+            word => ({
+              ...word
+            })
+          )
+          .concat(
+            next.words.map(
+              word => ({
+                ...word
+              })
+            )
+          )
+
+    };
+
+
+    lyricsEditorDraft.splice(
+      index,
+      2,
+      merged
+    );
+
+
+    lyricsEditorSelectedLine =
+      index;
+    lyricsEditorEditLineIndex =
+      index;
+
+
+    renderLyricsEditor();
+
+    updateLyricsUndoRedoButtons();
+
+  }
+);
+
+lyricsRepeatBtn.addEventListener(
+  "click",
+  () => {
+
+    syncAllTo(0);
+
+    lyricsEditorSelectedLine =
+      lyricsEditorDraft.length
+      ? 0
+      : -1;
+
+    renderLyricsEditor();
+
+    if (lyricsEditorRows) {
+      lyricsEditorRows.scrollTop = 0;
+    }
+
+    updatePlayheads();
+    updateMasterCursor();
+    updateTimeDisplay();
+    updateLyricsMasterCounter();
+
+  }
+);
+
+lyricsSetStartBtn.addEventListener("click", () => {
+  const line = getSelectedLyricsLine();
+  if (!line) return;
+
+  pushLyricsHistory();
+
+  line.start =
+    masterCursorTime;
+
+  if (line.words.length) {
+    line.words[0].start = line.start;
+  }
+
+  renderLyricsEditor();
+});
+
+lyricsSetEndBtn.addEventListener("click", () => {
+  const line = getSelectedLyricsLine();
+  if (!line) return;
+
+  pushLyricsHistory();
+
+  line.end =
+    masterCursorTime;
+
+  if (line.words.length) {
+    line.words[line.words.length - 1].end = line.end;
+  }
+
+  renderLyricsEditor();
+});
+
+lyricsPlayMasterBtn.addEventListener(
+  "click",
+  () => {
+
+    if (
+      lyricsStructureTransportMode === "loop"
+      && Number.isFinite(lyricsStructureLoopStart)
+      && Number.isFinite(lyricsStructureLoopEnd)
+      && lyricsStructureLoopEnd > lyricsStructureLoopStart
+    ) {
+      clearLyricsStructureLoop();
+      lyricsTransportMode = "master";
+      fragmentStart = null;
+      fragmentEnd = null;
+      loopEnabled = false;
+      lyricsLoopPaused = false;
+
+      if (!isPlaying) {
+        syncAllTo(masterCursorTime);
+        playCurrentMode();
+      }
+
+      updateLyricsTransportButtons();
+      renderLyricsStructure();
+      return;
+    }
+
+    if (
+      lyricsTransportMode === "line"
+      &&
+      loopEnabled
+      &&
+      isPlaying
+    ) {
+
+      lyricsTransportMode =
+        "master";
+
+      fragmentStart =
+        null;
+
+      fragmentEnd =
+        null;
+
+      loopEnabled =
+        false;
+
+      lyricsLoopPaused =
+        false;
+
+      updateLyricsTransportButtons();
+
+      return;
+    }
+
+    lyricsTransportMode =
+      "master";
+
+
+    if (isPlaying) {
+
+      pauseAll();
+
+
+      updateLyricsTransportButtons();
+
+
+      return;
+
+    }
+
+
+    fragmentStart =
+      null;
+
+
+    fragmentEnd =
+      null;
+
+
+    loopEnabled =
+      false;
+
+
+    syncAllTo(
+      masterCursorTime
+    );
+
+
+    playCurrentMode();
+
+
+    updateLyricsTransportButtons();
+
+  }
+);
+
+
+lyricsPlayLineBtn.addEventListener(
+  "click",
+  () => {
+    // Если выбрана Structure, Loop работает по выбранному блоку Structure.
+    if (lyricsStructureSelectedIndex >= 0 && lyricsStructureDraft?.[lyricsStructureSelectedIndex]) {
+      const segment = lyricsStructureDraft[lyricsStructureSelectedIndex];
+
+      if (lyricsStructureTransportMode === "loop" && isPlaying) {
+        pauseAll();
+        updateLyricsTransportButtons();
+        return;
+      }
+
+      lyricsTransportMode = "master";
+      loopEnabled = false;
+      fragmentStart = null;
+      fragmentEnd = null;
+      lyricsStructureTransportMode = "loop";
+      lyricsStructureLoopStart = Number(segment.start);
+      lyricsStructureLoopEnd = Number(segment.end);
+      lyricsLoopPaused = false;
+
+      setGlobalCursorTime(lyricsStructureLoopStart);
+      if (!isPlaying) playCurrentMode();
+      updateLyricsTransportButtons();
+      renderLyricsStructure();
+      return;
+    }
+
+    const line = getSelectedLyricsLine();
+    if (!line) return;
+
+    clearLyricsStructureLoop();
+    lyricsTransportMode = "line";
+
+    if (isPlaying && loopEnabled) {
+      pauseAll();
+      lyricsLoopPaused = true;
+      updateLyricsTransportButtons();
+      return;
+    }
+
+    fragmentStart = Number(line.start);
+    fragmentEnd = Number(line.end);
+    loopEnabled = true;
+    lyricsLoopPaused = false;
+
+    setGlobalCursorTime(fragmentStart);
+    if (!isPlaying) playCurrentMode();
+    updateLyricsTransportButtons();
+  }
+);
+
+
+
+
+
+
+
+
+lyricsUndoBtn.addEventListener("click", () => {
+  if (!lyricsUndoStack.length) return;
+
+  lyricsRedoStack.push(
+    cloneLyricsEditorState()
+  );
+
+  const state =
+    lyricsUndoStack.pop();
+
+  lyricsEditorDraft =
+    state.lyrics;
+
+  lyricsStructureDraft =
+    state.structure;
+
+  lyricsEditorSelectedLine =
+    lyricsEditorDraft.length
+    ? Math.min(
+        Math.max(0, lyricsEditorSelectedLine),
+        lyricsEditorDraft.length - 1
+      )
+    : -1;
+
+  renderLyricsEditor();
+  renderLyricsStructure();
+  updateLyricsUndoRedoButtons();
+});
+
+
+lyricsRedoBtn.addEventListener("click", () => {
+  if (!lyricsRedoStack.length) return;
+
+  lyricsUndoStack.push(
+    cloneLyricsEditorState()
+  );
+
+  const state =
+    lyricsRedoStack.pop();
+
+  lyricsEditorDraft =
+    state.lyrics;
+
+  lyricsStructureDraft =
+    state.structure;
+
+  lyricsEditorSelectedLine =
+    lyricsEditorDraft.length
+    ? Math.min(
+        Math.max(0, lyricsEditorSelectedLine),
+        lyricsEditorDraft.length - 1
+      )
+    : -1;
+
+  renderLyricsEditor();
+  renderLyricsStructure();
+  updateLyricsUndoRedoButtons();
+});
+
+
+lyricsResetBtn.addEventListener("click", () => {
+  pushLyricsHistory();
+
+  lyricsEditorDraft =
+    JSON.parse(
+      JSON.stringify(
+        originalWhisperKaraokeLines
+      )
+    );
+
+  lyricsEditorSelectedLine =
+    lyricsEditorDraft.length
+    ? 0
+    : -1;
+
+  renderLyricsEditor();
+  updateLyricsUndoRedoButtons();
+
+  setLyricsEditorMessage("Reset to WhisperX");
+});
+
+
+lyricsDeleteLineBtn.addEventListener("click", () => {
+  if (lyricsStructureSelectedIndex >= 0) {
+    deleteSelectedLyricsStructure();
+    return;
+  }
+
+  const index =
+    lyricsEditorEditLineIndex;
+
+  if (
+    index < 0
+    ||
+    index >= lyricsEditorDraft.length
+  ) {
+    return;
+  }
+
+  pushLyricsHistory();
+
+  lyricsEditorDraft.splice(index, 1);
+  lyricsEditorEditLineIndex = -1;
+  lyricsEditorCaretOffset = 0;
+
+  if (!lyricsEditorDraft.length) {
+    lyricsEditorSelectedLine = -1;
+  }
+  else if (
+    index >= lyricsEditorDraft.length
+  ) {
+    lyricsEditorSelectedLine =
+      lyricsEditorDraft.length - 1;
+  }
+  else {
+    lyricsEditorSelectedLine = index;
+  }
+
+  renderLyricsEditor();
+  updateLyricsUndoRedoButtons();
+
+  setLyricsEditorMessage("Line deleted");
+});
+
+
+lyricsLoadBtn.addEventListener("click", () => {
+  lyricsLoadInput.value = "";
+  lyricsLoadInput.click();
+});
+
+
+lyricsLoadInput.addEventListener("change", async () => {
+  const file =
+    lyricsLoadInput.files[0];
+
+  if (!file) return;
+
+  const text =
+    await file.text();
+
+  const extension =
+    file.name
+      .split(".")
+      .pop()
+      .toLowerCase();
+
+  pushLyricsHistory();
+
+  if (extension === "json") {
+    const loaded =
+      JSON.parse(text);
+
+    if (!Array.isArray(loaded.lines)) {
+      throw new Error(
+        "Invalid MyNus Lyrics file"
+      );
+    }
+
+    lyricsEditorDraft =
+      JSON.parse(
+        JSON.stringify(
+          loaded.lines
+        )
+      );
+
+    lyricsStructureDraft = Array.isArray(loaded.structure)
+      ? normalizeStructureCoverage(
+          JSON.parse(JSON.stringify(loaded.structure)),
+          Math.max(
+            Number(duration) || 0,
+            ...loaded.structure.map(item => Number(item.end) || 0)
+          )
+        )
+      : [];
+    clearLyricsStructureSelection();
+  }
+
+  else if (extension === "txt") {
+    const sourceLines =
+      text
+        .split(/\r?\n/)
+        .map(value => value.trim())
+        .filter(Boolean);
+
+    lyricsEditorDraft =
+      sourceLines.map(
+        (value, index) => {
+          const source =
+            karaokeLines[
+              Math.min(
+                index,
+                Math.max(
+                  0,
+                  karaokeLines.length - 1
+                )
+              )
+            ];
+
+          const start =
+            source
+            ? Number(source.start)
+            : index;
+
+          const end =
+            source
+            ? Number(source.end)
+            : start + 1;
+
+          const words =
+            value
+              .split(/\s+/)
+              .filter(Boolean);
+
+          const d =
+            Math.max(
+              0.001,
+              end - start
+            );
+
+          return {
+            start,
+            end,
+            words:
+              words.map(
+                (word, wordIndex) => ({
+                  word,
+                  start:
+                    start
+                    +
+                    d
+                    * wordIndex // индекс слова
+                    / words.length,
+                  end:
+                    start
+                    +
+                    d
+                    * (wordIndex + 1) // следующий индекс слова
+                    / words.length
+                })
+              )
+          };
+        }
+      );
+  }
+
+  else {
+    setLyricsEditorError("Load: use MyNus Lyrics JSON or TXT");
+    return;
+  }
+
+  lyricsEditorSelectedLine =
+    lyricsEditorDraft.length
+    ? 0
+    : -1;
+
+  renderLyricsEditor();
+  updateLyricsUndoRedoButtons();
+});
+
+
+lyricsSaveAsBtn.addEventListener("click", () => {
+  // Lyrics Save As использует имя исходного аудиофайла, а не техническое имя Original внутри Project.
+  const defaultName =
+    currentSourceAudioName
+    ? currentSourceAudioName.replace(
+        /\.[^.]+$/,
+        ""
+      )
+    : "lyrics";
+
+  const languageSource =
+    lyricsTranscriptionMode
+    &&
+    lyricsOriginalDraftForTranscription
+    ? lyricsOriginalDraftForTranscription
+    : lyricsEditorDraft;
+
+  const detectedLanguage =
+    detectLyricsLanguage(
+      languageSource
+        .map(
+          line =>
+            line._editedText
+            ??
+            lineText(line)
+        )
+        .join("\n")
+    );
+
+  const sourceSuffix =
+    languageLabel(
+      detectedLanguage
+    );
+
+  const languageSuffix =
+    lyricsTranscriptionMode
+    ? sourceSuffix + "-RU"
+    : sourceSuffix;
+
+  lyricsSaveAsName.value =
+    defaultName
+    + "_"
+    + languageSuffix;
+
+  lyricsSaveAsFormat.value =
+    "json";
+
+  lyricsSaveAsEncoding.value =
+    "utf8";
+
+  lyricsSaveAsDialog.classList.add(
+    "open"
+  );
+});
+
+
+
+lyricsSaveAsFormat.addEventListener(
+  "change",
+  () => {
+
+    const disabled =
+      lyricsSaveAsFormat.value === "pdf"
+      ||
+      lyricsSaveAsFormat.value === "json";
+
+
+    lyricsSaveAsEncoding.disabled =
+      disabled;
+
+
+    if (
+      lyricsSaveAsFormat.value === "json"
+    ) {
+
+      lyricsSaveAsEncoding.value =
+        "utf8";
+
+    }
+
+    if (lyricsSaveAsConfirmBtn) {
+      lyricsSaveAsConfirmBtn.textContent =
+        lyricsSaveAsFormat.value === "pdf" ? "Print / Save PDF" : "Save";
+    }
+
+  }
+);
+
+
+lyricsSaveAsCancelBtn.addEventListener("click", () => {
+  lyricsSaveAsDialog.classList.remove(
+    "open"
+  );
+});
+
+
+lyricsSaveAsConfirmBtn.addEventListener("click", () => {
+  exportLyricsFile(
+    lyricsSaveAsName.value,
+    lyricsSaveAsFormat.value,
+    lyricsSaveAsEncoding.value
+  );
+
+  lyricsSaveAsDialog.classList.remove(
+    "open"
+  );
+});
+
+
+// Форматирование значения для отображения.
+function formatLrcTime(seconds) {
+  const minutes =
+    Math.floor(seconds / 60);
+
+  const secs =
+    (seconds % 60)
+      .toFixed(2)
+      .padStart(5, "0");
+
+  return (
+    "["
+    + String(minutes).padStart(2, "0")
+    + ":"
+    + secs
+    + "]"
+  );
+}
+
+
+// Форматирование значения для отображения.
+function formatSrtTime(seconds) {
+  const ms =
+    Math.max(
+      0,
+      Math.round(
+        Number(seconds) * 1000
+      )
+    );
+
+  const hours =
+    Math.floor(ms / 3600000);
+
+  const minutes =
+    Math.floor(
+      (ms % 3600000) / 60000
+    );
+
+  const secs =
+    Math.floor(
+      (ms % 60000) / 1000
+    );
+
+  const millis =
+    ms % 1000;
+
+  return (
+    String(hours).padStart(2, "0")
+    + ":"
+    + String(minutes).padStart(2, "0")
+    + ":"
+    + String(secs).padStart(2, "0")
+    + ","
+    + String(millis).padStart(3, "0")
+  );
+}
+
+
+// Работа со Structure в Lyrics Editor.
+function buildLyricsStructureScheme() {
+  if (!lyricsStructureDraft?.length) return "";
+
+  return lyricsStructureDraft.map(segment => {
+    const name = String(segment.label || segment.type || "").trim() || "[      ]";
+    return formatStructureTime(segment.start)
+      + " -- " + name + " -- "
+      + formatStructureTime(segment.end);
+  }).join("\n");
+}
+
+// Работа со Structure в Lyrics Editor.
+function escapeLyricsHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// 5.4.7 | PDF: isolated print document gives the native PDF dialog the current project name.
+// The technical print window opens centered at 50% of the available screen.
+function printLyricsPdfDirect(fileName, html) {
+  const popupWidth = Math.max(480, Math.round((screen.availWidth || window.innerWidth || 960) * 0.5));
+  const popupHeight = Math.max(360, Math.round((screen.availHeight || window.innerHeight || 720) * 0.5));
+  const popupLeft = Math.max(0, Math.round(((screen.availWidth || popupWidth) - popupWidth) / 2));
+  const popupTop = Math.max(0, Math.round(((screen.availHeight || popupHeight) - popupHeight) / 2));
+
+  const printWindow = window.open(
+    "",
+    "_blank",
+    `popup=yes,width=${popupWidth},height=${popupHeight},left=${popupLeft},top=${popupTop}`
+  );
+
+  if (!printWindow) {
+    console.error("PDF print failed: print window was blocked");
+    return;
+  }
+
+  try {
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.document.title = fileName;
+
+    const runPrint = () => {
+      try {
+        printWindow.document.title = fileName;
+        printWindow.focus();
+        printWindow.print();
+      } catch (error) {
+        console.error("PDF print failed:", error);
+        try { printWindow.close(); } catch (_) {}
+      }
+    };
+
+    printWindow.addEventListener("afterprint", () => {
+      try { printWindow.close(); } catch (_) {}
+    }, { once: true });
+
+    if (printWindow.document.readyState === "complete") {
+      setTimeout(runPrint, 0);
+    } else {
+      printWindow.addEventListener("load", runPrint, { once: true });
+    }
+  } catch (error) {
+    console.error("PDF print failed:", error);
+    try { printWindow.close(); } catch (_) {}
+  }
+}
+
+// Работа со Structure в Lyrics Editor.
+function exportLyricsFile(rawName, format, encoding = "utf8") {
+  const safeName =
+    (
+      rawName
+      || "lyrics"
+    )
+    .replace(
+      /[\\/:*?"<>|]+/g,
+      "_"
+    )
+    .trim()
+    || "lyrics";
+
+  const lines =
+    lyricsEditorDraft.map(
+      line => ({
+        start: Number(line.start),
+        end: Number(line.end),
+        words:
+          line.words.map(
+            word => ({
+              ...word
+            })
+          )
+      })
+    );
+
+  let content = "";
+  let mime = "text/plain";
+  const structureScheme = buildLyricsStructureScheme();
+
+  if (format === "json") {
+    mime = "application/json";
+
+    content =
+      JSON.stringify(
+        {
+          language:
+            lyricsData.language,
+          text:
+            lines
+              .map(
+                line =>
+                  line.words
+                    .map(
+                      word =>
+                        word.word
+                    )
+                    .join(" ")
+              )
+              .join(" "),
+          lines,
+          structure: (lyricsStructureDraft || []).map(segment => ({
+            type: String(segment.type || ""),
+            label: String(segment.label || ""),
+            start: Number(segment.start),
+            end: Number(segment.end)
+          }))
+        },
+        null,
+        2
+      );
+  }
+
+  else if (format === "lrc") {
+    content =
+      lines
+        .map(
+          line =>
+            formatLrcTime(
+              Number(line.start)
+            )
+            +
+            line.words
+              .map(
+                word =>
+                  word.word
+              )
+              .join(" ")
+        )
+        .join("\n");
+
+    content = (structureScheme ? "Structure\n" + structureScheme + "\n\n" : "Structure\n\n")
+      + "Lyrics\n" + content;
+  }
+
+  else if (format === "srt") {
+    content =
+      lines
+        .map(
+          (line, index) =>
+            (index + 1)
+            + "\n"
+            + formatSrtTime(line.start)
+            + " --> "
+            + formatSrtTime(line.end)
+            + "\n"
+            + line.words
+                .map(
+                  word =>
+                    word.word
+                )
+                .join(" ")
+        )
+        .join("\n\n");
+
+    content = (structureScheme ? "Structure\n" + structureScheme + "\n\n" : "Structure\n\n")
+      + "Lyrics\n" + content;
+  }
+
+  else if (format === "txt") {
+    content =
+      lines
+        .map(
+          line =>
+            line.words
+              .map(
+                word =>
+                  word.word
+              )
+              .join(" ")
+        )
+        .join("\n");
+
+    content = (structureScheme ? "Structure\n" + structureScheme + "\n\n" : "Structure\n\n")
+      + "Lyrics\n" + content;
+  }
+
+  else if (format === "pdf") {
+    const pdfProjectName = String(currentPlaylistProject || projectSafeName())
+      .replace(/\.[^.]+$/, "")
+      .replace(/[\\/:*?"<>|]+/g, "_")
+      .trim() || "Project";
+    const body =
+      lines
+        .map(
+          line =>
+            "<p>"
+            + line.words.map(word => escapeLyricsHtml(word.word)).join(" ")
+            + "</p>"
+        )
+        .join("");
+
+    const structureBody = "<section class='structure'><h2>Structure</h2>"
+      + (structureScheme
+          ? structureScheme.split("\n").map(row => "<div>" + escapeLyricsHtml(row) + "</div>").join("")
+          : "")
+      + "</section>";
+    const lyricsBody = "<section class='lyrics'><h2>Lyrics</h2>" + body + "</section>";
+
+    const pdfHtml =
+      "<!doctype html>"
+      + "<html><head><meta charset='utf-8'>"
+      + "<title>" + escapeLyricsHtml(pdfProjectName) + "</title>"
+      + "<style>"
+      + "body{font-family:Arial,sans-serif;padding:40px;line-height:1.5;color:#111;background:#fff}"
+      + "h1{font-size:22px;margin:0 0 28px}"
+      + "h2{font-size:16px;font-weight:700;margin:22px 0 10px}"
+      + "p{margin:0 0 8px}"
+      + ".structure{font-family:Consolas,monospace;font-size:12px;white-space:pre}"
+      + ".structure h2{font-family:Arial,sans-serif;font-weight:700}"
+      + ".structure div{margin:0 0 4px}"
+      + "@media print{body{padding:0}}"
+      + "</style></head><body>"
+      + "<h1>" + escapeLyricsHtml(pdfProjectName) + "</h1>"
+      + structureBody
+      + lyricsBody
+      + "</body></html>";
+
+    printLyricsPdfDirect(pdfProjectName, pdfHtml);
+    return;
+  }
+  else {
+    return;
+  }
+
+  /*
+  ========================================
+  UTF-8 EXPORT | 4.7.1
+
+  TXT / LRC / SRT with Cyrillic need an
+  explicit UTF-8 BOM for Windows editors
+  that otherwise may open the file as ANSI.
+  JSON stays plain UTF-8.
+  ========================================
+  */
+
+  let blob;
+
+
+  if (
+    format === "json"
+  ) {
+
+    /*
+    JSON is always UTF-8.
+    */
+    const utf8 =
+      new TextEncoder()
+        .encode(
+          content
+        );
+
+
+    blob =
+      new Blob(
+        [utf8],
+        {
+          type:
+            "application/json;charset=utf-8"
+        }
+      );
+
+  }
+
+  else if (
+    encoding === "cp1251"
+  ) {
+
+    /*
+    Windows-1251 is optional and explicit.
+    Use only for legacy Windows programs.
+    */
+
+    const cp1251Extra = {
+      0x0402:0x80,0x0403:0x81,0x201A:0x82,0x0453:0x83,
+      0x201E:0x84,0x2026:0x85,0x2020:0x86,0x2021:0x87,
+      0x20AC:0x88,0x2030:0x89,0x0409:0x8A,0x2039:0x8B,
+      0x040A:0x8C,0x040C:0x8D,0x040B:0x8E,0x040F:0x8F,
+      0x0452:0x90,0x2018:0x91,0x2019:0x92,0x201C:0x93,
+      0x201D:0x94,0x2022:0x95,0x2013:0x96,0x2014:0x97,
+      0x2122:0x99,0x0459:0x9A,0x203A:0x9B,0x045A:0x9C,
+      0x045C:0x9D,0x045B:0x9E,0x045F:0x9F,0x00A0:0xA0,
+      0x040E:0xA1,0x045E:0xA2,0x0408:0xA3,0x00A4:0xA4,
+      0x0490:0xA5,0x00A6:0xA6,0x00A7:0xA7,0x0401:0xA8,
+      0x00A9:0xA9,0x0404:0xAA,0x00AB:0xAB,0x00AC:0xAC,
+      0x00AD:0xAD,0x00AE:0xAE,0x0407:0xAF,0x00B0:0xB0,
+      0x00B1:0xB1,0x0406:0xB2,0x0456:0xB3,0x0491:0xB4,
+      0x00B5:0xB5,0x00B6:0xB6,0x00B7:0xB7,0x0451:0xB8,
+      0x2116:0xB9,0x0454:0xBA,0x00BB:0xBB,0x0458:0xBC,
+      0x0405:0xBD,0x0455:0xBE,0x0457:0xBF
+    };
+
+
+    // Локальная функциональная операция этого блока.
+    function encodeWindows1251(text) {
+
+      const bytes = [];
+
+      for (
+        let i = 0;
+        i < text.length;
+        i++
+      ) {
+
+        const code =
+          text.charCodeAt(i);
+
+
+        if (code <= 0x7F) {
+          bytes.push(code);
+          continue;
+        }
+
+
+        if (
+          code >= 0x0410
+          &&
+          code <= 0x044F
+        ) {
+
+          bytes.push(
+            code - 0x0410 + 0xC0
+          );
+
+          continue;
+        }
+
+
+        if (
+          Object.prototype.hasOwnProperty.call(
+            cp1251Extra,
+            code
+          )
+        ) {
+
+          bytes.push(
+            cp1251Extra[code]
+          );
+
+          continue;
+        }
+
+
+        bytes.push(0x3F);
+
+      }
+
+
+      return new Uint8Array(
+        bytes
+      );
+
+    }
+
+
+    blob =
+      new Blob(
+        [
+          encodeWindows1251(
+            content
+          )
+        ],
+        {
+          type:
+            "text/plain;charset=windows-1251"
+        }
+      );
+
+  }
+
+  else {
+
+    /*
+    UTF-8 is the default and cross-platform format.
+    TextEncoder writes the actual UTF-8 bytes directly.
+    No BOM is added.
+    */
+
+    const utf8 =
+      new TextEncoder()
+        .encode(
+          content
+        );
+
+
+    blob =
+      new Blob(
+        [utf8],
+        {
+          type:
+            mime
+            + ";charset=utf-8"
+        }
+      );
+
+  }
+
+  const url =
+    URL.createObjectURL(blob);
+
+  const link =
+    document.createElement("a");
+
+  link.href = url;
+  link.download =
+    safeName
+    + "."
+    + format;
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  URL.revokeObjectURL(url);
+}
+
+
+// Сохранение текущего Project и связанных данных.
+function showLyricsSaveNotice(message, isError = false) {
+  if (lyricsSaveNoticeTimer) {
+    clearTimeout(lyricsSaveNoticeTimer);
+    lyricsSaveNoticeTimer = null;
+  }
+  if (lyricsSaveNotice) {
+    lyricsSaveNotice.textContent = String(message || "");
+    lyricsSaveNotice.style.opacity = "1";
+  }
+  if (!isError) {
+    lyricsSaveNoticeTimer = setTimeout(() => {
+      if (lyricsSaveNotice) lyricsSaveNotice.textContent = "";
+      lyricsSaveNoticeTimer = null;
+    }, 3000);
+  }
+}
+
+// Save в Lyrics Editor использует тот же общий механизм SAVE Project,
+// что и кнопка SAVE Project в Sequencer: сохраняется весь текущий Project.
+saveLyricsEditBtn.addEventListener("click", () => {
+  saveProjectBtn?.click();
+});
+
+let vocalRemaining = 0;
+let vocalPhase = "none";
+
+// Управление транспортом и воспроизведением.
+function updateTimeDisplay() {
+
+  const current =
+    getCurrentTime();
+
+
+  updateKaraoke(
+    current
+  );
+
+
+  const remaining =
+    Math.max(
+      0,
+      duration - current
+    );
+
+
+const lyricsWords =
+  (
+    lyricsData
+    &&
+    Array.isArray(
+      lyricsData.words
+    )
+  )
+  ? lyricsData.words
+  : [];
+
+
+const lyricsVocalStart =
+  lyricsWords.length
+  ? Number(
+      lyricsWords[0].start
+    )
+  : null;
+
+
+const lyricsVocalEnd =
+  lyricsWords.length
+  ? Number(
+      lyricsWords[
+        lyricsWords.length - 1
+      ].end
+    )
+  : null;
+
+
+vocalRemaining =
+  0;
+vocalPhase = "none";
+
+
+/*
+========================================
+ДО ПЕРВОГО СЛОВА
+
+Считаем до начала вокала.
+========================================
+*/
+
+if (
+  Number.isFinite(
+    lyricsVocalStart
+  )
+  &&
+  current <
+  lyricsVocalStart
+) {
+
+  vocalRemaining =
+    lyricsVocalStart
+    - current;
+  vocalPhase = "pre";
+
+}
+
+
+/*
+========================================
+ОТ ПЕРВОГО ДО ПОСЛЕДНЕГО СЛОВА
+
+Считаем до конца вокала.
+========================================
+*/
+
+else if (
+  Number.isFinite(
+    lyricsVocalEnd
+  )
+  &&
+  current <
+  lyricsVocalEnd
+) {
+
+  vocalRemaining =
+    lyricsVocalEnd
+    - current;
+  vocalPhase = "active";
+
+}
+
+
+/*
+========================================
+ПОСЛЕ ПОСЛЕДНЕГО СЛОВА
+
+Стоим на нуле.
+========================================
+*/
+
+else {
+
+  vocalRemaining =
+    0;
+  vocalPhase = "post";
+
+}
+
+
+  const inDisplay =
+    fragmentStart === null
+    ? "--:--.--"
+    : formatTime(
+        fragmentStart
+      );
+
+
+  const outDisplay =
+    fragmentEnd === null
+    ? "--:--.--"
+    : formatTime(
+        fragmentEnd
+      );
+
+
+  trackDurationInfo.textContent =
+    "Total: "
+    + formatTime(
+        duration
+      );
+
+
+  const counterText =
+
+    formatTime(
+      current
     )
 
+    + " / -"
+
+    + formatTime(
+      remaining
+    )
+
+    + " / V:-"
+
+    + formatTime(
+      vocalRemaining
+    )
+
+    + " / IN "
+
+    + inDisplay
+
+    + " / OUT "
+
+    + outDisplay;
 
 
-# Локальная серверная операция этого блока.
-def print_restart_command():
-    print("\n" + "=" * 72)
-    print("RESTART SERVER:")
-    print(r".venv313\Scripts\python.exe server.py")
-    print("=" * 72 + "\n")
+  timeDisplay.textContent =
+    counterText;
 
 
-if __name__ == "__main__":
-    print("\n" + "=" * 72)
-    print("MyNus Server 5.6.0")
-    print(r"5.6.0: New Project + Save Rec; Project SAVE/LOAD supports Master Rec track.")
-    print("=" * 72 + "\n")
+  timeDisplayTop.textContent =
+    counterText;
 
-    try:
-        app.run(
-    host="0.0.0.0",
-    port=5000,
-    debug=True,
-    threaded=True,
-    use_reloader=False
-)
-    except KeyboardInterrupt:
-        pass
-    except BaseException as error:
-        print(f"SERVER ERROR: {error}", file=sys.stderr)
-        raise
-    finally:
-        print_restart_command()
+}
+
+
+// ========================================
+// ЦИКЛ АНИМАЦИИ
+
+
+
+
+// ========================================
+
+// Локальная функциональная операция этого блока.
+function startAnimation() {
+
+  stopAnimation();
+
+
+  const update =
+    () => {
+
+      if (
+        !isPlaying
+      ) {
+
+        return;
+
+      }
+
+
+      keepTracksSynchronized();
+
+      applyMix();
+
+      // Во время воспроизведения источником является аудиотранспорт; все три визуальных курсора используют одно значение.
+      masterCursorTime = getCurrentTime();
+
+      updatePlayheads();
+
+      updateMasterCursor();
+
+      updateTimeDisplay();
+
+      updateLyricsMasterCounter();
+
+      updateLyricsTransportButtons();
+
+      followPlayhead();
+
+
+      if (
+        lyricsStructureTransportMode === "loop"
+        &&
+        Number.isFinite(lyricsStructureLoopStart)
+        &&
+        Number.isFinite(lyricsStructureLoopEnd)
+        &&
+        lyricsStructureLoopEnd > lyricsStructureLoopStart
+        &&
+        getCurrentTime() >= lyricsStructureLoopEnd
+      ) {
+        syncAllTo(lyricsStructureLoopStart);
+        updatePlayheads();
+        updateMasterCursor();
+        updateTimeDisplay();
+        updateLyricsMasterCounter();
+      }
+
+
+      if (
+  lyricsStructureTransportMode !== "loop"
+  &&
+  loopEnabled
+  &&
+  fragmentEnd !== null
+  &&
+  fragmentStart !== null
+  &&
+  fragmentEnd > fragmentStart
+  &&
+  getCurrentTime() >= fragmentEnd
+) {
+
+  syncAllTo(
+    fragmentStart
+  );
+
+  updatePlayheads();
+
+  updateMasterCursor();
+
+  updateTimeDisplay();
+
+}
+
+
+      if (getCurrentTime() >= getProjectPlaybackEnd()) {
+
+        if (isKaraokeUiMode()) {
+          pauseAll();
+          if (!karaokeFinishTriggered) {
+            karaokeFinishTriggered = true;
+            openKaraokeFinishedDialog();
+          }
+          return;
+        }
+
+        if (
+          lyricsEditorDialog
+          &&
+          !lyricsEditorDialog.classList.contains("hidden")
+        ) {
+
+          syncAllTo(getProjectTrimStart());
+
+          lyricsEditorSelectedLine =
+            lyricsEditorDraft.length
+            ? 0
+            : -1;
+
+          renderLyricsEditor();
+
+          if (lyricsEditorRows) {
+            lyricsEditorRows.scrollTop = 0;
+          }
+
+          updatePlayheads();
+          updateMasterCursor();
+          updateTimeDisplay();
+          updateLyricsMasterCounter();
+          updateLyricsStructurePlayhead();
+
+          animationFrame =
+            requestAnimationFrame(
+              update
+            );
+
+          return;
+
+        }
+
+        pauseAll();
+
+        return;
+
+      }
+
+
+      animationFrame =
+        requestAnimationFrame(
+          update
+        );
+
+    };
+
+
+  animationFrame =
+    requestAnimationFrame(
+      update
+    );
+
+}
+
+
+// Управление транспортом и воспроизведением.
+function stopAnimation() {
+
+  if (
+    animationFrame
+  ) {
+
+    cancelAnimationFrame(
+      animationFrame
+    );
+
+
+    animationFrame =
+      null;
+
+  }
+
+}
+
+
+// ========================================
+// СИНХРОНИЗАЦИЯ АУДИО
+// ========================================
+
+// Работа с аудиодорожкой и её состоянием.
+function keepTracksSynchronized() {
+
+  if (
+    mode !== "mix"
+  ) {
+
+    return;
+
+  }
+
+
+  const reference =
+    vocalsAudio.currentTime;
+
+
+  instrumentalStemIds.forEach(
+    stemId => {
+
+      const audio =
+        stemAudio[
+          stemId
+        ];
+
+
+      if (
+        Math.abs(
+          audio.currentTime
+          - reference
+        )
+        > 0.08
+      ) {
+
+        audio.currentTime =
+          reference;
+
+      }
+
+    }
+  );
+
+}
+
+
+// ========================================
+// АВТОПРОКРУТКА
+
+// ========================================
+
+// Обновление позиции курсора и указателей воспроизведения.
+function followPlayhead() {
+
+  const x =
+    getCurrentTime()
+    * pixelsPerSecond; // пикселей в секунду
+
+
+  const left =
+    getSharedScrollLeft();
+
+
+  const right =
+    left
+    +
+    sharedScroll.clientWidth;
+
+
+  const margin =
+    100;
+
+
+  if (
+    x >
+    right - margin
+  ) {
+
+    syncScrollTo(
+      x
+      - sharedScroll.clientWidth
+      + margin
+    );
+
+  }
+
+  else if (
+    x <
+    left + margin
+  ) {
+
+    syncScrollTo(
+      Math.max(
+        0,
+        x - margin
+      )
+    );
+
+  }
+
+}
+
+
+// ========================================
+// ОБЩАЯ ГОРИЗОНТАЛЬНАЯ ПРОКРУТКА
+
+// ========================================
+
+// Локальная функциональная операция этого блока.
+function getSharedScrollLeft() {
+
+  return (
+    sharedScroll.scrollLeft
+    ||
+    0
+  );
+
+}
+
+
+// Локальная функциональная операция этого блока.
+function applySharedScroll() {
+
+  const left =
+    getSharedScrollLeft();
+
+
+  Object.values(
+    timelines
+  )
+  .forEach(
+    timeline => {
+
+      timeline.style.transform =
+        "translateX("
+        + (-left)
+        + "px)";
+
+    }
+  );
+
+
+  masterTimelineInner.style.transform =
+    "translateX("
+    + (-left)
+    + "px)";
+
+const width = getTimelineWidth();
+const startX = Math.max(
+    0,
+    Math.min(width, getProjectTrimStart() * pixelsPerSecond)
+);
+const endX = Math.max(
+    0,
+    Math.min(width, getProjectTrimEnd() * pixelsPerSecond)
+);
+
+const rowRect =
+    masterTimeline.parentElement.getBoundingClientRect();
+
+if (projectTrimStartTime && projectTrimStartHandle) {
+    const handleRect =
+        projectTrimStartHandle.getBoundingClientRect();
+
+    projectTrimStartTime.style.left =
+        (
+            handleRect.left
+            + handleRect.width / 2
+            - rowRect.left
+        ) + "px";
+}
+
+if (projectTrimEndTime && projectTrimEndHandle) {
+    const handleRect =
+        projectTrimEndHandle.getBoundingClientRect();
+
+    projectTrimEndTime.style.left =
+        (
+            handleRect.left
+            + handleRect.width / 2
+            - rowRect.left
+        ) + "px";
+}
+
+}
+
+
+sharedScroll.addEventListener(
+  "scroll",
+  () => {
+
+    applySharedScroll();
+
+  }
+);
+
+
+// Локальная функциональная операция этого блока.
+function syncScrollTo(
+  left
+) {
+
+  sharedScroll.scrollLeft =
+    Math.max(
+      0,
+      left
+    );
+
+
+  applySharedScroll();
+
+}
+
+
+// ========================================
+// МАСШТАБ
+
+// ========================================
+
+zoomInBtn.addEventListener(
+  "click",
+  () => {
+
+    changeZoom(
+      pixelsPerSecond + 10
+    );
+
+  }
+);
+
+
+zoomOutBtn.addEventListener(
+  "click",
+  () => {
+
+    changeZoom(
+      pixelsPerSecond - 10
+    );
+
+  }
+);
+
+
+// Локальная функциональная операция этого блока.
+function changeZoom(
+  value
+) {
+
+  const currentTime =
+    getCurrentTime();
+
+
+  const viewport =
+    Math.max(
+      1,
+      masterTimeline.clientWidth
+    );
+
+
+  const minZoom =
+    duration > 0
+    ? viewport / duration
+    : 10;
+
+
+  const oldPixelsPerSecond =
+    pixelsPerSecond;
+
+
+  const oldScrollLeft =
+    getSharedScrollLeft();
+
+
+  const oldViewportCenterTime =
+    oldPixelsPerSecond > 0
+    ? (
+        oldScrollLeft
+        + viewport / 2
+      )
+      / oldPixelsPerSecond
+    : currentTime;
+
+
+  pixelsPerSecond =
+    Math.max(
+      minZoom,
+      Math.min(
+        200,
+        value
+      )
+    );
+
+
+  zoomValue.textContent =
+    pixelsPerSecond
+      .toFixed(1)
+    + " px/s";
+
+
+  zoomValueTop.textContent =
+    zoomValue.textContent;
+
+
+  drawAllWaveforms();
+
+
+  renderSingerSegments();
+  drawMasterTimeline();
+
+  updateSelectionDisplay();
+
+  updateCropMasks();
+
+
+  sharedScrollInner.style.width =
+    getTimelineWidth()
+    + "px";
+
+
+  const newScrollLeft =
+    Math.max(
+      0,
+      oldViewportCenterTime
+      * pixelsPerSecond // пикселей в секунду
+      - viewport / 2
+    );
+
+
+  syncScrollTo(
+    newScrollLeft
+  );
+
+
+  // Позиция аудио является единственным источником истины.
+  // Zoom никогда не меняет позицию; он только пересчитывает координаты для того же времени.
+  updatePlayheads();
+
+  updateMasterCursor();
+
+  updateTimeDisplay();
+
+  syncTransportMirrors();
+
+}
+
+
+// ========================================
+// СБРОС
+
+// ========================================
+
+
+
+// Очистка или сброс локального рабочего состояния.
+function resetToInitialSplit() {
+
+  if (
+    masterRecording
+  ) {
+
+    stopMasterRecording();
+
+  }
+
+
+  pauseAll();
+
+
+  masterSegments =
+    [];
+
+
+  masterUndoStack =
+    [];
+
+
+  masterRedoStack =
+    [];
+
+
+  masterBlob =
+    null;
+
+
+  savedMasterBlob =
+    null;
+
+
+  waveformData.master =
+    null;
+
+
+  masterAudio.removeAttribute(
+    "src"
+  );
+
+
+  masterAudio.load();
+
+
+  clearMasterCanvas();
+
+
+  stemIds.forEach(
+    stemId => {
+
+      stemState[
+        stemId
+      ].muted = false;
+
+
+      stemState[
+        stemId
+      ].solo = false;
+
+
+      stemState[
+        stemId
+      ].volume = 1;
+
+
+      stemVolumeControls[
+        stemId
+      ].value = 100;
+
+
+      stemVolumeValues[
+        stemId
+      ].textContent = "100%";
+
+
+      stemCrop[
+        stemId
+      ].in = 0;
+
+
+      stemCrop[
+        stemId
+      ].out = null;
+
+
+      fxSettings[
+        stemId
+      ] = {
+        ...defaultFxSettings
+      };
+
+    }
+  );
+
+
+  fxSettings.master = {
+    ...defaultFxSettings
+  };
+
+
+  originalVolume.value =
+    100;
+
+
+  originalVolumeValue.textContent =
+    "100%";
+
+
+  originalAudio.volume =
+    1;
+
+
+  masterVolume.value =
+    100;
+
+
+  masterVolumeValue.textContent =
+    "100%";
+
+
+  masterAudio.volume =
+    1;
+
+
+  fragmentStart = null;
+
+  fragmentEnd = null;
+
+  loopEnabled = false;
+
+
+  projectTrimStart = 0;
+  projectTrimEnd = null;
+
+
+  mode = "original";
+
+
+  syncAllTo(0);
+
+
+  updateMixButtons();
+
+  updateCropButtons();
+
+  updateCropMasks();
+
+  updateSelectionDisplay();
+
+  updateSelectionButtons();
+
+  updateMasterHistoryButtons();
+
+
+  const viewport =
+    Math.max(
+      1,
+      masterTimeline.clientWidth
+    );
+
+
+  pixelsPerSecond =
+    duration > 0
+    ? viewport / duration
+    : 10;
+
+
+  zoomValue.textContent =
+    pixelsPerSecond
+      .toFixed(1)
+    + " px/s";
+
+
+  zoomValueTop.textContent =
+    zoomValue.textContent;
+
+
+  setFxTarget(
+    "vocals"
+  );
+
+
+  applyMix();
+
+
+  stemIds.forEach(
+    stemId => {
+
+      applyFxSettings(
+        stemId
+      );
+
+    }
+  );
+
+
+  applyFxSettings(
+    "master"
+  );
+
+
+  drawAllWaveforms();
+
+
+  renderSingerSegments();
+  drawMasterTimeline();
+
+
+  syncScrollTo(0);
+
+
+  updatePlayheads();
+
+  updateMasterCursor();
+
+  updateTimeDisplay();
+
+  syncTransportMirrors();
+
+
+  masterState.textContent =
+    "No Records";
+
+
+  status.textContent =
+    "Reset to initial split";
+  status.className = "progress-status info";
+
+}
+
+
+resetBtn.addEventListener(
+  "click",
+  resetToInitialSplit
+);
+
+
+// Управление транспортом и воспроизведением.
+function resetTransport() {
+
+  pauseAll();
+
+  syncAllTo(0);
+
+
+  mode =
+    "original";
+
+
+  originalModeBtn.classList.add(
+    "active"
+  );
+
+
+  mixModeBtn.classList.remove(
+    "active"
+  );
+
+
+  masterModeBtn.classList.remove(
+    "active"
+  );
+
+
+  stemIds.forEach(
+    stemId => {
+
+      stemState[
+        stemId
+      ].muted =
+        false;
+
+
+      stemState[
+        stemId
+      ].solo =
+        false;
+
+
+      stemState[
+        stemId
+      ].volume =
+        1;
+
+
+      stemVolumeControls[
+        stemId
+      ].value =
+        100;
+
+
+      stemVolumeValues[
+        stemId
+      ].textContent =
+        "100%";
+
+    }
+  );
+
+
+  originalVolume.value =
+    100;
+
+
+  originalVolumeValue.textContent =
+    "100%";
+
+
+  originalAudio.volume =
+    1;
+
+
+  masterVolume.value =
+    100;
+
+
+  masterVolumeValue.textContent =
+    "100%";
+
+
+  masterAudio.volume =
+    1;
+fragmentStart =
+    null;
+
+
+  fragmentEnd =
+    null;
+
+
+  loopEnabled =
+    false;
+
+
+  loopBtn.classList.remove(
+    "active"
+  );
+
+
+  updateMixButtons();
+
+
+  applyMix();
+
+
+  updateTimeDisplay();
+
+  updatePlayheads();
+
+  updateMasterCursor();
+
+  syncScrollTo(0);
+
+  updateSelectionButtons();
+
+}
+
+
+
+
+// ========================================
+// ГОРЯЧИЕ КЛАВИШИ
+// ========================================
+
+let modifierCandidate =
+  null;
+
+
+// Локальная функциональная операция этого блока.
+function isTypingTarget(
+  target
+) {
+
+  return (
+    target instanceof HTMLInputElement
+    ||
+    target instanceof HTMLTextAreaElement
+    ||
+    target instanceof HTMLSelectElement
+    ||
+    target.isContentEditable
+  );
+
+}
+
+
+// Локальная функциональная операция этого блока.
+function seekBy(
+  seconds
+) {
+
+  syncAllTo(
+    getCurrentTime()
+    + seconds
+  );
+
+
+  updatePlayheads();
+
+  updateMasterCursor();
+
+  updateTimeDisplay();
+
+}
+
+
+// Отдельное переключение Tab: Lyrics Editor <-> Full Screen Karaoke.
+// Фаза capture не позволяет браузеру переводить фокус и не даёт активному элементу
+// перехватить Tab до обработки MyNus.
+window.addEventListener(
+  "keydown",
+  event => {
+    const isTab = event.key === "Tab" || event.code === "Tab";
+    if (!isTab) return;
+
+    if (!isLyricsUiOpen()) return;
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    setUiMode(isKaraokeUiMode() ? UI_MODE.LYRICS : UI_MODE.KARAOKE);
+  },
+  true
+);
+
+
+window.addEventListener(
+  "keydown",
+  event => {
+
+    const target =
+      event.target;
+
+
+   const isTextEditing =
+  target
+  &&
+  (
+    target.tagName === "TEXTAREA"
+    ||
+    target.tagName === "INPUT"
+    ||
+    target.isContentEditable
+  );
+
+
+// Любой обычный INPUT/TEXTAREA получает клавиши сам.
+// Исключение — специальное редактирование строки Lyrics,
+// которое обрабатывается ниже своей логикой.
+if (isTextEditing && lyricsEditorEditLineIndex < 0) {
+  return;
+}
+
+
+// Песня закончилась: Space = Play again.
+    if (karaokeFinishedDialog?.classList.contains("open") && event.code === "Space") {
+      event.preventDefault();
+      event.stopPropagation();
+      runKaraokeFinishAction("again");
+      return;
+    }
+
+    // Lyrics Editor / Full Screen: Esc всегда напрямую возвращает в Sequencer.
+    if (event.code === "Escape" && isLyricsUiOpen()) {
+      event.preventDefault();
+      closeLyricsEditor();
+      return;
+    }
+
+    // Навигация и popup-элементы, работающие только в Full Screen.
+
+    if (isKaraokeUiMode() && event.code === "Backspace") {
+      event.preventDefault();
+      closeLyricsFullScreenMenus();
+      return;
+    }
+
+    if (isKaraokeUiMode() && event.code === "PageUp") {
+      event.preventDefault();
+      setLyricsFullScreenMeters(true);
+      return;
+    }
+
+    if (isKaraokeUiMode() && event.code === "PageDown") {
+      event.preventDefault();
+      setLyricsFullScreenMeters(false);
+      return;
+    }
+
+    // Full Screen: Space всегда управляет транспортом независимо от Lines EDIT/caret.
+    if (event.code === "Space") {
+      if (isKaraokeUiMode()) {
+        event.preventDefault();
+        if (isPlaying) pauseAll();
+        else playCurrentMode();
+        updateLyricsTransportButtons();
+        return;
+      }
+
+      // Lyrics Editor: при активном EDIT/caret пробел остаётся вводом текста.
+      if (lyricsEditorEditLineIndex >= 0) {
+        const edit = getLyricsEditContext();
+        if (edit && event.target !== edit.textArea) {
+          event.preventDefault();
+          const text = edit.textArea.value;
+          const caret = Math.max(0, Math.min(text.length, Number(lyricsEditorCaretOffset) || 0));
+          edit.textArea.value = text.slice(0, caret) + " " + text.slice(caret);
+          edit.line._editedText = edit.textArea.value;
+          lyricsEditorCaretOffset = caret + 1;
+          edit.textArea.setSelectionRange(lyricsEditorCaretOffset, lyricsEditorCaretOffset);
+        }
+        return;
+      }
+
+      event.preventDefault();
+      if (isPlaying) pauseAll();
+      else playCurrentMode();
+      updateLyricsTransportButtons();
+      return;
+    }
+
+    if (isTextEditing) return;
+    if (isTypingTarget(event.target)) return;
+
+
+    if (
+      event.key === "Control"
+    ) {
+
+      modifierCandidate =
+        "original";
+
+      return;
+
+    }
+
+
+    if (
+      event.key === "Alt"
+    ) {
+
+      modifierCandidate =
+        "mix";
+
+      return;
+
+    }
+
+
+    if (
+      event.key === "Meta"
+    ) {
+
+      modifierCandidate =
+        "master";
+
+      return;
+
+    }
+
+
+    if (
+      event.ctrlKey
+      ||
+      event.altKey
+      ||
+      event.metaKey
+    ) {
+
+      modifierCandidate =
+        null;
+
+    }
+
+
+    const code =
+      event.code;
+
+
+    if (
+      code === "Backspace"
+    ) {
+
+      event.preventDefault();
+
+      stopBtn.click();
+
+    }
+
+    else if (
+      code === "Home"
+    ) {
+
+      event.preventDefault();
+
+      startBtn.click();
+
+    }
+
+    else if (
+      code === "End"
+    ) {
+
+      event.preventDefault();
+
+      endBtn.click();
+
+    }
+
+    else if (
+      code === "PageUp"
+    ) {
+
+      event.preventDefault();
+
+      // 5.4.18 | Page Up не меняет IN, а переводит курсор точно на установленный IN.
+      if (fragmentStart !== null) {
+        setGlobalCursorTime(fragmentStart);
+      }
+
+    }
+
+    else if (
+      code === "PageDown"
+    ) {
+
+      event.preventDefault();
+
+      // 5.4.18 | Page Down не меняет OUT, а переводит курсор точно на установленный OUT.
+      if (fragmentEnd !== null) {
+        setGlobalCursorTime(fragmentEnd);
+      }
+
+    }
+
+    else if (
+      code === "Insert"
+    ) {
+
+      event.preventDefault();
+
+      loopBtn.click();
+
+    }
+
+    else if (
+      code === "ArrowUp"
+    ) {
+
+      event.preventDefault();
+
+      zoomInBtn.click();
+
+    }
+
+    else if (
+      code === "ArrowDown"
+    ) {
+
+      event.preventDefault();
+
+      zoomOutBtn.click();
+
+    }
+
+    else if (
+      code === "ArrowLeft"
+    ) {
+
+      event.preventDefault();
+
+      seekBy(-1);
+
+    }
+
+    else if (
+      code === "ArrowRight"
+    ) {
+
+      event.preventDefault();
+
+      seekBy(1);
+
+    }
+
+    else if (
+      code === "Digit1"
+      ||
+      code === "Numpad1"
+    ) {
+
+      setFxTarget("vocals");
+
+    }
+
+    else if (
+      code === "Digit2"
+      ||
+      code === "Numpad2"
+    ) {
+
+      setFxTarget("drums");
+
+    }
+
+    else if (
+      code === "Digit3"
+      ||
+      code === "Numpad3"
+    ) {
+
+      setFxTarget("bass");
+
+    }
+
+    else if (
+      code === "Digit4"
+      ||
+      code === "Numpad4"
+    ) {
+
+      setFxTarget("guitar");
+
+    }
+
+    else if (
+      code === "Digit5"
+      ||
+      code === "Numpad5"
+    ) {
+
+      setFxTarget("piano");
+
+    }
+
+    else if (
+      code === "Digit6"
+      ||
+      code === "Numpad6"
+    ) {
+
+      setFxTarget("other");
+
+    }
+
+    else if (
+      code === "Digit0"
+      ||
+      code === "Numpad0"
+    ) {
+
+      setFxTarget("master");
+
+    }
+
+    else if (
+      code === "Minus"
+      ||
+      code === "NumpadSubtract"
+    ) {
+
+      event.preventDefault();
+
+      undoMasterBtn.click();
+
+    }
+
+    else if (
+      code === "Equal"
+      ||
+      code === "NumpadAdd"
+    ) {
+
+      event.preventDefault();
+
+      redoMasterBtn.click();
+
+    }
+
+    else if (
+      code === "Enter"
+    ) {
+
+      event.preventDefault();
+
+      if (
+        masterRecording
+      ) {
+
+        stopMasterRecording();
+
+      }
+
+      else {
+
+        startMasterRecording();
+
+      }
+
+    }
+
+    else if (
+      code === "Escape"
+    ) {
+
+      event.preventDefault();
+
+      resetToInitialSplit();
+
+    }
+
+  }
+);
+
+
+window.addEventListener(
+  "keyup",
+  event => {
+
+    if (
+      event.key === "Control"
+      &&
+      modifierCandidate === "original"
+    ) {
+
+      switchMode(
+        "original"
+      );
+
+
+      modifierCandidate =
+        null;
+
+    }
+
+    else if (
+      event.key === "Alt"
+      &&
+      modifierCandidate === "mix"
+    ) {
+
+      switchMode(
+        "mix"
+      );
+
+
+      modifierCandidate =
+        null;
+
+    }
+
+    else if (
+      event.key === "Meta"
+      &&
+      modifierCandidate === "master"
+    ) {
+
+      if (
+        masterBlob
+      ) {
+
+        switchMode(
+          "master"
+        );
+
+      }
+
+
+      modifierCandidate =
+        null;
+
+    }
+
+  }
+);
+
+
+
+updateSelectionButtons();
+
+updateMasterHistoryButtons();
+
+
+// ========================================
+// PROJECT / PLAYLIST: СОСТОЯНИЕ И НУМЕРАЦИЯ | 5.4.7
+// Project = 12 аудиослотов + Lyrics.json + Project.json
+// ========================================
+const saveProjectBtn = document.getElementById("saveProjectBtn");
+const loadProjectBtn = document.getElementById("loadProjectBtn");
+const lyricsFullScreenPlaylistBtn = document.getElementById("lyricsFullScreenPlaylistBtn");
+const lyricsFullScreenPlaylistMenu = document.getElementById("lyricsFullScreenPlaylistMenu");
+let currentPlaylistProject = null;
+let activeProjectId = null;
+let projectCreationPending = false;
+let playlistStatePath = "C:\\MyNus\\playlist.json";
+
+// Сохранение текущего Project и связанных данных.
+function setProjectActive(projectId = null) {
+  activeProjectId = projectId ? String(projectId) : null;
+}
+
+
+const projectTrackIds = [
+  "original", "vocals", "pitchCorrection", "harmonizer",
+  "drums", "bass", "guitar", "piano", "other", "master",
+  "reserve1", "reserve2", "reserve3"
+];
+
+// Сохранение текущего Project и связанных данных.
+function projectSafeName() {
+  const raw = fileName?.textContent || currentPlaylistProject || "Project";
+  return String(raw)
+    .replace(/\.[^.]+$/, "")
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .trim() || "Project";
+}
+
+// Локальная функциональная операция этого блока.
+function cloneSerializable(value, fallback) {
+  try { return JSON.parse(JSON.stringify(value)); }
+  catch (_) { return fallback; }
+}
+
+// Для Project SAVE делаем снимок ТЕКУЩЕГО состояния Lyrics.
+// Сначала фиксируем несохранённый текст, введённый сейчас в Lyrics Editor.
+function projectLyricsJson() {
+  if (Array.isArray(lyricsEditorDraft) && lyricsEditorDraft.length) {
+    lyricsEditorDraft.forEach(line => applyEditedTextToLine(line));
+  }
+
+  const sourceLines = (Array.isArray(lyricsEditorDraft) && lyricsEditorDraft.length)
+    ? lyricsEditorDraft
+    : (Array.isArray(karaokeLines) ? karaokeLines : []);
+
+  const lines = sourceLines.map(line => ({
+    start: Number(line.start),
+    end: Number(line.end),
+    words: (line.words || []).map(word => ({ ...word }))
+  }));
+
+  // Поддерживаем текущее состояние Lyrics синхронным с сохраняемым снимком.
+  karaokeLines = cloneSerializable(lines, []);
+  lyricsData.words = karaokeLines.flatMap(line => line.words || []);
+  lyricsData.text = lyricsData.words.map(word => word.word).join(" ").trim();
+
+  return {
+    language: lyricsData?.language || null,
+    text: lines.map(line => line.words.map(word => word.word).join(" ")).join(" ").trim(),
+    lines,
+    structure: (lyricsStructureDraft || []).map(segment => ({
+      type: String(segment.type || ""),
+      label: String(segment.label || ""),
+      start: Number(segment.start),
+      end: Number(segment.end)
+    }))
+  };
+}
+
+// Сохранение текущего Project и связанных данных.
+function projectStateJson() {
+  return {
+    version: "5.5.2",
+    // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
+    source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
+    sequencer: {
+      mode,
+      fragmentStart,
+      fragmentEnd,
+      trimStart: getProjectTrimStart(),
+      trimEnd: Number.isFinite(Number(projectTrimEnd)) ? getProjectTrimEnd() : null,
+      stemState: cloneSerializable(stemState, {}),
+      stemCrop: cloneSerializable(stemCrop, {}),
+      fxSettings: cloneSerializable(fxSettings, {}),
+      pixelsPerSecond
+    },
+    vocal_start: vocalStartTimeRaw,
+    vocal_end: vocalEndTimeRaw,
+    track_slots: projectTrackIds
+  };
+}
+
+const saveProjectDialog = document.getElementById("saveProjectDialog");
+const saveProjectNameInput = document.getElementById("saveProjectNameInput");
+const saveProjectPathInput = document.getElementById("saveProjectPathInput");
+const browseSaveProjectPathBtn = document.getElementById("browseSaveProjectPathBtn");
+const saveProjectMessage = document.getElementById("saveProjectMessage");
+const confirmSaveProjectBtn = document.getElementById("confirmSaveProjectBtn");
+const cancelSaveProjectBtn = document.getElementById("cancelSaveProjectBtn");
+const loadProjectDialog = document.getElementById("loadProjectDialog");
+const loadProjectList = document.getElementById("loadProjectList");
+const cancelLoadProjectBtn = document.getElementById("cancelLoadProjectBtn");
+const openProjectStartBtn = document.getElementById("openProjectStartBtn");
+const newProjectPromptDialog = document.getElementById("newProjectPromptDialog");
+const createNewProjectBtn = document.getElementById("createNewProjectBtn");
+const continueWithoutProjectBtn = document.getElementById("continueWithoutProjectBtn");
+const projectConflictDialog = document.getElementById("projectConflictDialog");
+const projectConflictMessage = document.getElementById("projectConflictMessage");
+const overwriteProjectBtn = document.getElementById("overwriteProjectBtn");
+const renameProjectBtn = document.getElementById("renameProjectBtn");
+const saveProjectCopyBtn = document.getElementById("saveProjectCopyBtn");
+const cancelProjectConflictBtn = document.getElementById("cancelProjectConflictBtn");
+let pendingProjectConflict = null;
+let newProjectAfterSavePending = false;
+
+// Сохранение текущего Project и связанных данных.
+function projectTrackFilename(trackId, source) {
+  const raw = String(source?.filename || "");
+  const match = raw.match(/\.[A-Za-z0-9]+$/);
+  return trackId + (match ? match[0].toLowerCase() : ".bin");
+}
+
+// Сохранение текущего Project и связанных данных.
+async function saveCurrentProject(projectName, savePath, conflictAction = "", options = {}) {
+  const fd = new FormData();
+  const name = String(projectName || "").trim() || projectSafeName();
+  const targetPath = String(savePath || "").trim();
+  fd.append("name", name);
+  fd.append("save_path", targetPath);
+  fd.append("conflict_action", conflictAction);
+  if (options.projectId) fd.append("project_id", String(options.projectId));
+  fd.append("lyrics_json", JSON.stringify(projectLyricsJson()));
+  fd.append("project_json", JSON.stringify(projectStateJson()));
+
+  // Используем существующий источник сохранения отдельной дорожки: getTrackBlob().
+  // 5.4.18 | Сохраняются девять исходных/рабочих дорожек + Master Rec.
+  // Три резервных слота остаются резервными.
+  const workingTrackIds = projectTrackIds.slice(0, 10);
+  for (const trackId of workingTrackIds) {
+    const source = await getTrackBlob(trackId);
+    if (!source?.blob) continue;
+    fd.append("track_" + trackId, source.blob, projectTrackFilename(trackId, source));
+  }
+
+  status.textContent = "Saving project...";
+  status.className = "progress-status process";
+  const response = await fetch("/projects/save", { method: "POST", body: fd });
+  const data = await response.json().catch(() => ({}));
+  if (response.status === 409 && data.conflict) {
+    const error = new Error(data.error || "Project already exists");
+    error.projectConflict = data;
+    throw error;
+  }
+  if (!response.ok) throw new Error(data.error || "SAVE Project failed");
+
+  if (options.activateProject) {
+    setProjectActive(data.id || name);
+    currentPlaylistProject = data.id || name;
+    await markProjectInUse(data.id || name, Infinity);
+  }
+
+  const savedPath = data.path || targetPath || "C:\\MyNus\\Projects";
+  status.textContent = "Project saved: " + (data.name || name);
+  status.className = "progress-status success";
+  if (saveProjectMessage) saveProjectMessage.textContent = "Saved successfully: " + savedPath;
+  window.alert("Project saved successfully:\n" + savedPath);
+  return data;
+}
+
+let karaokePlaylistSnapshot = [];
+
+// Работа с Play List и её текущим состоянием.
+async function fetchPlaylistProjects() {
+  const response = await fetch("/projects");
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "PlayList unavailable");
+  currentPlaylistProject = data.current || null;
+  if (data.state_file) playlistStatePath = data.state_file;
+  karaokePlaylistSnapshot = Array.isArray(data.projects) ? data.projects : [];
+  return karaokePlaylistSnapshot;
+}
+
+// Сохранение текущего Project и связанных данных.
+async function fetchSavedProjects() {
+  const response = await fetch("/saved-projects");
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "Projects unavailable");
+  return Array.isArray(data.projects) ? data.projects : [];
+}
+
+// Сохранение текущего Project и связанных данных.
+async function markProjectInUse(id, position = null, mode = null) {
+  const normalizedPosition = position === Infinity ? "inf" : position;
+  const response = await fetch("/projects/use", {
+    method: "POST",
+    headers: loadTraceHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ id, position: normalizedPosition, mode, trace_id: projectLoadTraceId || null })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "PlayList update failed");
+  currentPlaylistProject = data.current || null;
+  if (data.state_file) playlistStatePath = data.state_file;
+  karaokePlaylistSnapshot = Array.isArray(data.projects) ? data.projects : karaokePlaylistSnapshot;
+  return data;
+}
+
+// Работа с Play List и её текущим состоянием.
+async function addProjectToPlaylist(id, position) {
+  const response = await fetch("/playlist/add", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, position })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "Add to PlayList failed");
+  return data;
+}
+
+// Работа с Play List и её текущим состоянием.
+async function movePlaylistProject(fromPosition, toPosition) {
+  const response = await fetch("/playlist/move", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ from_position: fromPosition, to_position: toPosition })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "PlayList reorder failed");
+  return data;
+}
+
+// Работа с Play List и её текущим состоянием.
+async function deletePlaylistEntry(section, position) {
+  const response = await fetch("/playlist/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ section, position })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "PlayList delete failed");
+  return data;
+}
+
+let playlistEditMode = null;
+let playlistTransitionLocked = false;
+let postPlayLoadAnotherPending = false;
+
+// На время перехода PlayList недоступен: старое стабильное состояние не изменяется до завершения LOAD.
+function setPlaylistTransitionLocked(locked) {
+  playlistTransitionLocked = Boolean(locked);
+  if (!lyricsFullScreenPlaylistMenu) return;
+  lyricsFullScreenPlaylistMenu.classList.toggle("playlist-transition-locked", playlistTransitionLocked);
+  lyricsFullScreenPlaylistMenu.setAttribute("aria-busy", playlistTransitionLocked ? "true" : "false");
+}
+
+// Работа с Play List и её текущим состоянием.
+function playlistPositionPicker(maxPosition, onSelect) {
+  const picker = document.createElement("div");
+  picker.className = "playlist-position-picker";
+  for (let position = 1; position <= maxPosition; position += 1) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "+" + position;
+    button.addEventListener("click", async event => {
+      event.stopPropagation();
+      await onSelect(position);
+    });
+    picker.appendChild(button);
+  }
+  return picker;
+}
+
+// Работа с Play List и её текущим состоянием.
+function renderFullScreenPlaylist(projects = karaokePlaylistSnapshot) {
+  if (!lyricsFullScreenPlaylistMenu) return;
+  projects = Array.isArray(projects) ? projects : [];
+  lyricsFullScreenPlaylistMenu.replaceChildren();
+
+  const historyProjects = projects.filter(track => track.status === "executed");
+  const waitingTracks = projects.filter(track => track.status === "waiting");
+
+  const appendTrackRow = (track, source) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "lyrics-fullscreen-playlist-item " + (track.status || "waiting");
+    const position = Number(track.position);
+    const numberLabel = Number.isFinite(position)
+      ? (position > 0 ? "+" + position : String(position))
+      : "";
+    row.textContent = (numberLabel ? numberLabel + "  " : "") + track.name;
+    row.title = track.name;
+
+    row.addEventListener("click", async event => {
+      event.stopPropagation();
+
+      if (playlistEditMode === "remove") {
+        if (!Number.isFinite(position)) return;
+        const section = source === "history" ? "history" : "queue";
+        await deletePlaylistEntry(section, position);
+        playlistEditMode = null;
+        await refreshFullScreenPlaylist();
+        return;
+      }
+
+      if (playlistEditMode === "reorder") {
+        if (source !== "playlist" || !Number.isFinite(position)) return;
+        lyricsFullScreenPlaylistMenu.querySelectorAll(".playlist-position-picker").forEach(node => node.remove());
+        const picker = playlistPositionPicker(waitingTracks.length, async toPosition => {
+          await movePlaylistProject(position, toPosition);
+          playlistEditMode = null;
+          await refreshFullScreenPlaylist();
+        });
+        row.insertAdjacentElement("afterend", picker);
+        return;
+      }
+
+      // =====================================================================
+      // [5.4.13][СЦЕНАРИЙ 2 — PLAYLIST]
+      // Пользователь вручную выбрал Track в PlayList.
+      // Здесь PlayList выполняет ТОЛЬКО свою задачу: определяет ID выбранного Project.
+      // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
+      // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
+      // =====================================================================
+      beginProjectLoadTrace("[5.4.13][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", track.id, "playlist");
+      await reportProjectLoadTrace("[5.4.13][СЦЕНАРИЙ 2 — PLAYLIST] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+        command: "await loadProjectById(track.id)",
+        function: "loadProjectById",
+        parameters: { id: track.id },
+        result: "переход в единую LOAD-функцию"
+      });
+      if (playlistTransitionLocked) return;
+      setPlaylistTransitionLocked(true);
+      try {
+        await loadProjectById(track.id);
+
+        // После успешного LOAD передаём в единую нумерацию фактический номер n выбранного Track.
+        await markProjectInUse(track.id, position);
+        await refreshFullScreenPlaylist();
+        lyricsFullScreenPlaylistMenu.hidden = true;
+      } finally {
+        setPlaylistTransitionLocked(false);
+      }
+    });
+
+    lyricsFullScreenPlaylistMenu.appendChild(row);
+  };
+
+  historyProjects.forEach(track => appendTrackRow(track, "history"));
+
+  if (currentPlaylistProject) {
+    const currentRow = document.createElement("div");
+    currentRow.className = "lyrics-fullscreen-playlist-item current";
+    const currentName = String(fileName?.textContent || currentPlaylistProject).trim() || currentPlaylistProject;
+    currentRow.textContent = "0  " + currentName;
+    currentRow.title = currentName + " — IN USE";
+    lyricsFullScreenPlaylistMenu.appendChild(currentRow);
+  }
+
+  waitingTracks.forEach(track => appendTrackRow(track, "playlist"));
+
+  const separator = document.createElement("div");
+  separator.style.borderTop = "1px solid rgba(255,255,255,.18)";
+  separator.style.margin = "6px 0";
+  lyricsFullScreenPlaylistMenu.appendChild(separator);
+
+  const actionRow = document.createElement("div");
+  actionRow.className = "playlist-action-row";
+
+  const addButton = document.createElement("button");
+  addButton.type = "button";
+  addButton.className = "playlist-action-btn add" + (playlistEditMode === "add" ? " active" : "");
+  addButton.textContent = "Add Track";
+  addButton.addEventListener("click", async event => {
+    event.stopPropagation();
+    const opening = playlistEditMode !== "add";
+    playlistEditMode = opening ? "add" : null;
+    addButton.classList.toggle("active", opening);
+    lyricsFullScreenPlaylistMenu.querySelectorAll(".playlist-track-picker,.playlist-position-picker").forEach(node => node.remove());
+    if (!opening) return;
+
+    const savedTracks = await fetchSavedProjects();
+    if (!savedTracks.length) {
+      status.textContent = "Tracks list is empty";
+      status.className = "progress-status info";
+      playlistEditMode = null;
+      addButton.classList.remove("active");
+      return;
+    }
+
+    const picker = document.createElement("div");
+    picker.className = "playlist-track-picker";
+    savedTracks.forEach(track => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "lyrics-fullscreen-playlist-item waiting";
+      button.textContent = track.name;
+      button.addEventListener("click", event => {
+        event.stopPropagation();
+        picker.querySelectorAll(".playlist-position-picker").forEach(node => node.remove());
+        const positionPicker = playlistPositionPicker(waitingTracks.length + 1, async position => {
+          await addProjectToPlaylist(track.id, position);
+          playlistEditMode = null;
+          await refreshFullScreenPlaylist();
+        });
+        button.insertAdjacentElement("afterend", positionPicker);
+      });
+      picker.appendChild(button);
+    });
+    actionRow.insertAdjacentElement("afterend", picker);
+  });
+
+  const removeButton = document.createElement("button");
+  removeButton.type = "button";
+  removeButton.className = "playlist-action-btn remove" + (playlistEditMode === "remove" ? " active" : "");
+  removeButton.textContent = "Remove Track";
+  removeButton.addEventListener("click", event => {
+    event.stopPropagation();
+    playlistEditMode = playlistEditMode === "remove" ? null : "remove";
+    renderFullScreenPlaylist(karaokePlaylistSnapshot);
+  });
+
+  const reorderButton = document.createElement("button");
+  reorderButton.type = "button";
+  reorderButton.className = "playlist-action-btn reorder" + (playlistEditMode === "reorder" ? " active" : "");
+  reorderButton.textContent = "Reorder Tracks";
+  reorderButton.addEventListener("click", event => {
+    event.stopPropagation();
+    playlistEditMode = playlistEditMode === "reorder" ? null : "reorder";
+    renderFullScreenPlaylist(karaokePlaylistSnapshot);
+  });
+
+  actionRow.append(addButton, removeButton, reorderButton);
+  lyricsFullScreenPlaylistMenu.appendChild(actionRow);
+}
+
+// Работа с Play List и её текущим состоянием.
+async function refreshFullScreenPlaylist() {
+  const projects = await fetchPlaylistProjects();
+  renderFullScreenPlaylist(projects);
+  return projects;
+}
+
+const karaokeFinishedDialog = document.getElementById("karaokeFinishedDialog");
+const karaokePlayAgainBtn = document.getElementById("karaokePlayAgainBtn");
+const karaokeNextProjectBtn = document.getElementById("karaokeNextProjectBtn");
+const karaokeLoadAnotherBtn = document.getElementById("karaokeLoadAnotherBtn");
+const karaokeSaveCurrentProjectFlag = document.getElementById("karaokeSaveCurrentProjectFlag");
+const karaokeFinishedMessage = document.getElementById("karaokeFinishedMessage");
+const karaokeFinishedCancelBtn = document.getElementById("karaokeFinishedCancelBtn");
+let karaokeFinishActionRunning = false;
+let karaokeFinishTriggered = false;
+let karaokePostPlayAutoNextTimer = null;
+const KARAOKE_POSTPLAY_AUTO_NEXT_MS = 10000;
+
+function cancelKaraokePostPlayAutoNext() {
+  if (karaokePostPlayAutoNextTimer) {
+    clearTimeout(karaokePostPlayAutoNextTimer);
+    karaokePostPlayAutoNextTimer = null;
+  }
+}
+
+function hideFullScreenPlaylistForPostPlayAction() {
+  if (lyricsFullScreenPlaylistMenu) lyricsFullScreenPlaylistMenu.hidden = true;
+}
+
+async function showFullScreenPlaylistWithPostPlay() {
+  if (!lyricsFullScreenPlaylistMenu) return;
+  lyricsFullScreenPlaylistMenu.hidden = false;
+  renderFullScreenPlaylist(karaokePlaylistSnapshot);
+  try {
+    await refreshFullScreenPlaylist();
+  } catch (error) {
+    console.error(error);
+    status.textContent = error.message;
+    status.className = "progress-status error";
+  }
+}
+
+function isPositiveWaitingPlaylistProject(project) {
+  return project?.status === "waiting" && Number(project.position) > 0;
+}
+
+function scheduleKaraokePostPlayAutoNext() {
+  cancelKaraokePostPlayAutoNext();
+  karaokePostPlayAutoNextTimer = setTimeout(async () => {
+    karaokePostPlayAutoNextTimer = null;
+    if (!karaokeFinishedDialog?.classList.contains("open") || karaokeFinishActionRunning) return;
+    let projects;
+    try {
+      projects = await refreshFullScreenPlaylist();
+    } catch (_) {
+      return;
+    }
+    if (!projects.some(isPositiveWaitingPlaylistProject)) return;
+    await runKaraokeFinishAction("next", { autoplay: true });
+  }, KARAOKE_POSTPLAY_AUTO_NEXT_MS);
+}
+
+// Сохранение текущего Project и связанных данных.
+function karaokeHasNextProject() {
+  return karaokePlaylistSnapshot.some(isPositiveWaitingPlaylistProject);
+}
+
+// Логика режима Karaoke и его интерфейса.
+function resetKaraokeFinishedButtons() {
+  if (karaokePlayAgainBtn) karaokePlayAgainBtn.disabled = false;
+  if (karaokeLoadAnotherBtn) karaokeLoadAnotherBtn.disabled = false;
+  if (karaokeFinishedCancelBtn) karaokeFinishedCancelBtn.disabled = false;
+  if (karaokeNextProjectBtn) karaokeNextProjectBtn.disabled = !karaokeHasNextProject();
+}
+
+// Работа с Play List и её текущим состоянием.
+async function saveCurrentPlaylistProjectIfRequested() {
+  if (!karaokeSaveCurrentProjectFlag?.checked) return;
+  const projectName = fileName?.textContent || currentPlaylistProject || "Project";
+  if (karaokeFinishedMessage) karaokeFinishedMessage.textContent = "Saving current project…";
+
+  if (currentPlaylistProject) {
+    await saveCurrentProject(projectName, "C:\\MyNus\\Projects", "overwrite", {
+      silent: true,
+      projectId: currentPlaylistProject
+    });
+  } else {
+    await saveCurrentProject(projectName, "C:\\MyNus\\Projects", "overwrite", {
+      silent: true
+    });
+  }
+}
+
+// Логика режима Karaoke и его интерфейса.
+function openKaraokeFinishedDialog() {
+  if (!isKaraokeUiMode() || !karaokeFinishedDialog || karaokeFinishedDialog.classList.contains("open")) return;
+  karaokeFinishActionRunning = false;
+  if (karaokeFinishedMessage) karaokeFinishedMessage.textContent = "";
+  resetKaraokeFinishedButtons();
+  karaokeFinishedDialog.classList.add("open");
+  void showFullScreenPlaylistWithPostPlay();
+  scheduleKaraokePostPlayAutoNext();
+}
+
+// Логика режима Karaoke и его интерфейса.
+function closeKaraokeFinishedDialog() {
+  cancelKaraokePostPlayAutoNext();
+  karaokeFinishedDialog?.classList.remove("open");
+  karaokeFinishActionRunning = false;
+}
+
+// Логика режима Karaoke и его интерфейса.
+async function runKaraokeFinishAction(action, { autoplay = false } = {}) {
+  if (karaokeFinishActionRunning) return;
+  cancelKaraokePostPlayAutoNext();
+  hideFullScreenPlaylistForPostPlayAction();
+  karaokeFinishActionRunning = true;
+  [karaokePlayAgainBtn, karaokeNextProjectBtn, karaokeLoadAnotherBtn, karaokeFinishedCancelBtn].forEach(btn => {
+    if (btn) btn.disabled = true;
+  });
+  try {
+    await saveCurrentPlaylistProjectIfRequested();
+
+    if (action === "again") {
+      closeKaraokeFinishedDialog();
+      karaokeFinishTriggered = false;
+      syncAllTo(getProjectTrimStart());
+      updatePlayheads();
+      updateMasterCursor();
+      updateTimeDisplay();
+      playCurrentMode();
+    } else if (action === "next") {
+      const projects = await fetchPlaylistProjects();
+      const nextProject = projects.find(isPositiveWaitingPlaylistProject) || null;
+      if (!nextProject) throw new Error("No next project in playlist");
+      closeKaraokeFinishedDialog();
+
+      // =====================================================================
+      // [5.4.13][СЦЕНАРИЙ 3 — OPEN NEXT]
+      // Команда Open next берёт первый ожидающий Track из очереди и получает его Project ID.
+      // На этом сценарий выбора заканчивается.
+      // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
+      // Дальше выполняется прямой переход в ТУ ЖЕ ЕДИНУЮ функцию loadProjectById(ID).
+      // =====================================================================
+      beginProjectLoadTrace("[5.4.13][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", nextProject.id, "playlist");
+      await reportProjectLoadTrace("[5.4.13][СЦЕНАРИЙ 3 — OPEN NEXT] Выбран следующий Project; дальше прямой переход в единую LOAD-функцию", {
+        command: "await loadProjectById(nextProject.id)",
+        function: "loadProjectById",
+        parameters: { id: nextProject.id },
+        result: "переход в единую LOAD-функцию"
+      });
+      setPlaylistTransitionLocked(true);
+      try {
+        const loaded = await loadProjectById(nextProject.id);
+        if (loaded) {
+          // После успешного LOAD передаём в ту же единую нумерацию номер n следующего Track.
+          await markProjectInUse(nextProject.id, Number(nextProject.position));
+          await refreshFullScreenPlaylist();
+          karaokeFinishTriggered = false;
+          if (autoplay) playCurrentMode();
+        } else if (isKaraokeUiMode() && karaokeFinishedDialog) {
+          karaokeFinishedDialog.classList.add("open");
+        }
+      } finally {
+        setPlaylistTransitionLocked(false);
+      }
+    } else if (action === "other") {
+      closeKaraokeFinishedDialog();
+      postPlayLoadAnotherPending = true;
+      beginProjectLoadTrace("Open Project button", null, "projects");
+      await reportProjectLoadTrace("OPEN PROJECT BUTTON CLICK", {
+        command: "Song Finished -> Load another -> Open Project",
+        function: "openLoadProjectDialog",
+        parameters: {},
+        result: "calling"
+      });
+      await openLoadProjectDialog();
+      karaokeFinishActionRunning = false;
+    }
+  } catch (error) {
+    if (action === "other") postPlayLoadAnotherPending = false;
+    console.error(error);
+    if (isKaraokeUiMode() && karaokeFinishTriggered && karaokeFinishedDialog) {
+      karaokeFinishedDialog.classList.add("open");
+    }
+    if (karaokeFinishedMessage) karaokeFinishedMessage.textContent = error.message;
+    karaokeFinishActionRunning = false;
+  } finally {
+    if (karaokeFinishedDialog?.classList.contains("open")) {
+      resetKaraokeFinishedButtons();
+    }
+  }
+}
+
+karaokePlayAgainBtn?.addEventListener("click", () => runKaraokeFinishAction("again"));
+karaokeNextProjectBtn?.addEventListener("click", () => runKaraokeFinishAction("next"));
+karaokeLoadAnotherBtn?.addEventListener("click", () => runKaraokeFinishAction("other"));
+karaokeFinishedCancelBtn?.addEventListener("click", () => {
+  hideFullScreenPlaylistForPostPlayAction();
+  closeKaraokeFinishedDialog();
+});
+
+// Сохранение текущего Project и связанных данных.
+function resetProjectSequencerStateForLoad() {
+  clearSequencerHistory();
+  stemIds.forEach(stemId => {
+    Object.assign(stemState[stemId], {
+      muted: stemId === "pitchCorrection" || stemId === "harmonizer",
+      solo: false,
+      volume: 1
+    });
+    Object.assign(stemCrop[stemId], { in: 0, out: null });
+    if (fxSettings[stemId]) Object.assign(fxSettings[stemId], cloneSerializable(defaultFxSettings, {}));
+  });
+  if (fxSettings.master) Object.assign(fxSettings.master, cloneSerializable(defaultFxSettings, {}));
+  fragmentStart = null;
+  fragmentEnd = null;
+  projectTrimStart = 0;
+  projectTrimEnd = null;
+  mode = "original";
+}
+
+// Сохранение текущего Project и связанных данных.
+function restoreProjectSequencerState(saved) {
+  if (!saved || typeof saved !== "object") return;
+
+  stemIds.forEach(stemId => {
+    if (saved.stemState?.[stemId]) Object.assign(stemState[stemId], saved.stemState[stemId]);
+    if (saved.stemCrop?.[stemId]) Object.assign(stemCrop[stemId], saved.stemCrop[stemId]);
+  });
+
+  if (saved.fxSettings && typeof saved.fxSettings === "object") {
+    Object.keys(fxSettings).forEach(target => {
+      if (saved.fxSettings[target]) Object.assign(fxSettings[target], saved.fxSettings[target]);
+    });
+  }
+
+  fragmentStart = Number.isFinite(Number(saved.fragmentStart)) ? Number(saved.fragmentStart) : null;
+  fragmentEnd = Number.isFinite(Number(saved.fragmentEnd)) ? Number(saved.fragmentEnd) : null;
+  projectTrimStart = Number.isFinite(Number(saved.trimStart)) ? Math.max(0, Number(saved.trimStart)) : 0;
+  projectTrimEnd = saved.trimEnd == null
+  ? null
+  : (
+      Number.isFinite(Number(saved.trimEnd))
+        ? Math.max(projectTrimStart, Number(saved.trimEnd))
+        : null
+    );
+  if (["original", "mix", "master"].includes(saved.mode)) mode = saved.mode;
+}
+
+// Сохранение текущего Project и связанных данных.
+function restoreProjectLyricsJson(lyrics) {
+  const savedLines = Array.isArray(lyrics?.lines) ? cloneSerializable(lyrics.lines, []) : [];
+  lyricsEditorDraft = savedLines;
+  karaokeLines = cloneSerializable(savedLines, []);
+  
+  lyricsStructureDraft =
+  Array.isArray(lyrics?.structure)
+    ? cloneSerializable(lyrics.structure, [])
+    : [];
+    
+  lyricsData = {
+    language: lyrics?.language || null,
+    text: String(lyrics?.text || ""),
+    words: savedLines.flatMap(line => Array.isArray(line.words) ? line.words : [])
+  };
+}
+
+const projectLoader = document.getElementById("projectLoader");
+const projectLoaderProject = document.getElementById("projectLoaderProject");
+const projectLoaderPhase = document.getElementById("projectLoaderPhase");
+const projectLoaderFill = document.getElementById("projectLoaderFill");
+const projectLoaderPercent = document.getElementById("projectLoaderPercent");
+let projectLoading = false;
+
+// Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
+// Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
+const MYNUS_CLIENT_VERSION = "5.5.2";
+const MYNUS_CLIENT_CHANGE = "Karaoke non-Full-Screen minimum 620x900; separate session-only Sequencer History with Undo/Redo; Lyrics History, Trim, startup Select File/Open Project, and server unchanged";
+let projectLoadTraceId = null;
+let projectLoadTraceProject = null;
+let projectLoadTraceSource = null;
+let projectLoadTraceStartedAt = 0;
+let projectLoadTraceEvent = 0;
+
+function beginProjectLoadTrace(trigger, projectId = null, source = null) {
+  projectLoadTraceId = "load-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+  projectLoadTraceProject = projectId || null;
+  projectLoadTraceSource = source || null;
+  projectLoadTraceStartedAt = performance.now();
+  projectLoadTraceEvent = 0;
+  void reportProjectLoadTrace("TRACE START", {
+    command: trigger,
+    function: "beginProjectLoadTrace",
+    parameters: { trigger, projectId, source },
+    result: "trace created"
+  });
+}
+
+function loadTraceHeaders(extra = {}) {
+  const headers = { ...extra };
+  if (projectLoadTraceId) headers["X-MyNus-Load-Trace"] = projectLoadTraceId;
+  return headers;
+}
+
+function withLoadTraceUrl(url, trackId = null) {
+  if (!url || !projectLoadTraceId) return url;
+  const separator = String(url).includes("?") ? "&" : "?";
+  return String(url) + separator
+    + "trace_id=" + encodeURIComponent(projectLoadTraceId)
+    + (trackId ? "&track_id=" + encodeURIComponent(trackId) : "");
+}
+
+async function reportProjectLoadTrace(stage, details = {}) {
+  projectLoadTraceEvent += 1;
+  const elapsedMs = projectLoadTraceStartedAt ? Math.round(performance.now() - projectLoadTraceStartedAt) : 0;
+  const payload = {
+    version: MYNUS_CLIENT_VERSION,
+    change: MYNUS_CLIENT_CHANGE,
+    trace_id: projectLoadTraceId || "no-trace",
+    event: projectLoadTraceEvent,
+    stage: String(stage || "UNKNOWN"),
+    project_id: projectLoadTraceProject,
+    source: projectLoadTraceSource,
+    ui_mode: uiMode,
+    project_loading: Boolean(projectLoading),
+    elapsed_ms: elapsedMs,
+    client_time: new Date().toISOString(),
+    command: details.command || null,
+    function: details.function || null,
+    parameters: details.parameters || null,
+    result: details.result ?? null,
+    details
+  };
+
+  // HTML Service Console перехватывает console.log и показывает тот же trace пользователю.
+  console.log(`[LOAD TRACE][${payload.trace_id}][${String(payload.event).padStart(3, "0")}] ${payload.stage}`, payload);
+
+  try {
+    const response = await fetch("/debug/load-trace", {
+      method: "POST",
+      headers: loadTraceHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      console.warn(`[LOAD TRACE][${payload.trace_id}] server logger HTTP ${response.status}`);
+    }
+  } catch (error) {
+    // Диагностика не должна ломать сам LOAD даже при недоступном серверном логгере.
+    console.warn("[LOAD TRACE] server logger unavailable", error);
+  }
+}
+
+const projectLoadPhases = [
+  { label: "Opening project", percent: 5 },
+  { label: "Loading Original", percent: 15 },
+  { label: "Separating stems", percent: 25 },
+  { label: "Loading tracks", percent: 38 },
+  { label: "Restoring Sequencer", percent: 50 },
+  { label: "Drawing waveforms", percent: 63 },
+  { label: "Loading Lyrics", percent: 74 },
+  { label: "Making structure", percent: 84 },
+  { label: "Preparing Karaoke", percent: 93 },
+  { label: "Using Effects", percent: 98 },
+  { label: "Ready", percent: 100 }
+];
+
+// Сохранение текущего Project и связанных данных.
+function setProjectLoadPhase(index) {
+  if (!projectLoader) return;
+  const phase = projectLoadPhases[Math.max(0, Math.min(index, projectLoadPhases.length - 1))];
+  projectLoader.classList.remove("failed");
+  projectLoaderPhase.textContent = phase.label;
+  projectLoaderFill.style.width = phase.percent + "%";
+  projectLoaderPercent.textContent = phase.percent + "%";
+}
+
+// Сохранение текущего Project и связанных данных.
+async function showProjectLoader(projectName = "") {
+  projectLoading = true;
+  if (projectLoaderProject) projectLoaderProject.textContent = String(projectName || "").trim();
+  projectLoader?.classList.add("open");
+  projectLoader?.setAttribute("aria-hidden", "false");
+  setProjectLoadPhase(0);
+  await reportProjectLoadTrace("LOADER PHASE", { index: 0, label: projectLoadPhases[0].label, percent: projectLoadPhases[0].percent });
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+// Сохранение текущего Project и связанных данных.
+async function advanceProjectLoad(index, holdMs = 0) {
+  if (!projectLoading) return;
+  setProjectLoadPhase(index);
+  const phase = projectLoadPhases[Math.max(0, Math.min(index, projectLoadPhases.length - 1))];
+  await reportProjectLoadTrace("LOADER PHASE", { index, label: phase.label, percent: phase.percent });
+  if (holdMs > 0) await new Promise(resolve => setTimeout(resolve, holdMs));
+}
+
+// Сохранение текущего Project и связанных данных.
+async function finishProjectLoader() {
+  if (!projectLoading) return;
+  setProjectLoadPhase(10);
+  await reportProjectLoadTrace("LOADER READY", { index: 10, label: projectLoadPhases[10].label, percent: 100 });
+  projectLoader?.classList.remove("open");
+  projectLoader?.setAttribute("aria-hidden", "true");
+  projectLoading = false;
+}
+
+// Сохранение текущего Project и связанных данных.
+async function failProjectLoader(error) {
+  await reportProjectLoadTrace("LOAD FAILED", { error: String(error?.message || error || "unknown") });
+  if (!projectLoading || !projectLoader) return;
+  projectLoader.classList.add("failed");
+  projectLoaderPhase.textContent = "Project load failed";
+  projectLoaderPercent.textContent = "";
+  await new Promise(resolve => setTimeout(resolve, 900));
+  projectLoader.classList.remove("open", "failed");
+  projectLoader.setAttribute("aria-hidden", "true");
+  projectLoading = false;
+}
+
+
+// Сохранение текущего Project и связанных данных.
+function clearProjectState() {
+  // Очищаем ВСЁ текущее рабочее состояние Project/файла.
+  // PlayList намеренно исключён: playlist.json/current/queue/history
+  // и снимок PlayList в памяти принадлежат только логике PlayList.
+  pauseAll();
+  karaokeFinishTriggered = false;
+  closeKaraokeFinishedDialog();
+  setProjectActive(null);
+  projectCreationPending = false;
+
+  if (originalFileURL) {
+    try { URL.revokeObjectURL(originalFileURL); } catch (_) {}
+    originalFileURL = null;
+  }
+  // Полностью сбрасываем и исходный File, и техническую текущую Original-дорожку.
+  currentOriginalFile = null;
+  currentOriginalTrackFile = null;
+  currentSourceAudioName = null;
+  try { originalAudio.pause(); } catch (_) {}
+  originalAudio.removeAttribute("src");
+  originalAudio.load();
+
+  for (const trackId of ["pitchCorrection", "harmonizer"]) {
+    const url = generatedTrackURLs?.[trackId];
+    if (url && String(url).startsWith("blob:")) {
+      try { URL.revokeObjectURL(url); } catch (_) {}
+    }
+    generatedTrackURLs[trackId] = null;
+  }
+
+  currentStemURLs = {};
+  stemIds.forEach(stemId => {
+    const audio = stemAudio[stemId];
+    if (audio) {
+      try { audio.pause(); } catch (_) {}
+      audio.removeAttribute("src");
+      audio.load();
+      try { audio.currentTime = 0; } catch (_) {}
+    }
+    waveformData[stemId] = null;
+    document.getElementById(stemId + "TrackRow")?.style.setProperty("display", "none");
+  });
+  waveformData.original = null;
+
+  resetMaster();
+  resetProjectSequencerStateForLoad();
+
+  singerSegments = [];
+  renderSingerSegments();
+
+  lyricsData = { language: null, text: "", words: [] };
+  karaokeLines = [];
+  activeKaraokeLine = -1;
+  lyricsEditorDraft = [];
+  lyricsEditorSelectedLine = -1;
+  lyricsEditorEditLineIndex = -1;
+  lyricsEditorCaretOffset = 0;
+  lyricsStructureDraft = [];
+  lyricsStructureSelectedIndex = -1;
+  lyricsStructureSelectedIndices = new Set();
+  lyricsStructureTransportMode = "play";
+  lyricsStructureLoopStart = null;
+  lyricsStructureLoopEnd = null;
+  lyricsUndoStack = [];
+  lyricsRedoStack = [];
+  lyricsTranscriptionMode = false;
+  lyricsOriginalDraftForTranscription = null;
+  originalWhisperLyrics = { language: null, text: "", words: [] };
+  originalWhisperKaraokeLines = [];
+
+  vocalStartTimeRaw = null;
+  vocalEndTimeRaw = null;
+  vocalStartTime = null;
+  vocalEndTime = null;
+
+  fragmentStart = null;
+  fragmentEnd = null;
+  projectTrimStart = 0;
+  projectTrimEnd = null;
+  projectTrimDragging = null;
+  loopEnabled = false;
+  lyricsTransportMode = "master";
+  lyricsLoopPaused = false;
+  masterCursorTime = 0;
+  duration = 0;
+  mode = "original";
+
+  updateLyricsUndoRedoButtons();
+  renderLyrics();
+  renderLyricsEditor();
+  renderLyricsStructureTimeline(0);
+  updateLyricsMasterCounter();
+  updateTimeDisplay();
+  updatePlayheads();
+  updateMasterCursor();
+  updateCropButtons();
+  updateMixButtons();
+  syncScrollTo(0);
+}
+
+function clearProjectImage() {
+  // 5.5.2 | Только визуальная очистка после clearProjectState().
+  // Данные Project здесь НЕ меняются.
+
+  // Полностью очищаем waveform всех дорожек, включая Original и Master.
+  Object.values(canvases).forEach(canvas => {
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  });
+
+  // Очищаем шкалу Master Timeline.
+  if (masterRuler) {
+    masterRuler.innerHTML = "";
+  }
+
+  // Убираем Selection.
+  if (selectionRange) {
+    selectionRange.style.display = "none";
+  }
+
+  // Курсор Master возвращаем в начало.
+  if (masterCursor) {
+    masterCursor.style.left = "0px";
+  }
+
+  // Lyrics: штатно рисуем пустое состояние.
+  renderLyrics();
+
+  // Lyrics Editor: штатно очищает строки,
+  // потому что clearProjectState() уже обнулил lyricsEditorDraft.
+  renderLyricsEditor();
+
+  // Structure: штатно рисуем пустую структуру.
+  // ВАЖНО: именно renderLyricsStructure(), а не
+  // renderLyricsStructureTimeline(0).
+  renderLyricsStructure();
+
+  // Сбрасываем визуальный Selection на дорожках.
+  updateTrackSelectionOverlays();
+
+  // Синхронизируем нулевое положение интерфейса.
+  updateTimeDisplay();
+  updatePlayheads();
+  updateMasterCursor();
+
+  // Возвращаем общий горизонтальный скролл в начало.
+  syncScrollTo(0);
+}
+
+// =====================================================================
+// [5.4.13][ЕДИНАЯ LOAD-ФУНКЦИЯ]
+// Это ЕДИНСТВЕННАЯ функция загрузки сохранённого Project.
+// Она получает РОВНО ОДИН входной параметр: id.
+// Функция НЕ знает, кто выбрал этот ID: Open Project, PlayList или Open next.
+// В ней НЕТ проверки source, mode, playlist/history и НЕТ развилки по сценарию запуска.
+// Все три сценария выше заканчиваются одинаковой командой: await loadProjectById(ID).
+// =====================================================================
+async function loadProjectById(id) {
+  if (!projectLoadTraceId || projectLoadTraceProject !== (id || null)) {
+    beginProjectLoadTrace("[5.4.13][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", id || null, "projects");
+  } else {
+    projectLoadTraceProject = id || projectLoadTraceProject;
+  }
+
+  await reportProjectLoadTrace("[5.4.13][ЕДИНАЯ LOAD-ФУНКЦИЯ] Начало единой загрузки Project по ID", {
+    command: "LOAD Project",
+    function: "loadProjectById",
+    parameters: { id },
+    result: "единая LOAD-функция запущена"
+  });
+  await reportProjectLoadTrace("COMMAND", { command: "pause current playback", function: "pauseAll", parameters: {}, result: "calling" });
+  pauseAll();
+  await reportProjectLoadTrace("COMMAND RESULT", { command: "pause current playback", function: "pauseAll", parameters: {}, result: "done" });
+
+progressWrap.style.display = "block";
+
+  status.textContent = "Loading project...";
+  status.className = "progress-status process";
+
+progressBar.style.width = "100%";
+progressPercent.textContent = "100%";
+
+  await reportProjectLoadTrace("COMMAND", { command: "show Project loader", function: "showProjectLoader", parameters: {}, result: "calling" });
+  await showProjectLoader(id);
+
+  try {
+    const projectUrl = "/saved-projects/" + encodeURIComponent(id);
+    await reportProjectLoadTrace("HTTP REQUEST", { command: "GET " + projectUrl, function: "fetch", parameters: { method: "GET", id }, result: "sending" });
+    const response = await fetch(projectUrl, { headers: loadTraceHeaders() });
+
+    const data = await response.json().catch(() => ({}));
+    await reportProjectLoadTrace("PROJECT PAYLOAD RESPONSE", {
+      command: "parse Project payload",
+      function: "Response.json",
+      parameters: { http_status: response.status, ok: response.ok, cancelled: Boolean(data.cancelled) },
+      result: response.ok ? "payload received" : "HTTP error"
+    });
+    if (!response.ok) throw new Error(data.error || "LOAD Project failed");
+    if (projectLoaderProject) projectLoaderProject.textContent = String(data.name || id || "").trim();
+    if (data.cancelled) {
+      status.textContent = "Project loading cancelled";
+      status.className = "progress-status info";
+      projectLoader?.classList.remove("open");
+      projectLoader?.setAttribute("aria-hidden", "true");
+      projectLoading = false;
+      return false;
+    }
+
+    karaokeFinishTriggered = false;
+    await reportProjectLoadTrace("COMMAND", { command: "close Song Finished dialog", function: "closeKaraokeFinishedDialog", parameters: {}, result: "calling" });
+    closeKaraokeFinishedDialog();
+
+    const project = data.project || {};
+    const lyrics = data.lyrics || {};
+    const tracks = data.tracks || {};
+    if (!tracks.original) throw new Error("Project Original track not found");
+
+    // uiMode намеренно НЕ меняется при LOAD.
+    await reportProjectLoadTrace("CLEAR PROJECT STATE START", { command: "clear previous working material", function: "clearProjectState", parameters: { preserve_playlist: true, ui_mode_before: uiMode }, result: "calling" });
+    clearProjectState();
+    await reportProjectLoadTrace("CLEAR PROJECT STATE DONE", { command: "clear previous working material", function: "clearProjectState", parameters: { preserve_playlist: true }, result: "done" });
+
+    await advanceProjectLoad(1);
+
+    const originalUrl = withLoadTraceUrl(tracks.original, "original");
+    await reportProjectLoadTrace("HTTP REQUEST", { command: "GET Original track", function: "fetch", parameters: { track: "original", url: originalUrl }, result: "sending" });
+    const originalResponse = await fetch(originalUrl, { headers: loadTraceHeaders() });
+    if (!originalResponse.ok) throw new Error("Project Original track not found");
+    const originalBlob = await originalResponse.blob();
+    const originalFile = new File(
+      [originalBlob],
+      project.tracks?.original || "original.audio",
+      { type: originalBlob.type || "audio/mpeg" }
+    );
+
+    // Project LOAD восстанавливает техническую дорожку Original отдельно:
+    // currentOriginalFile остаётся зарезервирован только для реально выбранного пользователем исходного File.
+    currentOriginalTrackFile = originalFile;
+    currentSourceAudioName = String(project.source_audio_name || data.name || id || "").trim() || null;
+    recentSelectedAudioFile = null;
+    fileName.textContent = data.name || id;
+
+    if (originalFileURL) URL.revokeObjectURL(originalFileURL);
+    originalFileURL = URL.createObjectURL(originalFile);
+    originalAudio.src = originalFileURL;
+    await reportProjectLoadTrace("ORIGINAL ATTACHED", {
+      command: "attach Original to audio element",
+      function: "URL.createObjectURL + originalAudio.src",
+      parameters: { filename: originalFile.name, bytes: originalBlob.size, mime: originalBlob.type || "audio/mpeg" },
+      result: "attached"
+    });
+
+    await advanceProjectLoad(2, 180);
+    await advanceProjectLoad(3);
+
+    for (const trackId of ["pitchCorrection", "harmonizer"]) {
+      if (generatedTrackURLs[trackId]?.startsWith("blob:")) {
+        try { URL.revokeObjectURL(generatedTrackURLs[trackId]); } catch (_) {}
+      }
+      generatedTrackURLs[trackId] = null;
+    }
+
+    currentStemURLs = {};
+    stemIds.forEach(stemId => {
+      const rawUrl = tracks[stemId] || null;
+      const url = rawUrl ? withLoadTraceUrl(rawUrl, stemId) : null;
+      currentStemURLs[stemId] = url;
+      void reportProjectLoadTrace("TRACK SOURCE", { command: "assign Project track", function: "stemAudio[stemId].src", parameters: { stemId, url, present: Boolean(url) }, result: url ? "assigned" : "cleared" });
+      if (url) {
+        stemAudio[stemId].src = url;
+        stemAudio[stemId].load();
+        document.getElementById(stemId + "TrackRow")?.style.setProperty("display", "grid");
+      } else {
+        const audio = stemAudio[stemId];
+        if (audio) {
+          try { audio.pause(); } catch (_) {}
+          audio.removeAttribute("src");
+          audio.load();
+          try { audio.currentTime = 0; } catch (_) {}
+        }
+        currentStemURLs[stemId] = null;
+        waveformData[stemId] = null;
+        document.getElementById(stemId + "TrackRow")?.style.setProperty("display", "none");
+      }
+    });
+
+    await advanceProjectLoad(4);
+    await reportProjectLoadTrace("SEQUENCER RESTORE START", { command: "reset Sequencer state", function: "resetProjectSequencerStateForLoad", parameters: {}, result: "calling" });
+    resetProjectSequencerStateForLoad();
+    await reportProjectLoadTrace("SEQUENCER RESTORE", { command: "restore Sequencer state", function: "restoreProjectSequencerState", parameters: { keys: Object.keys(project.sequencer || {}) }, result: "calling" });
+    restoreProjectSequencerState(project.sequencer || {});
+
+    vocalStartTimeRaw = Number.isFinite(Number(project.vocal_start)) ? Number(project.vocal_start) : null;
+    vocalEndTimeRaw = Number.isFinite(Number(project.vocal_end)) ? Number(project.vocal_end) : null;
+    vocalStartTime = vocalStartTimeRaw;
+    vocalEndTime = vocalEndTimeRaw;
+
+    const metadataLoads = [waitForMetadata(originalAudio)];
+    stemIds.forEach(stemId => {
+      if (currentStemURLs[stemId]) metadataLoads.push(waitForMetadata(stemAudio[stemId]));
+    });
+    await reportProjectLoadTrace("TRACK METADATA WAIT", { command: "wait for audio metadata", function: "waitForMetadata + Promise.all", parameters: { audio_elements: metadataLoads.length }, result: "waiting" });
+    await Promise.all(metadataLoads);
+
+    duration = originalAudio.duration || 0;
+    await reportProjectLoadTrace("TRACK METADATA READY", { duration, stems_loaded: stemIds.filter(stemId => Boolean(currentStemURLs[stemId])) });
+
+    await advanceProjectLoad(5);
+    await reportProjectLoadTrace("WAVEFORMS START", { command: "load waveform data", function: "loadWaveforms", parameters: { original: originalFile.name, stems: stemIds.filter(stemId => Boolean(currentStemURLs[stemId])) }, result: "calling" });
+    await loadWaveforms(originalFile, currentStemURLs);
+    await reportProjectLoadTrace("WAVEFORMS READY", { command: "load waveform data", function: "loadWaveforms", parameters: {}, result: "done" });
+
+    // 5.5.0 | Восстанавливаем Save Rec из Project как полноценную Master-дорожку.
+    if (tracks.master) {
+      const masterUrl = withLoadTraceUrl(tracks.master, "master");
+      const masterResponse = await fetch(masterUrl, { headers: loadTraceHeaders() });
+      if (!masterResponse.ok) throw new Error("Project Master track not found");
+
+      const loadedMasterBlob = await masterResponse.blob();
+      const masterContext = new (window.AudioContext || window.webkitAudioContext)();
+
+      try {
+        const masterBuffer = await masterContext.decodeAudioData(
+          (await loadedMasterBlob.arrayBuffer()).slice(0)
+        );
+
+        masterBlob = loadedMasterBlob;
+        savedMasterBlob = loadedMasterBlob;
+        waveformData.master = masterBuffer;
+        masterSegments = [{ start: 0, buffer: masterBuffer }];
+        masterDuration = masterBuffer.duration;
+
+        if (masterObjectURL) {
+          try { URL.revokeObjectURL(masterObjectURL); } catch (_) {}
+        }
+
+        masterObjectURL = URL.createObjectURL(loadedMasterBlob);
+        masterAudio.src = masterObjectURL;
+        await waitForMetadata(masterAudio);
+
+        masterState.textContent = "Saved successfully";
+        saveAsMasterBtn.disabled = false;
+        saveMasterSelectionBtn.disabled = !hasSelection();
+        updateMasterHistoryButtons();
+      } finally {
+        await masterContext.close();
+      }
+    }
+
+    const savedZoom = Number(project.sequencer?.pixelsPerSecond);
+    const fitWidth = Math.max(1, masterTimeline.clientWidth);
+    pixelsPerSecond = Number.isFinite(savedZoom) && savedZoom > 0
+      ? savedZoom
+      : (duration > 0 ? fitWidth / duration : 10);
+
+    zoomValue.textContent = pixelsPerSecond.toFixed(1) + " px/s";
+    if (zoomValueTop) zoomValueTop.textContent = zoomValue.textContent;
+    sharedScrollInner.style.width = getTimelineWidth() + "px";
+
+    updateEffectiveVocalRange();
+    pauseAll();
+    syncAllTo(getProjectTrimStart());
+    masterCursorTime = getProjectTrimStart();
+    updatePlayheads();
+    updateMasterCursor();
+    updateTimeDisplay();
+    syncScrollTo(0);
+    drawAllWaveforms();
+    drawMasterTimeline();
+    // 5.4.15 | Восстановленные IN / OUT сразу отображаем тем же Selection.
+    updateSelectionDisplay();
+
+    await advanceProjectLoad(6);
+
+    await reportProjectLoadTrace("LYRICS RESTORE START", { command: "restore Lyrics.json", function: "restoreProjectLyricsJson", parameters: { lines: Array.isArray(lyrics?.lines) ? lyrics.lines.length : 0, structure: Array.isArray(lyrics?.structure) ? lyrics.structure.length : 0, language: lyrics?.language || null }, result: "calling" });
+    restoreProjectLyricsJson(lyrics);
+    await reportProjectLoadTrace("LYRICS RESTORED", { command: "restore Lyrics.json", function: "restoreProjectLyricsJson", parameters: { lines: Array.isArray(lyrics?.lines) ? lyrics.lines.length : 0, structure: Array.isArray(lyrics?.structure) ? lyrics.structure.length : 0 }, result: "done" });
+    await reportProjectLoadTrace("LYRICS RENDER", { command: "render Lyrics and editor", function: "renderLyrics + renderLyricsEditor", parameters: {}, result: "calling" });
+    renderLyrics();
+    renderLyricsEditor();
+
+    await advanceProjectLoad(7);
+
+    // Восстанавливаем Structure и её временную шкалу как единый визуальный блок.
+    await reportProjectLoadTrace("STRUCTURE RENDER START", { command: "restore Structure timeline", function: "renderLyricsStructure", parameters: { segments: Array.isArray(lyricsStructureDraft) ? lyricsStructureDraft.length : 0 }, result: "calling" });
+    renderLyricsStructure();
+    await reportProjectLoadTrace("STRUCTURE RENDERED", { command: "restore Structure timeline", function: "renderLyricsStructure", parameters: { segments: Array.isArray(lyricsStructureDraft) ? lyricsStructureDraft.length : 0 }, result: "done" });
+
+    updateCropButtons();
+    updateMixButtons();
+    studio.style.display = "block";
+    updateProjectTrimDisplay();
+
+    await advanceProjectLoad(8);
+
+    await reportProjectLoadTrace("FX RESTORE START", { command: "apply track FX", function: "applyFxSettings", parameters: { stemIds: [...stemIds] }, result: "calling" });
+    stemIds.forEach(stemId => applyFxSettings(stemId));
+    await reportProjectLoadTrace("MIX RESTORE", { command: "apply mix", function: "applyMix", parameters: {}, result: "calling" });
+    applyMix();
+
+    await advanceProjectLoad(9);
+
+    await reportProjectLoadTrace("PROJECT ACTIVATE", { command: "set active Project", function: "setProjectActive", parameters: { id: data.id || id }, result: "calling" });
+    setProjectActive(data.id || id);
+
+await reportProjectLoadTrace("PROJECT UI STATE", {
+  command: "check Karaoke/Lyrics buttons",
+  function: "setProjectActive",
+  parameters: {
+    activeProjectId,
+    editLyricsBtn_disabled: editLyricsBtn?.disabled,
+    openLyricsFullScreenBtn_disabled: openLyricsFullScreenBtn?.disabled
+  },
+  result: "state captured"
+});
+
+    status.textContent = "Project loaded: " + (data.name || id);
+    status.className = "progress-status success";
+    await reportProjectLoadTrace("PROJECT ACTIVE", { command: "set active Project", function: "setProjectActive", parameters: { active_id: data.id || id, name: data.name || id }, result: "done" });
+
+    await reportProjectLoadTrace("COMMAND", { command: "finish Project loader", function: "finishProjectLoader", parameters: {}, result: "calling" });
+    await finishProjectLoader();
+    await reportProjectLoadTrace("LOAD FUNCTION SUCCESS", { command: "LOAD Project complete", function: "loadProjectById", parameters: { id, ui_mode_after_load: uiMode }, result: "success" });
+
+    // uiMode остаётся точно таким, каким был до LOAD.
+    // Учёт PlayList намеренно находится вне Project LOAD.
+    return true;
+  } catch (error) {
+    await reportProjectLoadTrace("LOAD EXCEPTION", { command: "LOAD Project", function: "loadProjectById", parameters: { id }, result: "error", error: String(error?.stack || error?.message || error) });
+    await failProjectLoader(error);
+    throw error;
+  }
+}
+
+// Сохранение текущего Project и связанных данных.
+async function openLoadProjectDialog() {
+  await reportProjectLoadTrace("LOAD DIALOG OPEN REQUEST");
+  const projects = await fetchSavedProjects();
+  await reportProjectLoadTrace("LOAD DIALOG PROJECT LIST READY", { count: projects.length });
+  loadProjectList.replaceChildren();
+
+  if (!projects.length) {
+    const empty = document.createElement("div");
+    empty.className = "popup-state";
+    empty.textContent = "Projects is empty";
+    loadProjectList.appendChild(empty);
+  } else {
+    projects.forEach(project => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = project.name;
+      button.style.textAlign = "left";
+      button.title = "Load project";
+      button.addEventListener("click", async () => {
+        try {
+          // =====================================================================
+          // [5.4.13][СЦЕНАРИЙ 1 — OPEN PROJECT]
+          // Пользователь выбрал Project в обычном окне Open Project.
+          // Этот сценарий выполняет только выбор Project и получает его ID.
+          // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
+          // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
+          // =====================================================================
+          beginProjectLoadTrace("[5.4.13][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
+          await reportProjectLoadTrace("[5.4.13][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
+            command: "await loadProjectById(project.id)",
+            function: "loadProjectById",
+            parameters: { id: project.id, name: project.name },
+            result: "переход в единую LOAD-функцию"
+          });
+          const postPlayNumbering = postPlayLoadAnotherPending;
+          if (postPlayNumbering) setPlaylistTransitionLocked(true);
+          await loadProjectById(project.id);
+
+          // После успешного LOAD меняется только состояние PlayList; сам LOAD остаётся без изменений.
+          if (postPlayNumbering) {
+            try {
+              await markProjectInUse(project.id, Infinity);
+              await refreshFullScreenPlaylist();
+            } finally {
+              postPlayLoadAnotherPending = false;
+              setPlaylistTransitionLocked(false);
+            }
+          } else {
+            await reportProjectLoadTrace("PLAYLIST CURRENT UPDATE START", { mode: "open" });
+            await markProjectInUse(project.id, null, "open");
+            await reportProjectLoadTrace("PLAYLIST CURRENT UPDATE DONE", { mode: "open" });
+          }
+          loadProjectDialog.classList.remove("open");
+        } catch (error) {
+          if (postPlayLoadAnotherPending) {
+            postPlayLoadAnotherPending = false;
+            setPlaylistTransitionLocked(false);
+          }
+          console.error(error);
+          status.textContent = error.message;
+          status.className = "progress-status error";
+        }
+      });
+      loadProjectList.appendChild(button);
+    });
+  }
+
+  loadProjectDialog.classList.add("open");
+}
+
+// ============================================================================
+// 5.5.3 | SAVE PROJECT
+// ============================================================================
+
+// Если SAVE был вызван из NEW PROJECT,
+// здесь хранится функция завершения ожидания SAVE.
+// null = обычный SAVE, который никто не ожидает.
+let saveProjectResolve = null;
+
+
+// ============================================================================
+// SAVE PROJECT — ОТКРЫТИЕ ДИАЛОГА
+// ============================================================================
+
+saveProjectBtn?.addEventListener("click", () => {
+
+  // Подставляем имя текущего проекта.
+  saveProjectNameInput.value = projectSafeName();
+
+  // Если путь ещё не задан — используем стандартную папку Projects.
+  if (saveProjectPathInput && !saveProjectPathInput.value.trim()) {
+    saveProjectPathInput.value = "C:\\MyNus\\Projects";
+  }
+
+  // Очищаем сообщение предыдущего SAVE.
+  if (saveProjectMessage) {
+    saveProjectMessage.textContent = "";
+  }
+
+  // Открываем штатный диалог Save Project.
+  saveProjectDialog.classList.add("open");
+
+  // После открытия ставим курсор в поле имени проекта.
+  requestAnimationFrame(() => {
+    saveProjectNameInput.focus();
+    saveProjectNameInput.select();
+  });
+});
+
+
+// ============================================================================
+// SAVE PROJECT — ВЫБОР ПАПКИ
+// ============================================================================
+
+browseSaveProjectPathBtn?.addEventListener("click", async () => {
+
+  browseSaveProjectPathBtn.disabled = true;
+
+  try {
+
+    const response = await fetch("/projects/select-folder", {
+      method: "POST"
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data.error || "Folder selection failed");
+    }
+
+    // Сервер вернул выбранную папку — записываем её в поле.
+    if (data.path) {
+      saveProjectPathInput.value = data.path;
+    }
+
+  } catch (error) {
+
+    console.error(error);
+
+    if (saveProjectMessage) {
+      saveProjectMessage.textContent = error.message;
+    }
+
+  } finally {
+
+    browseSaveProjectPathBtn.disabled = false;
+  }
+});
+
+
+// ============================================================================
+// SAVE PROJECT — ОЖИДАНИЕ РЕЗУЛЬТАТА
+// ============================================================================
+
+// Используется NEW PROJECT.
+//
+// Функция открывает ОБЫЧНЫЙ штатный Save Project,
+// но возвращается из await только тогда, когда:
+//
+// true  = SAVE действительно успешно завершён;
+// false = пользователь отменил SAVE.
+//
+// Обычная кнопка Save Project этой функцией пользоваться не обязана.
+function waitForSaveProject() {
+
+  return new Promise(resolve => {
+
+    // Запоминаем, кому сообщить результат SAVE.
+    saveProjectResolve = resolve;
+
+    // Открываем тот же самый штатный Save Project.
+    saveProjectBtn.click();
+  });
+}
+
+
+// ============================================================================
+// SAVE PROJECT — CANCEL
+// ============================================================================
+
+cancelSaveProjectBtn?.addEventListener("click", () => {
+
+  // Закрываем диалог.
+  saveProjectDialog.classList.remove("open");
+
+  // Если SAVE ожидался функцией NEW PROJECT —
+  // сообщаем ей, что сохранение отменено.
+  if (saveProjectResolve) {
+    saveProjectResolve(false);
+    saveProjectResolve = null;
+  }
+});
+
+
+// ============================================================================
+// SAVE PROJECT — ЗАКРЫТИЕ КЛИКОМ ВНЕ ДИАЛОГА
+// ============================================================================
+
+saveProjectDialog?.addEventListener("click", event => {
+
+  if (event.target === saveProjectDialog) {
+
+    saveProjectDialog.classList.remove("open");
+
+    // Для NEW PROJECT это считается отменой SAVE.
+    if (saveProjectResolve) {
+      saveProjectResolve(false);
+      saveProjectResolve = null;
+    }
+  }
+});
+
+
+// ============================================================================
+// SAVE PROJECT — КНОПКА SAVE В ДИАЛОГЕ
+// ============================================================================
+
+confirmSaveProjectBtn?.addEventListener("click", async () => {
+
+  // Получаем имя проекта и путь сохранения.
+  const name = String(saveProjectNameInput.value || "").trim();
+  const savePath = String(saveProjectPathInput?.value || "").trim();
+
+
+  // Без имени не сохраняем.
+  if (!name) {
+    saveProjectNameInput.focus();
+    return;
+  }
+
+
+  // Без пути не сохраняем.
+  if (!savePath) {
+    saveProjectPathInput?.focus();
+    return;
+  }
+
+
+  // Защита от повторного нажатия SAVE во время сохранения.
+  confirmSaveProjectBtn.disabled = true;
+
+  if (saveProjectMessage) {
+    saveProjectMessage.textContent = "Saving…";
+  }
+
+
+  try {
+
+    // ------------------------------------------------------------------------
+    // РЕАЛЬНОЕ СОХРАНЕНИЕ PROJECT
+    // ------------------------------------------------------------------------
+
+    await saveCurrentProject(name, savePath, "");
+
+
+    // SAVE успешно завершён.
+    // Закрываем Save Project.
+    saveProjectDialog.classList.remove("open");
+
+
+    // Если этот SAVE был запущен через NEW PROJECT,
+    // разрешаем newProject() продолжить выполнение.
+    if (saveProjectResolve) {
+      saveProjectResolve(true);
+      saveProjectResolve = null;
+    }
+
+
+  } catch (error) {
+
+    console.error(error);
+
+
+    // ------------------------------------------------------------------------
+    // PROJECT С ТАКИМ ИМЕНЕМ УЖЕ СУЩЕСТВУЕТ
+    // ------------------------------------------------------------------------
+
+    if (error.projectConflict) {
+
+      // Сохраняем имя и путь для дальнейшего
+      // Overwrite / Save Copy / Rename.
+      pendingProjectConflict = {
+        name,
+        savePath
+      };
+
+      if (projectConflictMessage) {
+        projectConflictMessage.textContent =
+          "Project “" + name + "” already exists.";
+      }
+
+      // Открываем штатный диалог конфликта.
+      projectConflictDialog?.classList.add("open");
+
+
+    } else {
+
+      // ----------------------------------------------------------------------
+      // ОБЫЧНАЯ ОШИБКА SAVE
+      // ----------------------------------------------------------------------
+
+      status.textContent = error.message;
+      status.className = "progress-status error";
+
+      if (saveProjectMessage) {
+        saveProjectMessage.textContent = error.message;
+      }
+    }
+
+
+  } finally {
+
+    // Снова разрешаем кнопку SAVE.
+    confirmSaveProjectBtn.disabled = false;
+  }
+});
+
+
+// ============================================================================
+// SAVE PROJECT — ENTER / ESCAPE
+// ============================================================================
+
+saveProjectNameInput?.addEventListener("keydown", event => {
+
+  // ENTER = нажать SAVE.
+  if (event.key === "Enter") {
+
+    event.preventDefault();
+    confirmSaveProjectBtn.click();
+
+
+  // ESCAPE = отменить SAVE.
+  } else if (event.key === "Escape") {
+
+    saveProjectDialog.classList.remove("open");
+
+    // Если SAVE ожидался NEW PROJECT —
+    // возвращаем ему отмену.
+    if (saveProjectResolve) {
+      saveProjectResolve(false);
+      saveProjectResolve = null;
+    }
+  }
+});
+
+
+// ============================================================================
+// 5.5.3 | NEW PROJECT
+// ============================================================================
+
+// Кнопка New Project запускает ТОЛЬКО функцию newProject().
+loadProjectBtn?.addEventListener("click", newProject);
+
+
+async function newProject() {
+
+  // --------------------------------------------------------------------------
+  // 1. ОТКРЫВАЕМ ШТАТНЫЙ SAVE PROJECT
+  // --------------------------------------------------------------------------
+  //
+  // Здесь открывается обычный Save Project.
+  // newProject() останавливается на await и ждёт результата.
+
+  const saved = await waitForSaveProject();
+
+
+  // --------------------------------------------------------------------------
+  // 2. SAVE НЕ СОСТОЯЛСЯ
+  // --------------------------------------------------------------------------
+  //
+  // Пользователь нажал Cancel / Escape / закрыл диалог.
+  // НИЧЕГО не очищаем.
+
+  if (!saved) {
+    return;
+  }
+
+
+  // --------------------------------------------------------------------------
+  // 3. SAVE УСПЕШНО ЗАВЕРШЁН
+  // --------------------------------------------------------------------------
+  //
+  // Только теперь очищаем текущий проект.
+
+  clearProjectState();
+  clearProjectImage();
+
+
+  // Очищаем выбранный исходный аудиофайл.
+  if (audioFile) {
+    audioFile.value = "";
+  }
+
+  recentSelectedAudioFile = null;
+
+
+  // Возвращаем исходную надпись выбора файла.
+  if (fileName) {
+    fileName.textContent = "No file selected";
+  }
+
+
+  // Возвращаем интерфейс в Sequencer.
+  setUiMode(UI_MODE.SEQUENCER);
+
+  if (studio) {
+    studio.style.display = "block";
+  }
+
+
+  // NEW PROJECT полностью готов.
+  status.textContent = "New Project — select any audio file";
+  status.className = "progress-status info";
+}
+
+
+// ============================================================================
+// CREATE PROJECT ПОСЛЕ SPLIT
+// ============================================================================
+//
+// ВАЖНО:
+// Create Project — это НЕ New Project.
+//
+// После Split материал уже загружен:
+// audio / stems / lyrics / structure / waveforms.
+//
+// Поэтому Create Project только открывает сохранение проекта.
+// Никакой очистки после SAVE здесь нет.
+
+createNewProjectBtn?.addEventListener("click", () => {
+
+  newProjectPromptDialog?.classList.remove("open");
+
+  projectCreationPending = true;
+  saveProjectBtn.click();
+});
+
+
+// ============================================================================
+// CONTINUE WITHOUT PROJECT
+// ============================================================================
+
+continueWithoutProjectBtn?.addEventListener("click", () => {
+
+  // Закрываем диалог после Split.
+  newProjectPromptDialog?.classList.remove("open");
+
+  // Работа продолжается без активного Project.
+  projectCreationPending = false;
+  setProjectActive(null);
+
+  status.textContent = "Ready — audio tracks only";
+  status.className = "progress-status success";
+});
+
+
+// ============================================================================
+// OPEN PROJECT
+// ============================================================================
+
+openProjectStartBtn?.addEventListener("click", () => {
+
+  // Запускаем диагностический trace загрузки Project.
+  beginProjectLoadTrace(
+    "Open Project button",
+    null,
+    "projects"
+  );
+
+  void reportProjectLoadTrace(
+    "OPEN PROJECT BUTTON CLICK"
+  );
+
+
+  // Открываем штатный Load Project.
+  openLoadProjectDialog().catch(error => {
+
+    console.error(error);
+    status.textContent = error.message;
+    status.className = "progress-status error";
+  });
+});
+
+
+// ============================================================================
+// PROJECT CONFLICT — OVERWRITE
+// ============================================================================
+
+overwriteProjectBtn?.addEventListener("click", async () => {
+
+  // Без сохранённого конфликта делать нечего.
+  if (!pendingProjectConflict) {
+    return;
+  }
+
+
+  const pending = pendingProjectConflict;
+
+  overwriteProjectBtn.disabled = true;
+
+
+  try {
+
+    // Перезаписываем существующий Project.
+    await saveCurrentProject(
+      pending.name,
+      pending.savePath,
+      "overwrite"
+    );
+
+
+    // SAVE успешно завершён.
+    projectConflictDialog.classList.remove("open");
+    saveProjectDialog.classList.remove("open");
+
+    pendingProjectConflict = null;
+
+
+    // Если исходный SAVE был вызван NEW PROJECT,
+    // сообщаем newProject(), что SAVE завершился успешно.
+    //
+    // После этого newProject() продолжит работу
+    // и очистит текущий проект.
+    if (saveProjectResolve) {
+      saveProjectResolve(true);
+      saveProjectResolve = null;
+    }
+
+
+  } catch (error) {
+
+    status.textContent = error.message;
+    status.className = "progress-status error";
+
+
+  } finally {
+
+    overwriteProjectBtn.disabled = false;
+  }
+});
+
+
+// ============================================================================
+// PROJECT CONFLICT — SAVE COPY
+// ============================================================================
+
+saveProjectCopyBtn?.addEventListener("click", async () => {
+
+  if (!pendingProjectConflict) {
+    return;
+  }
+
+
+  const pending = pendingProjectConflict;
+
+  saveProjectCopyBtn.disabled = true;
+
+
+  try {
+
+    // Сохраняем Project как копию.
+    await saveCurrentProject(
+      pending.name,
+      pending.savePath,
+      "copy"
+    );
+
+
+    // SAVE успешно завершён.
+    projectConflictDialog.classList.remove("open");
+    saveProjectDialog.classList.remove("open");
+
+    pendingProjectConflict = null;
+
+
+    // Если SAVE ожидался NEW PROJECT —
+    // разрешаем newProject() продолжить.
+    if (saveProjectResolve) {
+      saveProjectResolve(true);
+      saveProjectResolve = null;
+    }
+
+
+  } catch (error) {
+
+    status.textContent = error.message;
+    status.className = "progress-status error";
+
+
+  } finally {
+
+    saveProjectCopyBtn.disabled = false;
+  }
+});
+
+
+// ============================================================================
+// PROJECT CONFLICT — RENAME
+// ============================================================================
+
+renameProjectBtn?.addEventListener("click", () => {
+
+  // Закрываем Conflict.
+  projectConflictDialog.classList.remove("open");
+
+  pendingProjectConflict = null;
+
+
+  // Возвращаем пользователя в Save Project.
+  saveProjectDialog.classList.add("open");
+
+
+  if (saveProjectMessage) {
+    saveProjectMessage.textContent =
+      "Enter a new project name.";
+  }
+
+
+  // Выделяем текущее имя для замены.
+  saveProjectNameInput.focus();
+  saveProjectNameInput.select();
+});
+
+
+// ============================================================================
+// PROJECT CONFLICT — CANCEL
+// ============================================================================
+
+cancelProjectConflictBtn?.addEventListener("click", () => {
+
+  // Закрываем Conflict.
+  projectConflictDialog.classList.remove("open");
+
+  pendingProjectConflict = null;
+
+
+  // Если конфликт возник во время NEW PROJECT,
+  // отменяем весь сценарий New Project.
+  if (saveProjectResolve) {
+    saveProjectResolve(false);
+    saveProjectResolve = null;
+  }
+});
+
+
+// ============================================================================
+// PROJECT CONFLICT — КЛИК ВНЕ ДИАЛОГА
+// ============================================================================
+
+projectConflictDialog?.addEventListener("click", event => {
+
+  if (event.target === projectConflictDialog) {
+
+    projectConflictDialog.classList.remove("open");
+
+    pendingProjectConflict = null;
+
+
+    // Для NEW PROJECT закрытие Conflict
+    // считается отменой SAVE.
+    if (saveProjectResolve) {
+      saveProjectResolve(false);
+      saveProjectResolve = null;
+    }
+  }
+});
+
+
+// ============================================================================
+// LOAD PROJECT — CANCEL
+// ============================================================================
+
+cancelLoadProjectBtn?.addEventListener("click", () => {
+
+  loadProjectDialog.classList.remove("open");
+
+  // Сбрасываем ожидание Load Another из POSTPLAY.
+  postPlayLoadAnotherPending = false;
+});
+
+
+// ============================================================================
+// LOAD PROJECT — КЛИК ВНЕ ДИАЛОГА
+// ============================================================================
+
+loadProjectDialog?.addEventListener("click", event => {
+
+  if (event.target === loadProjectDialog) {
+
+    loadProjectDialog.classList.remove("open");
+
+    // Сбрасываем ожидание Load Another из POSTPLAY.
+    postPlayLoadAnotherPending = false;
+  }
+});
+
+
+
+
+lyricsFullScreenPlaylistBtn?.addEventListener("click", event => {
+  event.stopPropagation();
+  if (playlistTransitionLocked) return;
+  const opening = lyricsFullScreenPlaylistMenu.hidden;
+  lyricsFullScreenPlaylistMenu.hidden = !opening;
+  if (!opening) return;
+
+  // Сразу открываем последнее известное состояние; обновление с сервера выполняем отдельно.
+  renderFullScreenPlaylist(karaokePlaylistSnapshot);
+  refreshFullScreenPlaylist().catch(error => {
+    console.error(error);
+    status.textContent = error.message;
+    status.className = "progress-status error";
+  });
+});
+
+document.addEventListener("click", event => {
+  if (
+    lyricsFullScreenPlaylistMenu &&
+    !event.target.closest(".lyrics-fullscreen-playlist-wrap")
+  ) {
+    lyricsFullScreenPlaylistMenu.hidden = true;
+  }
+});
+
+
+</script>
+
+
+
+
+
+<!-- ========================================
+     SERVICE CONSOLE
+======================================== -->
+
+<div id="service-console"></div>
+<script>
+// Служебная консоль MyNus: показывает только сообщения текущего запуска.
+// Статический changelog и заранее записанный отладочный мусор сюда не выводятся.
+(function initServiceConsole() {
+  const serviceConsole = document.getElementById("service-console");
+  if (!serviceConsole) return;
+
+  const nativeLog = console.log.bind(console);
+  const nativeWarn = console.warn.bind(console);
+  const nativeError = console.error.bind(console);
+
+  function appendServiceConsole(level, args) {
+    const row = document.createElement("div");
+    const time = new Date().toLocaleTimeString();
+    row.textContent = "[" + time + "] " + level + ": " + args.map(value => {
+      if (typeof value === "string") return value;
+      try { return JSON.stringify(value); } catch (_) { return String(value); }
+    }).join(" ");
+    serviceConsole.appendChild(row);
+    serviceConsole.scrollTop = serviceConsole.scrollHeight;
+  }
+
+  console.log = (...args) => {
+    nativeLog(...args);
+    appendServiceConsole("LOG", args);
+  };
+
+  console.warn = (...args) => {
+    nativeWarn(...args);
+    appendServiceConsole("WARN", args);
+  };
+
+  console.error = (...args) => {
+    nativeError(...args);
+    appendServiceConsole("ERROR", args);
+  };
+})();
+console.log("MyNus 5.6.2 | Ipad & Bad Block STRUCTURE | ПОСЛЕДОВАТЕЛЬНЫЙ ЛОГ| fix Save | Trim fix");
+console.log("[SERVICE CONSOLE] MyNus 5.6.2 | Ipad & Bad Block STRUCTURE | ПОСЛЕДОВАТЕЛЬНЫЙ ЛОГ| fix Save | Trim fix");
+</script>
+
+<div class="row" id="build-down">
+deploy: --
+</div>
+
+<script>
+(function () {
+  const now = new Date();
+
+  const pad = n =>
+    String(n).padStart(2, "0");
+
+  const date =
+      pad(now.getDate())
+    + "."
+    + pad(now.getMonth() + 1)
+    + "."
+    + now.getFullYear();
+
+  const time =
+      pad(now.getHours())
+    + ":"
+    + pad(now.getMinutes());
+
+  document
+    .getElementById("build-down")
+    .textContent =
+      "deploy: "
+      + date
+      + " "
+      + time;
+})();
+</script>
+
+
+</body>
+</html>
+  
