@@ -744,8 +744,6 @@ def run_demucs(
             bufsize=1
         )
 
-      
-
 
         # ========================================
         # READ DEMUCS OUTPUT
@@ -779,7 +777,7 @@ def run_demucs(
                 )
 
 
-                process.wait()
+        process.wait()
 
 
         if process.returncode != 0:
@@ -793,6 +791,7 @@ def run_demucs(
             )
 
             return
+
 
         # ========================================
         # FIND DEMUCS OUTPUT
@@ -960,8 +959,6 @@ def run_demucs(
 # ========================================
 # PROCESS PROGRESS
 # ========================================
-
-
 
 @app.route("/progress/<job_id>")
 # Локальная серверная операция этого блока.
