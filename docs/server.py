@@ -1,5 +1,5 @@
 # ========================================
-#  ПОДКЛЮЧЕНИЕ БАЗЫ ДАННЫХ mynus.db | 6.0.0 
+#  НОРМАЛИЗАЦИЯ АРХИТЕКТУРЫ без Оберток + язык при распаковке | 6.1.0 
 # ========================================
 
 # ========================================
@@ -66,7 +66,7 @@ opened_project_folders = {}
 
 
 # ========================================
-# PROJECT LOAD TRACE (6.0.0)
+# PROJECT LOAD TRACE (6.1.1)
 # Diagnostic-only endpoint. It does not write, delete, move or replace files.
 # ========================================
 
@@ -106,7 +106,7 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "6.0.0", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "6.1.1", "trace_id": trace_id})
 
 
 # ========================================
@@ -148,6 +148,11 @@ def debug_client_console():
 
 @app.route("/")
 def index():
+    if session.get("user_id") is None:
+        return redirect("/test-users")
+
+    current_user_id()
+
     # Play List history belongs to the current index session only.
     # Reloading index clears -N history but preserves current and queue.
     state = _read_playlist_state()
@@ -333,6 +338,26 @@ def index():
     else:
         index_html = client_console_bridge + "\n" + index_html
 
+    # Передаём фактические источники дорожек при сохранении проекта.
+    source_script = r'''<script>
+    if (typeof projectStateJson === "function") {
+      const originalProjectStateJson = projectStateJson;
+      projectStateJson = function() {
+        const state = originalProjectStateJson();
+        state._sources =
+          typeof currentStemURLs === "undefined" ? [] :
+          Object.values(currentStemURLs).filter(v => typeof v === "string");
+        return state;
+      };
+    }
+    </script>'''
+
+    if "</body>" in index_html:
+        head, sep, tail = index_html.rpartition("</body>")
+        index_html = head + source_script + "\n" + sep + tail
+    else:
+        index_html += "\n" + source_script
+
     return index_html
 
 
@@ -343,6 +368,8 @@ def index():
 @app.route("/separate", methods=["POST"])
 # Локальная серверная операция этого блока.
 def separate():
+
+    uid = current_user_id()
 
     if "audio" not in request.files:
 
@@ -362,6 +389,14 @@ def separate():
 
     job_id = str(uuid.uuid4())
 
+    with db_connection() as db:
+        separation_id = db.execute(
+            """INSERT INTO separations
+               (user_id,client_request_id,source_kind,source_name,status,started_at)
+               VALUES (?,?,'local',?,'running',?)""",
+            (uid, "job:" + job_id, audio.filename, utc_now()),
+        ).lastrowid
+        write_log(db, uid, "separation.started", audio.filename, sid=separation_id)
 
     job_upload_dir = os.path.join(
         UPLOAD_DIR,
@@ -416,22 +451,30 @@ def separate():
         "error": None
     }
 
+    lyrics_language = request.form.get("lyrics_language", "auto")
 
     thread = threading.Thread(
         target=run_demucs,
         args=(
             job_id,
             input_path,
-            job_result_dir
+            job_result_dir,
+            lyrics_language
         ),
         daemon=True
     )
-
     thread.start()
 
+    threading.Thread(
+        target=watch_separation,
+        args=(job_id, uid, separation_id),
+        daemon=True,
+    ).start()
 
     return jsonify({
-        "job_id": job_id
+        "job_id": job_id,
+        "separation_id": separation_id,
+        "user_id": uid
     })
 
 
@@ -518,7 +561,7 @@ def detect_vocal_range(
 # ========================================
 
 # Локальная серверная операция этого блока.
-def detect_lyrics(vocal_path):
+def detect_lyrics(vocal_path, lyrics_language="auto"):
 
     import whisperx
     import torch
@@ -544,10 +587,21 @@ def detect_lyrics(vocal_path):
         vocal_path
     )
 
+    requested_language = str(
+        lyrics_language or "auto"
+    ).strip().lower()
+
+    language = (
+        None
+        if requested_language == "auto"
+        else requested_language
+    )
+
     model = whisperx.load_model(
         "small",
         device,
-        compute_type=compute_type
+        compute_type=compute_type,
+        language=language
     )
 
     result = model.transcribe(
@@ -555,10 +609,11 @@ def detect_lyrics(vocal_path):
         batch_size=4
     )
 
-    language = result.get(
-        "language"
+    language = (
+        result.get("language")
+        if requested_language == "auto"
+        else requested_language
     ) or "ru"
-
 
     if language not in {
         "ru",
@@ -653,7 +708,8 @@ def detect_lyrics(vocal_path):
 def run_demucs(
     job_id,
     input_path,
-    job_result_dir
+    job_result_dir,
+    lyrics_language="auto"
 ):
 
     command = [
@@ -687,6 +743,8 @@ def run_demucs(
 
             bufsize=1
         )
+
+        jobs[job_id]["process"] = process
 
 
         # ========================================
@@ -723,6 +781,10 @@ def run_demucs(
 
         process.wait()
 
+        jobs[job_id]["process"] = None
+
+        if jobs[job_id].get("status") == "aborted":
+            return
 
         if process.returncode != 0:
 
@@ -735,7 +797,6 @@ def run_demucs(
             )
 
             return
-
 
         # ========================================
         # FIND DEMUCS OUTPUT
@@ -836,9 +897,9 @@ def run_demucs(
         # ========================================
 
         lyrics = detect_lyrics(
-            stem_targets["vocals"]
+            stem_targets["vocals"],
+            lyrics_language
         )
-
 
         # ========================================
         # JOB COMPLETE
@@ -903,6 +964,27 @@ def run_demucs(
 # ========================================
 # PROCESS PROGRESS
 # ========================================
+
+@app.route("/abort/<job_id>", methods=["POST"])
+def abort_separation(job_id):
+
+    job = jobs.get(job_id)
+
+    if not job:
+        return jsonify({
+            "error": "Job not found"
+        }), 404
+
+    job["status"] = "aborted"
+
+    process = job.get("process")
+
+    if process and process.poll() is None:
+        process.terminate()
+
+    return jsonify({
+        "status": "aborted"
+    })
 
 @app.route("/progress/<job_id>")
 # Локальная серверная операция этого блока.
@@ -1591,7 +1673,7 @@ def transcribe_to_ru():
 
 
 # ========================================
-# MYNUS PlayList JSON state + standalone Projects | 6.0.0
+# MYNUS PlayList JSON state + standalone Projects | 6.1.1
 # ========================================
 def _project_id(value):
     value = secure_filename(str(value or "Project")) or "Project"
@@ -1954,6 +2036,7 @@ def select_project_folder():
 @app.route("/projects/save", methods=["POST"])
 # Работа с сохранённым Project.
 def save_project():
+    uid = current_user_id()
     project_name = str(request.form.get("name") or "Project").strip() or "Project"
     requested_project_id = str(request.form.get("project_id") or "").strip()
     project_id = _project_id(requested_project_id) if requested_project_id else _project_id(project_name)
@@ -1961,6 +2044,19 @@ def save_project():
     save_root = os.path.abspath(os.path.expanduser(save_root_raw))
     conflict_action = str(request.form.get("conflict_action") or "").strip().lower()
     folder = os.path.join(save_root, project_id)
+
+    with db_connection() as db:
+        if conflict_action != "copy":
+            other_owner = db.execute(
+                """SELECT 1 FROM projects
+                   WHERE client_request_id=? AND user_id<>?""",
+                (project_path_key(folder), uid),
+            ).fetchone()
+            if other_owner:
+                return jsonify(error=(
+                    "Эта папка принадлежит другому тестовому пользователю. "
+                    "Сохраните под другим именем."
+                )), 409
 
     if os.path.isdir(folder):
         if conflict_action == "copy":
@@ -2031,7 +2127,7 @@ def save_project():
         if not track_files.get("original"):
             raise ValueError("Original track not received")
 
-        project_json["version"] = "6.0.0"
+        project_json["version"] = "6.1.1"
         project_json["id"] = project_id
         project_json["name"] = project_name
         project_json["tracks"] = track_files
@@ -2051,11 +2147,39 @@ def save_project():
 
         print(f"[PROJECT SAVE] SUCCESS | tracks={saved_count} | {folder}", flush=True)
         print("=" * 72 + "\n", flush=True)
+
+        key = project_path_key(folder)
+        with db_connection() as db:
+            separation_id = source_separation(db, uid)
+            db.execute(
+                """INSERT INTO projects
+                   (user_id,client_request_id,separation_id,name)
+                   VALUES (?,?,?,?)
+                   ON CONFLICT(user_id,client_request_id)
+                   DO UPDATE SET
+                     name=excluded.name,
+                     separation_id=COALESCE(excluded.separation_id,projects.separation_id),
+                     updated_at=?,deleted_at=NULL""",
+                (uid, key, separation_id, project_name, utc_now()),
+            )
+            row = db.execute(
+                """SELECT project_id,separation_id FROM projects
+                   WHERE user_id=? AND client_request_id=?""",
+                (uid, key),
+            ).fetchone()
+            write_log(
+                db, uid, "project.saved", project_name,
+                sid=row["separation_id"], pid=row["project_id"],
+            )
+
         return jsonify({
             "ok": True,
             "id": project_id,
             "name": project_name,
-            "path": folder
+            "path": folder,
+            "project_id": row["project_id"],
+            "separation_id": row["separation_id"],
+            "user_id": uid
         })
 
     except Exception as exc:
@@ -2068,6 +2192,7 @@ def save_project():
 @app.route("/lyrics/save-current", methods=["POST"])
 # Локальная серверная операция этого блока.
 def save_current_lyrics():
+    uid = current_user_id()
     data = request.get_json(silent=True) or {}
     lyrics = data.get("lyrics")
     if not isinstance(lyrics, dict) or not isinstance(lyrics.get("lines"), list):
@@ -2078,6 +2203,16 @@ def save_current_lyrics():
         return jsonify({"error": "No current project"}), 400
 
     folder = _saved_project_folder(current_id)
+    key = project_path_key(folder)
+    with db_connection() as db:
+        other_owner = db.execute(
+            """SELECT 1 FROM projects
+               WHERE client_request_id=? AND user_id<>?""",
+            (key, uid),
+        ).fetchone()
+        if other_owner:
+            return jsonify(error="Проект другого пользователя"), 403
+
     if not os.path.isdir(folder) or not os.path.isfile(os.path.join(folder, "Project.json")):
         return jsonify({"error": "Current project folder not found in Projects"}), 404
 
@@ -2087,6 +2222,24 @@ def save_current_lyrics():
         with open(temp_path, "w", encoding="utf-8") as fh:
             json.dump(lyrics, fh, ensure_ascii=False, indent=2)
         os.replace(temp_path, lyrics_path)
+
+        with db_connection() as db:
+            db.execute(
+                """UPDATE projects SET updated_at=?
+                   WHERE user_id=? AND client_request_id=?""",
+                (utc_now(), uid, key),
+            )
+            row = db.execute(
+                """SELECT project_id,separation_id FROM projects
+                   WHERE user_id=? AND client_request_id=?""",
+                (uid, key),
+            ).fetchone()
+            if row:
+                write_log(
+                    db, uid, "project.lyrics_saved", "Текст обновлён",
+                    sid=row["separation_id"], pid=row["project_id"],
+                )
+
         print(f"[LYRICS SAVE] SUCCESS | {lyrics_path}", flush=True)
         return jsonify({"ok": True, "id": current_id, "path": lyrics_path})
     except Exception as exc:
@@ -2172,7 +2325,7 @@ def print_restart_command():
 
 
 
-# ===== ПОДКЛЮЧЕНИЕ БАЗЫ ДАННЫХ mynus.db: SQLite, тестовые пользователи, сепарации и проекты =====
+# ===== SQLite: пользователи, сепарации и проекты =====
 import sqlite3
 import secrets
 import time
@@ -2181,19 +2334,18 @@ from pathlib import Path
 from urllib.parse import urlsplit, unquote
 from flask import session, redirect, render_template_string, abort
 
-MN_DB = Path(BASE_DIR) / "mynus.db"
+DB_PATH = Path(BASE_DIR) / "mynus.db"
 app.secret_key = app.secret_key or secrets.token_hex(32)
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
 )
-MN_SAVE_LOCK = threading.RLock()
 
 
 @contextmanager
-def mn_db():
+def db_connection():
     db = sqlite3.connect(
-        MN_DB.resolve().as_uri() + "?mode=rw",
+        DB_PATH.resolve().as_uri() + "?mode=rw",
         uri=True,
         timeout=30,
     )
@@ -2206,7 +2358,7 @@ def mn_db():
         db.close()
 
 
-def mn_now():
+def utc_now():
     from datetime import datetime, timezone
     return (
         datetime.now(timezone.utc)
@@ -2215,9 +2367,9 @@ def mn_now():
     )
 
 
-def mn_user():
-    uid = session.get("mn_user_id")
-    with mn_db() as db:
+def current_user_id():
+    uid = session.get("user_id")
+    with db_connection() as db:
         row = db.execute(
             "SELECT user_id FROM users WHERE user_id=?",
             (uid,),
@@ -2227,11 +2379,11 @@ def mn_user():
     return row["user_id"]
 
 
-def mn_key(folder):
+def project_path_key(folder):
     return os.path.normcase(os.path.realpath(folder))
 
 
-def mn_log(db, uid, event, message, sid=None, pid=None, level="info"):
+def write_log(db, uid, event, message, sid=None, pid=None, level="info"):
     db.execute(
         """INSERT INTO diagnostic_logs
            (user_id,separation_id,project_id,app_version,level,event,message)
@@ -2241,13 +2393,13 @@ def mn_log(db, uid, event, message, sid=None, pid=None, level="info"):
 
 
 @app.route("/test-users", methods=["GET", "POST"])
-def mn_choose_user():
-    session.setdefault("mn_csrf", secrets.token_hex(32))
+def choose_user():
+    session.setdefault("csrf_token", secrets.token_hex(32))
 
     if request.method == "POST":
         if not secrets.compare_digest(
             request.form.get("csrf", ""),
-            session["mn_csrf"],
+            session["csrf_token"],
         ):
             abort(403)
 
@@ -2256,7 +2408,7 @@ def mn_choose_user():
         except (KeyError, ValueError):
             abort(400)
 
-        with mn_db() as db:
+        with db_connection() as db:
             row = db.execute(
                 "SELECT 1 FROM users WHERE user_id=?",
                 (uid,),
@@ -2264,10 +2416,10 @@ def mn_choose_user():
             if row is None:
                 abort(404)
 
-        session["mn_user_id"] = uid
+        session["user_id"] = uid
         return redirect("/")
 
-    with mn_db() as db:
+    with db_connection() as db:
         users = db.execute(
             "SELECT user_id,name FROM users ORDER BY user_id"
         ).fetchall()
@@ -2292,15 +2444,15 @@ def mn_choose_user():
         </form>
         </html>""",
         users=users,
-        selected=session.get("mn_user_id"),
-        csrf=session["mn_csrf"],
+        selected=session.get("user_id"),
+        csrf=session["csrf_token"],
     )
 
 
 @app.route("/api/current-user")
-def mn_current_user():
-    uid = mn_user()
-    with mn_db() as db:
+def current_user():
+    uid = current_user_id()
+    with db_connection() as db:
         row = db.execute(
             "SELECT user_id,name FROM users WHERE user_id=?",
             (uid,),
@@ -2309,65 +2461,12 @@ def mn_current_user():
 
 
 # Проверяем существующую БД. Пустую базу вместо отсутствующей не создаём.
-with mn_db() as _mn_db:
-    for _mn_table in ("users", "separations", "projects", "diagnostic_logs"):
-        _mn_db.execute("SELECT * FROM " + _mn_table + " LIMIT 0")
+with db_connection() as database:
+    for table_name in ("users", "separations", "projects", "diagnostic_logs"):
+        database.execute("SELECT * FROM " + table_name + " LIMIT 0")
 
 
-# Сохраняем существующие обработчики MyNus.
-_mn_index = app.view_functions["index"]
-_mn_separate = app.view_functions["separate"]
-_mn_save = app.view_functions["save_project"]
-_mn_lyrics = app.view_functions["save_current_lyrics"]
-
-
-def mn_index():
-    if session.get("mn_user_id") is None:
-        return redirect("/test-users")
-
-    mn_user()
-    response = app.make_response(_mn_index())
-
-    if response.status_code == 304:
-        response = app.make_response(
-            send_file(
-                os.path.join(BASE_DIR, "index.html"),
-                conditional=False,
-            )
-        )
-
-    if response.status_code == 200:
-        response.direct_passthrough = False
-
-        # Передаём фактические источники дорожек при сохранении проекта.
-        # Сам index.html на диске не изменяется.
-        script = """<script>
-        if (typeof projectStateJson === 'function') {
-          const mnOriginalState = projectStateJson;
-          projectStateJson = function() {
-            const state = mnOriginalState();
-            state._mn_sources =
-              typeof currentStemURLs === 'undefined' ? [] :
-              Object.values(currentStemURLs)
-                .filter(v => typeof v === 'string');
-            return state;
-          };
-        }
-        </script>"""
-
-        html = response.get_data(as_text=True)
-        pos = html.lower().rfind("</body>")
-        response.set_data(
-            html[:pos] + script + html[pos:] if pos >= 0 else html + script
-        )
-        response.headers.pop("ETag", None)
-        response.headers.pop("Last-Modified", None)
-        response.headers["Cache-Control"] = "no-store"
-
-    return response
-
-
-def mn_watch(job_id, uid, sid):
+def watch_separation(job_id, uid, sid):
     # Учёт завершения работает независимо от открытого браузера.
     try:
         while jobs.get(job_id, {}).get("status") not in ("done", "error"):
@@ -2376,14 +2475,14 @@ def mn_watch(job_id, uid, sid):
         state = jobs[job_id]
         status = "completed" if state["status"] == "done" else "failed"
 
-        with mn_db() as db:
+        with db_connection() as db:
             db.execute(
                 """UPDATE separations
                    SET status=?,finished_at=?,error_message=?
                    WHERE separation_id=? AND user_id=?""",
-                (status, mn_now(), state.get("error"), sid, uid),
+                (status, utc_now(), state.get("error"), sid, uid),
             )
-            mn_log(
+            write_log(
                 db, uid,
                 "separation." + status,
                 state.get("error") or status,
@@ -2396,71 +2495,9 @@ def mn_watch(job_id, uid, sid):
         )
 
 
-def mn_separate():
-    uid = mn_user()
-    audio = request.files.get("audio")
-
-    if audio is None or not audio.filename:
-        return jsonify(error="Выберите аудиофайл"), 400
-
-    with mn_db() as db:
-        sid = db.execute(
-            """INSERT INTO separations
-               (user_id,client_request_id,source_kind,source_name,status)
-               VALUES (?,?,'local',?,'pending')""",
-            (uid, "request:" + str(uuid.uuid4()), audio.filename),
-        ).lastrowid
-
-    try:
-        response = app.make_response(_mn_separate())
-        data = response.get_json(silent=True) or {}
-
-        if response.status_code >= 400 or not data.get("job_id"):
-            raise RuntimeError(
-                data.get("error") or "Сепарация не запущена"
-            )
-
-        job_id = data["job_id"]
-
-        with mn_db() as db:
-            db.execute(
-                """UPDATE separations
-                   SET client_request_id=?,status='running',started_at=?
-                   WHERE separation_id=?""",
-                ("job:" + job_id, mn_now(), sid),
-            )
-            mn_log(
-                db, uid, "separation.started",
-                audio.filename, sid=sid,
-            )
-
-        threading.Thread(
-            target=mn_watch,
-            args=(job_id, uid, sid),
-            daemon=True,
-        ).start()
-
-        data.update(separation_id=sid, user_id=uid)
-        return jsonify(data)
-
-    except Exception as exc:
-        with mn_db() as db:
-            db.execute(
-                """UPDATE separations
-                   SET status='failed',finished_at=?,error_message=?
-                   WHERE separation_id=?""",
-                (mn_now(), str(exc), sid),
-            )
-            mn_log(
-                db, uid, "separation.failed",
-                exc, sid=sid, level="error",
-            )
-        return jsonify(error=str(exc), separation_id=sid), 500
-
-
-def mn_source_separation(db, uid):
+def source_separation(db, uid):
     state = json.loads(request.form.get("project_json") or "{}")
-    sources = state.get("_mn_sources", [])
+    sources = state.get("_sources", [])
     found = set()
 
     for source in sources if isinstance(sources, list) else []:
@@ -2478,7 +2515,7 @@ def mn_source_separation(db, uid):
             ).fetchone()
 
         elif len(parts) >= 4 and parts[0] == "saved-projects":
-            key = mn_key(
+            key = project_path_key(
                 os.path.join(PROJECTS_DIR, _project_id(parts[1]))
             )
             row = db.execute(
@@ -2493,7 +2530,7 @@ def mn_source_separation(db, uid):
                 row = db.execute(
                     """SELECT separation_id FROM projects
                        WHERE user_id=? AND client_request_id=?""",
-                    (uid, mn_key(folder)),
+                    (uid, project_path_key(folder)),
                 ).fetchone()
 
         if row and row[0] is not None:
@@ -2503,155 +2540,6 @@ def mn_source_separation(db, uid):
     return next(iter(found)) if len(found) == 1 else None
 
 
-def mn_save():
-    uid = mn_user()
-
-    with MN_SAVE_LOCK:
-        name = str(
-            request.form.get("name") or "Project"
-        ).strip() or "Project"
-
-        folder_id = _project_id(
-            str(request.form.get("project_id") or "").strip() or name
-        )
-
-        root = os.path.abspath(
-            os.path.expanduser(
-                str(
-                    request.form.get("save_path") or PROJECTS_DIR
-                ).strip() or PROJECTS_DIR
-            )
-        )
-        key = mn_key(os.path.join(root, folder_id))
-
-        with mn_db() as db:
-            if request.form.get("conflict_action") != "copy":
-                other_owner = db.execute(
-                    """SELECT 1 FROM projects
-                       WHERE client_request_id=? AND user_id<>?""",
-                    (key, uid),
-                ).fetchone()
-
-                if other_owner:
-                    return jsonify(
-                        error=(
-                            "Эта папка принадлежит другому тестовому "
-                            "пользователю. Сохраните под другим именем."
-                        )
-                    ), 409
-
-            sid = mn_source_separation(db, uid)
-
-        response = app.make_response(_mn_save())
-        data = response.get_json(silent=True) or {}
-
-        if response.status_code >= 400 or not data.get("ok"):
-            return response
-
-        key = mn_key(data["path"])
-
-        try:
-            with mn_db() as db:
-                db.execute(
-                    """INSERT INTO projects
-                       (user_id,client_request_id,separation_id,name)
-                       VALUES (?,?,?,?)
-                       ON CONFLICT(user_id,client_request_id)
-                       DO UPDATE SET
-                         name=excluded.name,
-                         separation_id=COALESCE(
-                             excluded.separation_id,
-                             projects.separation_id
-                         ),
-                         updated_at=?,
-                         deleted_at=NULL""",
-                    (uid, key, sid, data["name"], mn_now()),
-                )
-
-                row = db.execute(
-                    """SELECT project_id,separation_id FROM projects
-                       WHERE user_id=? AND client_request_id=?""",
-                    (uid, key),
-                ).fetchone()
-
-                mn_log(
-                    db, uid, "project.saved", data["name"],
-                    sid=row["separation_id"],
-                    pid=row["project_id"],
-                )
-
-            # id — существующий ключ папки для текущего HTML.
-            # project_id — числовой идентификатор записи в базе.
-            data.update(
-                project_id=row["project_id"],
-                separation_id=row["separation_id"],
-                user_id=uid,
-            )
-            return jsonify(data)
-
-        except sqlite3.Error as exc:
-            return jsonify(
-                error=(
-                    "Файлы сохранены, но запись в БД не выполнена: "
-                    + str(exc)
-                ),
-                path=data["path"],
-            ), 500
-
-
-def mn_lyrics():
-    uid = mn_user()
-
-    with MN_SAVE_LOCK:
-        key = mn_key(
-            _saved_project_folder(
-                _read_playlist_state().get("current")
-            )
-        )
-
-        with mn_db() as db:
-            other_owner = db.execute(
-                """SELECT 1 FROM projects
-                   WHERE client_request_id=? AND user_id<>?""",
-                (key, uid),
-            ).fetchone()
-
-            if other_owner:
-                return jsonify(error="Проект другого пользователя"), 403
-
-        response = app.make_response(_mn_lyrics())
-        data = response.get_json(silent=True) or {}
-
-        if response.status_code < 400 and data.get("ok"):
-            with mn_db() as db:
-                db.execute(
-                    """UPDATE projects SET updated_at=?
-                       WHERE user_id=? AND client_request_id=?""",
-                    (mn_now(), uid, key),
-                )
-
-                row = db.execute(
-                    """SELECT project_id,separation_id FROM projects
-                       WHERE user_id=? AND client_request_id=?""",
-                    (uid, key),
-                ).fetchone()
-
-                if row:
-                    mn_log(
-                        db, uid,
-                        "project.lyrics_saved",
-                        "Текст обновлён",
-                        sid=row["separation_id"],
-                        pid=row["project_id"],
-                    )
-
-        return response
-
-
-app.view_functions["index"] = mn_index
-app.view_functions["separate"] = mn_separate
-app.view_functions["save_project"] = mn_save
-app.view_functions["save_current_lyrics"] = mn_lyrics
 # ===== КОНЕЦ ВСТАВКИ =====
 
 
@@ -2663,8 +2551,8 @@ app.view_functions["save_current_lyrics"] = mn_lyrics
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("MyNus Server 6.0.0")
-    print(r"6.0.0: New Project + Save Rec; Project SAVE/LOAD supports Master Rec track.")
+    print("MyNus Server 6.1.1")
+    print(r"НОРМАЛИЗАЦИЯ АРХИТЕКТУРЫ без Оберток + язык при распаковке | 6.1.1 ")
     print("=" * 72 + "\n")
 
     try:
