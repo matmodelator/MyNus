@@ -744,7 +744,7 @@ def run_demucs(
             bufsize=1
         )
 
-        jobs[job_id]["process"] = process
+      
 
 
         # ========================================
@@ -779,12 +779,8 @@ def run_demucs(
                 )
 
 
-        process.wait()
+                process.wait()
 
-        jobs[job_id]["process"] = None
-
-        if jobs[job_id].get("status") == "aborted":
-            return
 
         if process.returncode != 0:
 
@@ -965,26 +961,7 @@ def run_demucs(
 # PROCESS PROGRESS
 # ========================================
 
-@app.route("/abort/<job_id>", methods=["POST"])
-def abort_separation(job_id):
 
-    job = jobs.get(job_id)
-
-    if not job:
-        return jsonify({
-            "error": "Job not found"
-        }), 404
-
-    job["status"] = "aborted"
-
-    process = job.get("process")
-
-    if process and process.poll() is None:
-        process.terminate()
-
-    return jsonify({
-        "status": "aborted"
-    })
 
 @app.route("/progress/<job_id>")
 # Локальная серверная операция этого блока.
@@ -2551,8 +2528,8 @@ def source_separation(db, uid):
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("MyNus Server 6.1.1")
-    print(r"НОРМАЛИЗАЦИЯ АРХИТЕКТУРЫ без Оберток + язык при распаковке | 6.1.1 ")
+    print("MyNus Server 6.1.0")
+    print(r"НОРМАЛИЗАЦИЯ АРХИТЕКТУРЫ без Оберток + язык при распаковке | 6.1.0 ")
     print("=" * 72 + "\n")
 
     try:
