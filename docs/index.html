@@ -1,4 +1,4 @@
-<!-- MyNus 6.3.0 | mynus-json\recent-restore -->
+<!-- MyNus 6.3.2 | manual-original-path -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 6.3.0</title>
+  <title>MyNus 6.3.2</title>
 
 
  <style>
@@ -6416,10 +6416,11 @@ async function openRecentAudioMenu(event) {
 }
 
 fileName.addEventListener("contextmenu", openRecentAudioMenu);
-const recentOpenButton=document.createElement("button");
-recentOpenButton.type="button";recentOpenButton.textContent="Recent ▾";
-selectFileBtn.insertAdjacentElement("afterend",recentOpenButton);
-recentOpenButton.addEventListener("click",event=>{event.stopPropagation();openRecentAudioMenu(event);});
+fileName.addEventListener("click", event => {
+  event.stopPropagation();
+  if(recentAudioMenu.classList.contains("open")) closeRecentAudioMenu();
+  else openRecentAudioMenu(event);
+});
 recentAudioMenu.style.maxHeight="min(420px,70vh)";
 recentAudioMenu.style.overflowY="auto";
 document.addEventListener("click", event => {
@@ -6589,15 +6590,13 @@ async function waitForSeparation(jobId, run = activeSeparation) {
 updateSplitButton();
 
 
-splitBtn.addEventListener(
-  "click",
-  async () => {
+async function startSeparation(restoreRequest = null) {
     if (activeSeparation) {
       await abortCurrentSeparation();
       return;
     }
 
-    const restore = window.pendingMynusRestore;
+    const restore = restoreRequest || window.pendingMynusRestore;
     const file = restore?.originalFile || audioFile.files[0] || recentSelectedAudioFile;
 
 
@@ -7158,6 +7157,7 @@ studio.style.display =
       status.className = "progress-status success";
 
       if (run.restore) await restoreMynusSnapshot(run.restore);
+      run.succeeded = true;
 
       // Разделение завершено. Предлагаем создать Project для полной работы Karaoke.
       newProjectPromptDialog?.classList.add("open");
@@ -7186,9 +7186,16 @@ studio.style.display =
       if (activeSeparation === run) activeSeparation = null;
       updateSplitButton();
     }
+    return run;
 
-  }
-);
+}
+splitBtn.addEventListener("click", () => {
+  startSeparation().catch(error => {
+    console.error(error);
+    activeSeparation = null; updateSplitButton();
+    status.textContent = "Separation error: " + error.message;
+  });
+});
 
 
 // ========================================
@@ -23318,10 +23325,10 @@ document.addEventListener("click", event => {
         <p>Karaoke .mynus file uses the Master track.
            Please check it before saving.</p>
 
-        <label for="saveKaraokeOriginal">Original link / file path</label>
+        <label for="saveKaraokeOriginal">Original file path</label>
         <input id="saveKaraokeOriginal" type="text"
                style="width:100%;box-sizing:border-box;margin:8px 0"
-               placeholder="Original location for project recovery">
+               placeholder="Enter Original file path manually">
 
         <div style="font-size:12px">
           Without an Original link, karaoke playback is available,
@@ -23365,9 +23372,9 @@ document.addEventListener("click", event => {
     closeKaraokeFinishedDialog();
     lyricsFullScreenPlaylistMenu.hidden = true;
 
-    const originalFile = currentOriginalFile || currentOriginalTrackFile;
-    originalInput.value = originalReference || window.currentMynusKaraoke?.project?.original?.reference ||
-      (originalFile ? "mynus-local:" + encodeURIComponent(`${originalFile.name}::${originalFile.size}::${originalFile.lastModified}`) : "");
+    const savedOriginal = window.currentMynusKaraoke?.project?.original;
+    const reference = savedOriginal ? (savedOriginal.reference || "") : originalReference;
+    originalInput.value = reference.startsWith("mynus-local:") ? "" : reference;
     message.textContent = masterBlob?.size
       ? ""
       : "Master is empty. Create Master in Sequencer first.";
@@ -23375,30 +23382,6 @@ document.addEventListener("click", event => {
     saveButton.disabled = !masterBlob?.size;
     dialog.classList.add("open");
 
-    // Для сохранённого проекта получаем ссылку именно на Original.
-    const projectId = activeProjectId;
-    if (!originalReference && projectId) {
-      fetch("/saved-projects/" + encodeURIComponent(projectId))
-        .then(response => {
-          if (!response.ok) throw new Error("Original unavailable");
-          return response.json();
-        })
-        .then(data => {
-          if (
-            activeProjectId !== projectId ||
-            !dialog.classList.contains("open") ||
-            originalInput.value.trim()
-          ) return;
-
-          const source = data.tracks?.original;
-          if (source) {
-            originalInput.value = new URL(source, location.href).href;
-          }
-        })
-        .catch(() => {
-          // Для локального Original путь или ссылку можно ввести вручную.
-        });
-    }
   }
 
   // Синяя кнопка — последняя справа в панели PlayList.
@@ -23612,6 +23595,10 @@ document.addEventListener("click", event => {
       const archive = await makeZip([["Karaoke.json",json(manifest)],[masterPath,master]]);
 
       originalReference = reference;
+      if(window.currentMynusKaraoke) {
+        window.currentMynusKaraoke.original={...window.currentMynusKaraoke.original,reference};
+        window.currentMynusKaraoke.project.original=window.currentMynusKaraoke.original;
+      }
 
       const url = URL.createObjectURL(archive);
       const link = document.createElement("a");
@@ -24098,66 +24085,73 @@ document.addEventListener("click", event => {
 (() => {
   const panel=document.createElement("div");
   panel.className="export-dialog"; panel.style.zIndex="11000";
-  panel.innerHTML=`<div class="export-dialog-card"><div class="export-dialog-title">Original backup</div>
-    <p>Master is ready for karaoke. Original is only needed to restore the full project.</p>
-    <input type="text" style="width:100%;box-sizing:border-box" aria-label="Original backup reference">
-    <p role="status"></p><div class="export-format-grid">
-    <button type="button">Use saved access</button><button type="button">Select Original</button>
+  panel.innerHTML=`<div class="export-dialog-card"><div class="export-dialog-title">Load Karaoke</div>
+    <label>Original file path<input type="text" style="width:100%;box-sizing:border-box" aria-label="Original file path"></label>
+    <p>Restore Project will ask you to select the Original audio file.</p>
+    <p role="status"></p><div class="export-format-grid" style="grid-template-columns:1fr 1fr">
     <button type="button">Continue Karaoke</button><button type="button">Restore Project</button></div></div>`;
   document.body.appendChild(panel);
   const input=panel.querySelector("input"), info=panel.querySelector('[role="status"]');
-  const [resolveButton,selectButton,closeButton,restoreButton]=panel.querySelectorAll("button");
-  const fallback=document.createElement("input");fallback.type="file";fallback.accept="audio/*";fallback.hidden=true;document.body.appendChild(fallback);
-  function remember(file,reference) {
-    const loaded=window.currentMynusKaraoke;
-    if (!loaded) return;
-    loaded.original={name:file.name,reference}; loaded.project.original=loaded.original;
-    loaded.originalFile=file;
-    input.value=reference || "";info.textContent="Original selected: "+file.name;
+  const [closeButton,restoreButton]=panel.querySelectorAll("button");
+  const fallback=document.createElement("input");
+  fallback.type="file";fallback.accept="audio/*";fallback.hidden=true;document.body.appendChild(fallback);
+  let pending=null, choosing=false;
+  function savePath(loaded) {
+    loaded.original={...loaded.original,reference:input.value.trim()||null};
+    loaded.project.original=loaded.original;
   }
-  async function selected(handle) {
-    const file=await handle.getFile();await saveRecentAudioHandle(handle,file);
-    remember(file,"mynus-local:"+encodeURIComponent(`${file.name}::${file.size}::${file.lastModified}`));
-  }
+  function unlock(){choosing=false;closeButton.disabled=false;restoreButton.disabled=false;input.disabled=false;}
   window.addEventListener("mynus-karaoke-loaded",()=>{
-    input.value=window.currentMynusKaraoke?.original?.reference || "";
-    info.textContent="Use saved access or select Original if it is unavailable.";
-    panel.classList.add("open");
+    pending=null;unlock();
+    const ref=window.currentMynusKaraoke?.project?.original?.reference || "";
+    input.value=ref.startsWith("mynus-local:") ? "" : ref;
+    info.textContent="";panel.classList.add("open");
   });
-  resolveButton.onclick=async()=>{
-    try {
-      const ref=input.value.trim();
-      if (!ref.startsWith("mynus-local:")) throw new Error("For a local file, use Select Original. A typed path does not grant access.");
-      const key=decodeURIComponent(ref.slice(12));
-      const row=(await getRecentAudioEntries()).find(row=>row.key===key);
-      if (!row?.handle) throw new Error("Saved access not found. Select Original again.");
-      let permission=await row.handle.queryPermission({mode:"read"});
-      if(permission!=="granted") permission=await row.handle.requestPermission({mode:"read"});
-      if(permission!=="granted") throw new Error("Permission not granted. Select Original again.");
-      await selected(row.handle);
-    } catch(error) {info.textContent=error.message;}
-  };
-  selectButton.onclick=async()=>{
-    if(!window.showOpenFilePicker){fallback.value="";fallback.click();return;}
-    try {const [handle]=await showOpenFilePicker({multiple:false});if(handle)await selected(handle);}
-    catch(error){if(error.name!=="AbortError")info.textContent=error.message;}
-  };
-  fallback.onchange=()=>{if(fallback.files[0])remember(fallback.files[0],null);};
-  restoreButton.onclick=()=>{
-    const loaded=window.currentMynusKaraoke;
-    if(!loaded?.originalFile){info.textContent="First use saved access or Select Original.";return;}
-    if(activeSeparation || projectLoading){info.textContent="Wait for the current operation.";return;}
-    loaded.project.original={...loaded.original,reference:input.value.trim()||null};
-    window.pendingMynusRestore=loaded;
-    panel.classList.remove("open");
-    closeLyricsEditor();
-    splitBtn.click();
-  };
   closeButton.onclick=()=>{
     const loaded=window.currentMynusKaraoke;
-    if(loaded){loaded.original={...loaded.original,reference:input.value.trim()||null};loaded.project.original=loaded.original;}
+    if(loaded)savePath(loaded);
     panel.classList.remove("open");
   };
+  async function restore(loaded,file) {
+    if(!file)return;
+    loaded.originalFile=file;
+    loaded.original={...loaded.original,name:file.name};loaded.project.original=loaded.original;
+    try {
+      info.textContent="Restoring project…";
+      closeLyricsEditor();panel.classList.remove("open");
+      const run=await startSeparation(loaded);
+      if(!run?.succeeded) {
+        window.currentMynusKaraoke=loaded;
+        info.textContent=status.textContent || "Restore did not finish.";
+        panel.classList.add("open");
+      }
+    } catch(error) {
+      console.error("Restore Project:",error);
+      if(activeSeparation && !activeSeparation.jobId){activeSeparation=null;updateSplitButton();}
+      window.currentMynusKaraoke=loaded;
+      info.textContent="Restore Project: "+error.message;panel.classList.add("open");
+    }
+  }
+  restoreButton.onclick=async()=>{
+    if(choosing)return;
+    if(activeSeparation || projectLoading){info.textContent="Wait for the current operation.";return;}
+    const loaded=window.currentMynusKaraoke;
+    if(!loaded?.master || !loaded.lyrics){info.textContent="Load a .mynus file first.";return;}
+    savePath(loaded);choosing=true;closeButton.disabled=true;restoreButton.disabled=true;input.disabled=true;
+    if(!window.showOpenFilePicker){pending=loaded;fallback.value="";fallback.click();return;}
+    try {
+      const [handle]=await window.showOpenFilePicker({multiple:false,types:[{description:"Original audio",accept:{"audio/*":[".mp3",".wav",".flac",".m4a",".aac",".ogg",".webm"]}}]});
+      if(handle)await restore(loaded,await handle.getFile());
+    } catch(error) {
+      info.textContent=error.name==="AbortError" ? "File selection cancelled." : error.message;
+    } finally {unlock();}
+  };
+  fallback.onchange=async()=>{
+    const loaded=pending;pending=null;
+    try{if(loaded && fallback.files[0])await restore(loaded,fallback.files[0]);}
+    finally{unlock();}
+  };
+  fallback.addEventListener("cancel",()=>{pending=null;info.textContent="File selection cancelled.";unlock();});
 })();
 </script>
 
@@ -24238,8 +24232,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus MyNus 6.3.0 | mynus-json\recent-restore");
-console.log("[SERVICE CONSOLE] MyNus 6.3.0 | mynus-json\recent-restore");
+console.log("MyNus 6.3.2 | manual-original-path");
+console.log("[SERVICE CONSOLE] MyNus 6.3.2 | manual-original-path");
 </script>
 
 <div class="row" id="build-down">
