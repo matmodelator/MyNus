@@ -1,5 +1,5 @@
 # ========================================
-#  НОРМАЛИЗАЦИЯ АРХИТЕКТУРЫ без Оберток + язык при распаковке | 6.1.0 
+#  Аборт Сепарации - отдельные процессы севрера | 6.2.0 
 # ========================================
 
 # ========================================
@@ -57,6 +57,7 @@ os.makedirs(PROJECTS_DIR, exist_ok=True)
 # ========================================
 
 jobs = {}
+job_controls = {}
 
 
 
@@ -66,7 +67,7 @@ opened_project_folders = {}
 
 
 # ========================================
-# PROJECT LOAD TRACE (6.1.1)
+# PROJECT LOAD TRACE (6.2.0)
 # Diagnostic-only endpoint. It does not write, delete, move or replace files.
 # ========================================
 
@@ -106,7 +107,7 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "6.1.1", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "6.2.0", "trace_id": trace_id})
 
 
 # ========================================
@@ -366,7 +367,6 @@ def index():
 # ========================================
 
 @app.route("/separate", methods=["POST"])
-# Локальная серверная операция этого блока.
 def separate():
 
     uid = current_user_id()
@@ -438,6 +438,7 @@ def separate():
 
 
     jobs[job_id] = {
+        "user_id": uid,
         "progress": 0,
         "status": "processing",
         "vocals": None,
@@ -449,6 +450,11 @@ def separate():
         "vocal_start": None,
         "vocal_end": None,
         "error": None
+    }
+
+    job_controls[job_id] = {
+        "lock": threading.RLock(), "stop_lock": threading.Lock(),
+        "cancel": threading.Event(), "finished": threading.Event(), "process": None,
     }
 
     lyrics_language = request.form.get("lyrics_language", "auto")
@@ -484,7 +490,7 @@ def separate():
 
 # Локальная серверная операция этого блока.
 def detect_vocal_range(
-    vocals_path
+    vocals_path, job_id
 ):
 
     command = [
@@ -499,20 +505,7 @@ def detect_vocal_range(
         "-"
     ]
 
-    process = subprocess.run(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        errors="replace"
-    )
-
-    output = (
-        process.stdout
-        + "\n"
-        + process.stderr
-    )
-
+    output = _run_job_command(job_id, command, capture_output=True)
 
     silence_ends = [
         float(value)
@@ -705,275 +698,201 @@ def detect_lyrics(vocal_path, lyrics_language="auto"):
 # ========================================
 
 # Локальная серверная операция этого блока.
-def run_demucs(
-    job_id,
-    input_path,
-    job_result_dir,
-    lyrics_language="auto"
-):
+def _stop_job_process(process):
+    """Stop the stage process AND its children (Demucs, ffmpeg). Never stop Flask."""
+    if process is None or process.poll() is not None:
+        return
+    if os.name == "nt":
+        result = subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            capture_output=True, text=True, errors="replace", timeout=15,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        if result.returncode and process.poll() is None:
+            raise RuntimeError("Could not stop job process tree: " + result.stderr.strip())
+    else:
+        import signal
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    process.wait(timeout=10)
 
-    command = [
-
-        sys.executable,
-        "-m",
-        "demucs",
-
-        "-n",
-        "htdemucs_6s",
-
-        "--mp3",
-
-        "-o",
-        job_result_dir,
-
-        input_path
-    ]
+class SeparationAborted(Exception):
+    pass
 
 
+def _check_job_cancelled(job_id):
+    if job_controls[job_id]["cancel"].is_set():
+        raise SeparationAborted()
+
+
+def _run_job_command(job_id, command, on_line=None, capture_output=False):
+    """Run one stage. The active process belongs only to this job_id."""
+    control = job_controls[job_id]
+    process = None
+    output = []
+    options = dict(stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                   text=True, encoding="utf-8", errors="replace", bufsize=1,
+                   env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    if os.name == "nt":
+        options["creationflags"] = subprocess.CREATE_NO_WINDOW
+    else:
+        options["start_new_session"] = True
     try:
-
-        process = subprocess.Popen(
-
-            command,
-
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-
-            text=True,
-
-            bufsize=1
-        )
-
-
-        # ========================================
-        # READ DEMUCS OUTPUT
-        # ========================================
-
+        with control["lock"]:
+            _check_job_cancelled(job_id)
+            process = subprocess.Popen(command, **options)
+            control["process"] = process
         for line in process.stdout:
+            if capture_output:
+                output.append(line)
+            if on_line:
+                on_line(line)
+            elif not capture_output:
+                print(line, end="", flush=True)
+        code = process.wait()
+        _check_job_cancelled(job_id)
+        if code != 0:
+            raise RuntimeError("Separation stage failed (exit " + str(code) + ")")
+        return "".join(output)
+    finally:
+        if process is not None:
+            # Do not leave a model running after a Python-side parsing/error path.
+            if process.poll() is None:
+                try:
+                    with control["stop_lock"]:
+                        _stop_job_process(process)
+                except Exception:
+                    app.logger.exception("Could not stop stage for job %s", job_id)
+                    # Retain the handle while alive, so /abort can retry.
+                    process.wait()
+            if process.stdout is not None:
+                process.stdout.close()
+            with control["lock"]:
+                if control["process"] is process:
+                    control["process"] = None
 
-            print(line, end="")
 
-            matches = re.findall(
-                r"(\d{1,3})%",
-                line
-            )
+def _run_whisperx(job_id, vocal_path, lyrics_language):
+    import inspect
+    result = None
+    # Only the WhisperX function is executed in a fresh Python process.
+    # No server import, no Flask/DB initialization, no extra .py file.
+    source = inspect.getsource(detect_lyrics)
+    script = ("import json, sys\n" + source +
+              "\nresult = detect_lyrics(sys.argv[1], sys.argv[2])\n"
+              "print('MYNUS_LYRICS ' + json.dumps(result, ensure_ascii=True), flush=True)\n")
 
+    def read_line(line):
+        nonlocal result
+        if line.startswith("MYNUS_LYRICS "):
+            result = json.loads(line[len("MYNUS_LYRICS "):])
+        else:
+            print(line, end="", flush=True)
+
+    _run_job_command(job_id, [sys.executable, "-u", "-c", script, vocal_path, lyrics_language],
+                     on_line=read_line)
+    if not isinstance(result, dict):
+        raise RuntimeError("WhisperX returned no lyrics result")
+    return result
+
+
+def run_demucs(job_id, input_path, job_result_dir, lyrics_language="auto"):
+    control = job_controls[job_id]
+    result = None
+    error_message = None
+    try:
+        def demucs_line(line):
+            print(line, end="", flush=True)
+            matches = re.findall(r"(\d{1,3})%", line)
             if matches:
+                with control["lock"]:
+                    if not control["cancel"].is_set():
+                        jobs[job_id]["progress"] = max(0, min(100, int(matches[-1])))
 
-                percent = int(
-                    matches[-1]
-                )
-
-                percent = max(
-                    0,
-                    min(
-                        100,
-                        percent
-                    )
-                )
-
-                jobs[job_id]["progress"] = (
-                    percent
-                )
-
-
-        process.wait()
-
-
-        if process.returncode != 0:
-
-            jobs[job_id]["status"] = (
-                "error"
-            )
-
-            jobs[job_id]["error"] = (
-                "Demucs process failed"
-            )
-
-            return
-
-
-        # ========================================
-        # FIND DEMUCS OUTPUT
-        # ========================================
-
-        model_dir = os.path.join(
-            job_result_dir,
-            "htdemucs_6s"
-        )
-
-
-        song_dirs = [
-
-            directory
-
-            for directory
-            in os.listdir(model_dir)
-
-            if os.path.isdir(
-
-                os.path.join(
-                    model_dir,
-                    directory
-                )
-            )
-        ]
-
-
+        _run_job_command(job_id, [sys.executable, "-m", "demucs", "-n", "htdemucs_6s",
+                                  "--mp3", "-o", job_result_dir, input_path], on_line=demucs_line)
+        _check_job_cancelled(job_id)
+        model_dir = os.path.join(job_result_dir, "htdemucs_6s")
+        song_dirs = sorted(name for name in os.listdir(model_dir)
+                           if os.path.isdir(os.path.join(model_dir, name)))
         if not song_dirs:
+            raise RuntimeError("Demucs output not found")
+        stems = ("vocals", "drums", "bass", "guitar", "piano", "other")
+        for stem in stems:
+            _check_job_cancelled(job_id)
+            source_path = os.path.join(model_dir, song_dirs[0], stem + ".mp3")
+            if not os.path.isfile(source_path):
+                raise RuntimeError("Demucs stem not found: " + stem)
+            shutil.copy(source_path, os.path.join(job_result_dir, stem + ".mp3"))
 
-            raise Exception(
-                "Demucs output not found"
-            )
+        vocal_path = os.path.join(job_result_dir, "vocals.mp3")
+        vocal_start, vocal_end = detect_vocal_range(vocal_path, job_id)
+        lyrics = _run_whisperx(job_id, vocal_path, lyrics_language)
+        result = {stem: f"/results/{job_id}/{stem}.mp3" for stem in stems}
+        result.update(vocal_start=vocal_start, vocal_end=vocal_end, lyrics=lyrics)
+    except SeparationAborted:
+        pass
+    except Exception as exc:
+        error_message = str(exc)
+        app.logger.exception("Separation failed: %s", job_id)
+    finally:
+        # Every stage has exited before publishing its final state.
+        with control["lock"]:
+            if control["cancel"].is_set():
+                jobs[job_id].update(status="aborted", error=None)
+            elif error_message:
+                jobs[job_id].update(status="error", error=error_message)
+            elif result is not None:
+                jobs[job_id].update(result)
+                jobs[job_id].update(status="done", progress=100, error=None)
+            else:
+                jobs[job_id].update(status="error", error="Separation returned no result")
+            control["finished"].set()
 
-
-        song_dir = os.path.join(
-            model_dir,
-            song_dirs[0]
-        )
-
-
-        stem_names = [
-            "vocals",
-            "drums",
-            "bass",
-            "guitar",
-            "piano",
-            "other"
-        ]
-
-
-        stem_targets = {}
-
-
-        for stem_name in stem_names:
-
-            source_path = os.path.join(
-                song_dir,
-                f"{stem_name}.mp3"
-            )
-
-            target_path = os.path.join(
-                job_result_dir,
-                f"{stem_name}.mp3"
-            )
-
-            if not os.path.isfile(
-                source_path
-            ):
-
-                raise Exception(
-                    f"Demucs stem not found: {stem_name}"
-                )
-
-            shutil.copy(
-                source_path,
-                target_path
-            )
-
-            stem_targets[
-                stem_name
-            ] = target_path
-
-        # ========================================
-        # DETECT VOCAL START / END
-        # ========================================
-
-        (
-            vocal_start,
-            vocal_end
-        ) = detect_vocal_range(
-            stem_targets["vocals"]
-        )
-
-
-        # ========================================
-        # DETECT LYRICS
-        # ========================================
-
-        lyrics = detect_lyrics(
-            stem_targets["vocals"],
-            lyrics_language
-        )
-
-        # ========================================
-        # JOB COMPLETE
-        # ========================================
-      
-        jobs[job_id]["progress"] = 100
-
-        jobs[job_id]["status"] = (
-            "done"
-        )
-
-
-        jobs[job_id]["vocals"] = (
-            f"/results/{job_id}/vocals.mp3"
-        )
-
-        jobs[job_id]["drums"] = (
-            f"/results/{job_id}/drums.mp3"
-        )
-
-        jobs[job_id]["bass"] = (
-            f"/results/{job_id}/bass.mp3"
-        )
-
-        jobs[job_id]["guitar"] = (
-            f"/results/{job_id}/guitar.mp3"
-        )
-
-        jobs[job_id]["piano"] = (
-            f"/results/{job_id}/piano.mp3"
-        )
-
-        jobs[job_id]["other"] = (
-            f"/results/{job_id}/other.mp3"
-        )
-
-        jobs[job_id]["vocal_start"] = (
-            vocal_start
-        )
-
-        jobs[job_id]["vocal_end"] = (
-            vocal_end
-        )
-
-        jobs[job_id]["lyrics"] = (
-            lyrics
-        )
-
-    except Exception as error:
-
-        print(error)
-
-        jobs[job_id]["status"] = (
-            "error"
-        )
-
-        jobs[job_id]["error"] = str(
-            error
-        )
 
 
 # ========================================
 # PROCESS PROGRESS
 # ========================================
 
+
+
+@app.route("/abort/<job_id>", methods=["POST"])
+def abort_separation(job_id):
+    uid = current_user_id()
+    job = jobs.get(job_id)
+    control = job_controls.get(job_id)
+    if job is None or control is None or job.get("user_id") != uid:
+        return jsonify(error="Job not found"), 404
+    with control["lock"]:
+        if job["status"] in ("done", "error", "aborted"):
+            return jsonify(job_id=job_id, status=job["status"])
+        control["cancel"].set()
+        job["status"] = "aborting"
+        process = control["process"]
+    try:
+        # Repeated clicks/requests serialize termination for this one job only.
+        with control["stop_lock"]:
+            _stop_job_process(process)
+    except Exception as exc:
+        return jsonify(error=str(exc), job_id=job_id, status="aborting"), 500
+    if not control["finished"].wait(timeout=2):
+        return jsonify(job_id=job_id, status="aborting"), 202
+    with control["lock"]:
+        return jsonify(job_id=job_id, status=job["status"])
+
 @app.route("/progress/<job_id>")
-# Локальная серверная операция этого блока.
 def progress(job_id):
-
-    if job_id not in jobs:
-
-        return jsonify({
-            "error": "Job not found"
-        }), 404
-
-
-    return jsonify(
-        jobs[job_id]
-    )
+    uid = current_user_id()
+    job = jobs.get(job_id)
+    control = job_controls.get(job_id)
+    if job is None or control is None or job.get("user_id") != uid:
+        return jsonify(error="Job not found"), 404
+    with control["lock"]:
+        # Process handles/locks/events live in job_controls, never in JSON.
+        return jsonify(dict(job))
 
 
 # ========================================
@@ -1647,7 +1566,7 @@ def transcribe_to_ru():
 
 
 # ========================================
-# MYNUS PlayList JSON state + standalone Projects | 6.1.1
+# MYNUS PlayList JSON state + standalone Projects | 6.2.0
 # ========================================
 def _project_id(value):
     value = secure_filename(str(value or "Project")) or "Project"
@@ -2101,7 +2020,7 @@ def save_project():
         if not track_files.get("original"):
             raise ValueError("Original track not received")
 
-        project_json["version"] = "6.1.1"
+        project_json["version"] = "6.2.0"
         project_json["id"] = project_id
         project_json["name"] = project_name
         project_json["tracks"] = track_files
@@ -2443,11 +2362,11 @@ with db_connection() as database:
 def watch_separation(job_id, uid, sid):
     # Учёт завершения работает независимо от открытого браузера.
     try:
-        while jobs.get(job_id, {}).get("status") not in ("done", "error"):
+        while jobs.get(job_id, {}).get("status") not in ("done", "error", "aborted"):
             time.sleep(0.5)
 
         state = jobs[job_id]
-        status = "completed" if state["status"] == "done" else "failed"
+        status = {"done": "completed", "error": "failed", "aborted": "cancelled"}[state["status"]]
 
         with db_connection() as db:
             db.execute(
@@ -2525,8 +2444,8 @@ def source_separation(db, uid):
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("MyNus Server 6.1.0")
-    print(r"НОРМАЛИЗАЦИЯ АРХИТЕКТУРЫ без Оберток + язык при распаковке | 6.1.0 ")
+    print("MyNus Server 6.2.0")
+    print(r"Аборт Сепарации - отдельные процессы севрера | 6.2.0 ")
     print("=" * 72 + "\n")
 
     try:
