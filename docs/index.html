@@ -1,4 +1,4 @@
-<!-- MyNus 6.2.2 | Save&Load Karaoke.minus -->
+<!-- MyNus 6.2.3 | mynus-json -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 6.2.2</title>
+  <title>MyNus 6.2.3</title>
 
 
  <style>
@@ -6335,7 +6335,7 @@ async function saveRecentAudioHandle(handle, file) {
       const next = rows.filter(row => row.key !== key).sort((a,b) => (b.savedAt||0)-(a.savedAt||0));
       next.unshift({ key, name:file.name, size:file.size||0, lastModified:file.lastModified||0, savedAt:Date.now(), handle });
       store.clear();
-      next.slice(0, RECENT_AUDIO_LIMIT).forEach(row => store.put(row));
+      next.forEach(row => store.put(row));
     };
   } catch (_) {}
 }
@@ -6350,7 +6350,7 @@ async function getRecentAudioEntries() {
       const request = tx.objectStore(RECENT_AUDIO_STORE).getAll();
       request.onsuccess = () => {
         const rows = Array.isArray(request.result) ? request.result : [];
-        resolve(rows.sort((a,b) => (b.savedAt||0)-(a.savedAt||0)).slice(0, RECENT_AUDIO_LIMIT));
+        resolve(rows.sort((a,b) => (b.savedAt||0)-(a.savedAt||0)));
       };
       request.onerror = () => reject(request.error);
     });
@@ -6389,13 +6389,25 @@ async function openRecentAudioMenu(event) {
     empty.textContent = "No recent files";
     recentAudioMenu.appendChild(empty);
   } else {
-    entries.forEach(entry => {
+    let expanded = false;
+    const renderEntries = () => {
+    recentAudioMenu.replaceChildren();
+    (expanded ? entries : entries.slice(0, 10)).forEach(entry => {
       const item = document.createElement("button");
       item.type = "button"; item.className = "recent-audio-menu-item";
       item.textContent = entry.name; item.title = entry.name;
       item.addEventListener("click", () => selectRecentAudioEntry(entry));
       recentAudioMenu.appendChild(item);
     });
+    if (entries.length > 10) {
+      const more = document.createElement("button");
+      more.type = "button"; more.className = "recent-audio-menu-item";
+      more.textContent = expanded ? "▲ Recent 10" : "▼ All files (" + entries.length + ")";
+      more.onclick = event => { event.stopPropagation(); expanded = !expanded; renderEntries(); };
+      recentAudioMenu.appendChild(more);
+    }
+    };
+    renderEntries();
   }
   const rect = fileName.getBoundingClientRect();
   const menuWidth = Math.min(520, Math.max(280, rect.width));
@@ -23336,6 +23348,7 @@ document.addEventListener("click", event => {
   const previousClearProjectState = clearProjectState;
   clearProjectState = function (...args) {
     originalReference = "";
+    window.currentMynusKaraoke = null;
     return previousClearProjectState.apply(this, args);
   };
 
@@ -23345,7 +23358,9 @@ document.addEventListener("click", event => {
     closeKaraokeFinishedDialog();
     lyricsFullScreenPlaylistMenu.hidden = true;
 
-    originalInput.value = originalReference;
+    const originalFile = currentOriginalFile || currentOriginalTrackFile;
+    originalInput.value = originalReference || window.currentMynusKaraoke?.project?.original?.reference ||
+      (originalFile ? "mynus-local:" + encodeURIComponent(`${originalFile.name}::${originalFile.size}::${originalFile.lastModified}`) : "");
     message.textContent = masterBlob?.size
       ? ""
       : "Master is empty. Create Master in Sequencer first.";
@@ -23578,17 +23593,21 @@ document.addEventListener("click", event => {
         { type: "application/json" }
       );
 
-      const archive = await makeZip([
-        ["Project.json", json(project)],
-        ["Lyrics.json", json({
-          language: lyrics.language,
-          text: lyrics.text,
-          lines: lyrics.lines
-        })],
-        ["Structure.json", json(lyrics.structure)],
-        ["Sequencer.json", json(state.sequencer)],
-        [masterPath, master]
-      ]);
+      const encoded = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",")[1]);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(master);
+      });
+      const archive = new Blob([JSON.stringify({
+        original_backup: project.original,
+        format: "MyNus Karaoke", format_version: 2,
+        project: {name:project.name, project_id:project.project_id, exported_at:project.exported_at,
+          source_audio_name:project.source_audio_name, vocal_start:project.vocal_start, vocal_end:project.vocal_end},
+        lyrics: {language:lyrics.language,text:lyrics.text,lines:lyrics.lines},
+        structure: lyrics.structure, sequencer:state.sequencer,
+        master: {file:masterPath,mime_type:master.type,encoding:"base64",data:encoded}
+      }, null, 2)], {type:"application/json;charset=utf-8"});
 
       originalReference = reference;
 
@@ -23677,6 +23696,32 @@ document.addEventListener("click", event => {
   // Читаем ZIP-контейнер, созданный предыдущей вставкой Save.
   // Файлы внутри него записаны без дополнительного сжатия.
   async function readMynus(file) {
+    const isJson = (await file.slice(0, 256).text()).replace(/^\uFEFF/, "").trimStart().startsWith("{");
+    if (isJson) {
+      const data = JSON.parse((await file.text()).replace(/^\uFEFF/, ""));
+      if (data.format !== "MyNus Karaoke" || data.format_version !== 2 ||
+          data.master?.encoding !== "base64" || typeof data.master.data !== "string" ||
+          !data.project || !Array.isArray(data.lyrics?.lines) || !Array.isArray(data.structure) ||
+          !data.sequencer || typeof data.sequencer !== "object") throw new Error("Invalid MyNus JSON");
+      const raw = atob(data.master.data);
+      const chunks = [];
+      for (let p=0;p<raw.length;p+=65536) {
+        const chunk=raw.slice(p,p+65536);
+        chunks.push(Uint8Array.from(chunk,c=>c.charCodeAt(0)));
+      }
+      const master = new Blob(chunks,{type:data.master.mime_type || "application/octet-stream"});
+      if (!master.size) throw new Error("Master is empty");
+      for (const line of data.lyrics.lines) {
+        if (!line || !Number.isFinite(line.start) || !Number.isFinite(line.end) ||
+            line.end < line.start || !Array.isArray(line.words)) throw new Error("Invalid lyrics");
+        for (const word of line.words) if (!word || typeof word.word !== "string" ||
+          !Number.isFinite(word.start) || !Number.isFinite(word.end) || word.end < word.start) throw new Error("Invalid words");
+      }
+      for (const part of data.structure) if (!part || !Number.isFinite(part.start) ||
+        !Number.isFinite(part.end) || part.end < part.start) throw new Error("Invalid Structure");
+      return {project:{...data.project,original:data.original_backup || null},
+        lyrics:{...data.lyrics,structure:data.structure},sequencer:data.sequencer,master};
+    }
     const buffer = await file.arrayBuffer();
     const bytes = new Uint8Array(buffer);
     const view = new DataView(buffer);
@@ -24005,6 +24050,7 @@ document.addEventListener("click", event => {
       setGlobalCursorTime(getProjectTrimStart());
       closeKaraokeFinishedDialog();
       setUiMode(UI_MODE.KARAOKE);
+      window.dispatchEvent(new Event("mynus-karaoke-loaded"));
 
       status.textContent = "Karaoke loaded: " +
         (loaded.project.name || file.name);
@@ -24025,6 +24071,68 @@ document.addEventListener("click", event => {
 })();
 </script>
 
+
+<!-- ========================================
+     ВЫБОР Original при BackUp
+======================================== -->
+
+
+<script>
+(() => {
+  const panel=document.createElement("div");
+  panel.className="export-dialog"; panel.style.zIndex="11000";
+  panel.innerHTML=`<div class="export-dialog-card"><div class="export-dialog-title">Original backup</div>
+    <p>Master is ready for karaoke. Original is only needed to restore the full project.</p>
+    <input type="text" style="width:100%;box-sizing:border-box" aria-label="Original backup reference">
+    <p role="status"></p><div class="export-format-grid">
+    <button type="button">Use saved access</button><button type="button">Select Original</button>
+    <button type="button">Continue Karaoke</button></div></div>`;
+  document.body.appendChild(panel);
+  const input=panel.querySelector("input"), info=panel.querySelector('[role="status"]');
+  const [resolveButton,selectButton,closeButton]=panel.querySelectorAll("button");
+  const fallback=document.createElement("input");fallback.type="file";fallback.accept="audio/*";fallback.hidden=true;document.body.appendChild(fallback);
+  function remember(file,reference) {
+    const loaded=window.currentMynusKaraoke;
+    if (!loaded) return;
+    loaded.original={name:file.name,reference}; loaded.project.original=loaded.original;
+    loaded.originalFile=file;
+    input.value=reference || "";info.textContent="Original selected: "+file.name;
+  }
+  async function selected(handle) {
+    const file=await handle.getFile();await saveRecentAudioHandle(handle,file);
+    remember(file,"mynus-local:"+encodeURIComponent(`${file.name}::${file.size}::${file.lastModified}`));
+  }
+  window.addEventListener("mynus-karaoke-loaded",()=>{
+    input.value=window.currentMynusKaraoke?.original?.reference || "";
+    info.textContent="Use saved access or select Original if it is unavailable.";
+    panel.classList.add("open");
+  });
+  resolveButton.onclick=async()=>{
+    try {
+      const ref=input.value.trim();
+      if (!ref.startsWith("mynus-local:")) throw new Error("For a local file, use Select Original. A typed path does not grant access.");
+      const key=decodeURIComponent(ref.slice(12));
+      const row=(await getRecentAudioEntries()).find(row=>row.key===key);
+      if (!row?.handle) throw new Error("Saved access not found. Select Original again.");
+      let permission=await row.handle.queryPermission({mode:"read"});
+      if(permission!=="granted") permission=await row.handle.requestPermission({mode:"read"});
+      if(permission!=="granted") throw new Error("Permission not granted. Select Original again.");
+      await selected(row.handle);
+    } catch(error) {info.textContent=error.message;}
+  };
+  selectButton.onclick=async()=>{
+    if(!window.showOpenFilePicker){fallback.value="";fallback.click();return;}
+    try {const [handle]=await showOpenFilePicker({multiple:false});if(handle)await selected(handle);}
+    catch(error){if(error.name!=="AbortError")info.textContent=error.message;}
+  };
+  fallback.onchange=()=>{if(fallback.files[0])remember(fallback.files[0],null);};
+  closeButton.onclick=()=>{
+    const loaded=window.currentMynusKaraoke;
+    if(loaded){loaded.original={...loaded.original,reference:input.value.trim()||null};loaded.project.original=loaded.original;}
+    panel.classList.remove("open");
+  };
+})();
+</script>
 
 
 <!-- ========================================
@@ -24069,13 +24177,14 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 6.2.2 | Save&Load Karaoke.minus");
-console.log("[SERVICE CONSOLE] MyNus 6.2.2 | Save&Load Karaoke.minus");
+console.log("MyNus MyNus 6.2.3 | mynus-json");
+console.log("[SERVICE CONSOLE] MyNus 6.2.3 | mynus-json");
 </script>
 
 <div class="row" id="build-down">
 deploy: --
 </div>
+
 
 <script>
 (function () {
