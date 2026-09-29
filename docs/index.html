@@ -1,4 +1,4 @@
-<!-- MyNus 6.2.0 | Аборт Сепарации -->
+<!-- MyNus 6.2.1 | Canvas Reset -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 6.2.0</title>
+  <title>MyNus 6.2.1</title>
 
 
  <style>
@@ -6622,8 +6622,9 @@ splitBtn.addEventListener(
 
 
 
-    // Выбранный файл уже был очищен через clearProjectState().
-    // Состояние PlayList намеренно сохраняется.
+    // Каждая сепарация начинает новое рабочее состояние, даже без Project.
+    // File уже сохранён в локальной переменной выше.
+    clearProjectState();
 
 
     studio.style.display =
@@ -7248,75 +7249,26 @@ function waitForMetadata(
 // ========================================
 
 // Загрузка Project и восстановление рабочего состояния.
-async function loadWaveforms(
-  originalFile,
-  data
-) {
-
-  const audioContext =
-    new AudioContext();
-
-
-  const originalBuffer =
-    await originalFile.arrayBuffer();
-
-
-  waveformData.original =
-    await audioContext.decodeAudioData(
-      originalBuffer.slice(0)
-    );
-
-
-  for (
-    const stemId
-    of stemIds
-  ) {
-
-    const stemURL =
-      data[
-        stemId
-      ];
-
-
-    /*
-    ========================================
-    GENERATED TRACKS | 4.6.0 FIX
-
-    Pitch Correction and Vocal Harmonizer
-    are not returned by Demucs. They are
-    created later from the Vocals track.
-    ========================================
-    */
-
-    if (!stemURL) {
-
-      continue;
-
+async function loadWaveforms(originalFile, data) {
+  const audioContext = new AudioContext();
+  // Заменяем весь набор, включая отсутствующие и сгенерированные дорожки.
+  for (const key of Object.keys(waveformData)) waveformData[key] = null;
+  clearProjectImage();
+  try {
+    const next = { original: await audioContext.decodeAudioData(
+      (await originalFile.arrayBuffer()).slice(0)) };
+    for (const stemId of stemIds) {
+      next[stemId] = null;
+      if (!data[stemId]) continue;
+      const response = await fetch(data[stemId]);
+      if (!response.ok) throw new Error("Cannot load track: " + stemId);
+      next[stemId] = await audioContext.decodeAudioData(
+        (await response.arrayBuffer()).slice(0));
     }
-
-
-    const stemBuffer =
-      await fetch(
-        stemURL
-      )
-      .then(
-        response =>
-          response.arrayBuffer()
-      );
-
-
-    waveformData[
-      stemId
-    ] =
-      await audioContext.decodeAudioData(
-        stemBuffer.slice(0)
-      );
-
+    Object.assign(waveformData, next);
+  } finally {
+    await audioContext.close();
   }
-
-
-  await audioContext.close();
-
 }
 
 
@@ -21910,6 +21862,7 @@ function clearProjectState() {
   updateCropButtons();
   updateMixButtons();
   syncScrollTo(0);
+  clearProjectImage();
 }
 
 function clearProjectImage() {
@@ -23368,8 +23321,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 6.2.0 | Аборт Сепарации");
-console.log("[SERVICE CONSOLE] MyNus 6.2.0 | Аборт Сепарации");
+console.log("MyNus 6.2.1 | Canvas Reset");
+console.log("[SERVICE CONSOLE] MyNus 6.2.1 | Canvas Reset");
 </script>
 
 <div class="row" id="build-down">
