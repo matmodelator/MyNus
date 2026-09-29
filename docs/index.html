@@ -1,4 +1,4 @@
-<!-- MyNus 6.1.0 | отмена автосплита и выбор языка -->
+<!-- MyNus 6.2.0 | Аборт Сепарации -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 6.1.0</title>
+  <title>MyNus 6.2.0</title>
 
 
  <style>
@@ -3273,7 +3273,7 @@ position: relative;
     </select>
 
     <button id="splitBtn">
-      Split
+      SPLIT
     </button>
 
   </div>
@@ -6463,9 +6463,123 @@ audioFile.addEventListener(
 // РАЗДЕЛЕНИЕ АУДИО
 // ========================================
 
+let activeSeparation = null;
+
+function updateSplitButton() {
+  const run = activeSeparation;
+  splitBtn.textContent = run && !run.serverFinished ? "ABORT" : "SPLIT";
+  splitBtn.disabled = Boolean(run && (run.abortRequested || run.serverFinished));
+  splitBtn.setAttribute("aria-label", splitBtn.textContent);
+}
+
+function separationAbortedError() {
+  const error = new Error("Separation aborted");
+  error.name = "SeparationAborted";
+  return error;
+}
+
+async function abortCurrentSeparation(run = activeSeparation) {
+  if (!run || run !== activeSeparation || run.serverFinished || run.aborted) return;
+  if (run.abortPromise) return run.abortPromise;
+  run.abortRequested = true;
+  run.abortError = "";
+  updateSplitButton();
+  status.textContent = run.jobId ? "Stopping separation..." : "Abort requested — waiting for job ID...";
+  status.className = "progress-status process";
+
+  // Не отменяем POST /separate: иначе сервер может создать job без известного ID.
+  // После получения ID отложенный Abort отправится именно этому job.
+  if (!run.jobId) return;
+
+  run.abortPromise = (async () => {
+    try {
+      const response = await fetch("/abort/" + encodeURIComponent(run.jobId), {
+        method: "POST",
+        credentials: "same-origin"
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Abort failed: HTTP " + response.status);
+      if (data.status === "aborted" || data.status === "cancelled") {
+        run.aborted = true;
+      } else if (data.status === "done" || data.status === "error") {
+        // Завершение могло опередить нажатие: окончательный результат читает polling.
+        run.serverFinished = true;
+      } else if (data.status !== "aborting") {
+        throw new Error("Server did not confirm cancellation");
+      }
+    } catch (error) {
+      run.abortRequested = false;
+      run.abortError = "Abort failed: " + error.message + ". Press ABORT to retry.";
+      status.textContent = run.abortError;
+      status.className = "progress-status error";
+    } finally {
+      run.abortPromise = null;
+      if (run === activeSeparation) updateSplitButton();
+    }
+  })();
+  return run.abortPromise;
+}
+
+async function waitForSeparation(jobId, run = activeSeparation) {
+  let failures = 0;
+  while (true) {
+    if (run.aborted) throw separationAbortedError();
+    let data;
+    try {
+      const response = await fetch("/progress/" + encodeURIComponent(jobId), {
+        credentials: "same-origin",
+        cache: "no-store"
+      });
+      data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Progress request failed: HTTP " + response.status);
+      if (!data.status) throw new Error("Invalid progress response");
+      failures = 0;
+    } catch (error) {
+      if (run.abortPromise) await run.abortPromise;
+      if (run.aborted) throw separationAbortedError();
+      if (++failures >= 3) throw error;
+      await sleep(500);
+      continue;
+    }
+
+    // Старый ответ /progress не должен перекрыть подтверждённую отмену.
+    if (run.abortPromise) await run.abortPromise;
+    if (run.aborted || data.status === "aborted" || data.status === "cancelled") {
+      run.aborted = true;
+      throw separationAbortedError();
+    }
+    if (data.status === "error") {
+      run.serverFinished = true;
+      throw new Error(data.error || "Separation failed");
+    }
+    if (data.status === "done") {
+      run.serverFinished = true;
+      updateSplitButton();
+      progressBar.style.width = "100%";
+      progressPercent.textContent = "100%";
+      return data;
+    }
+
+    const percent = Math.max(0, Math.min(100, Number(data.progress) || 0));
+    progressBar.style.width = percent + "%";
+    progressPercent.textContent = percent + "%";
+    status.textContent = run.abortError ||
+      (run.abortRequested || data.status === "aborting" ? "Stopping separation..." : "Separating...");
+    status.className = "progress-status " + (run.abortError ? "error" : "process");
+    await sleep(300);
+  }
+}
+
+updateSplitButton();
+
+
 splitBtn.addEventListener(
   "click",
   async () => {
+    if (activeSeparation) {
+      await abortCurrentSeparation();
+      return;
+    }
 
     const file =
       audioFile.files[0]
@@ -6483,6 +6597,14 @@ splitBtn.addEventListener(
     }
 
 
+    const run = {
+      jobId: null, abortRequested: false, abortPromise: null,
+      aborted: false, serverFinished: false, abortError: "",
+      previousStudioDisplay: studio.style.display
+    };
+    activeSeparation = run;
+    updateSplitButton();
+
     const formData =
       new FormData();
 
@@ -6498,8 +6620,7 @@ splitBtn.addEventListener(
     );
 
 
-    splitBtn.disabled =
-      true;
+
 
     // Выбранный файл уже был очищен через clearProjectState().
     // Состояние PlayList намеренно сохраняется.
@@ -6597,6 +6718,11 @@ splitBtn.addEventListener(
       const jobId =
         startData.job_id;
 
+      if (!jobId) throw new Error("Server did not return job_id");
+      run.jobId = jobId;
+      if (run.abortRequested) await abortCurrentSeparation(run);
+      if (run.aborted) throw separationAbortedError();
+
 
       resetMaster();
 
@@ -6627,7 +6753,7 @@ splitBtn.addEventListener(
 
       const data =
         await waitForSeparation(
-          jobId
+          jobId, run
         );
 
 
@@ -7020,25 +7146,25 @@ studio.style.display =
 
 
     catch (error) {
-
-      console.error(
-        error
-      );
-
-
-      status.textContent =
-        "Processing error: "
-        + error.message;
-      status.className = "progress-status error";
-
-    }
-
-
-    finally {
-
-      splitBtn.disabled =
-        false;
-
+      if (error.name === "SeparationAborted") {
+        newProjectPromptDialog?.classList.remove("open");
+        studio.style.display = run.previousStudioDisplay;
+        status.textContent = "Separation aborted";
+        status.className = "progress-status info";
+      } else {
+        // При потере polling стараемся остановить job, а не оставить его без UI.
+        if (run.jobId && !run.serverFinished && !run.aborted) {
+          await abortCurrentSeparation(run);
+        }
+        console.error(error);
+        status.textContent = "Processing error: " + error.message +
+          (run.abortError ? " — " + run.abortError + " Job: " + run.jobId : "");
+        status.className = "progress-status error";
+        studio.style.display = run.previousStudioDisplay;
+      }
+    } finally {
+      if (activeSeparation === run) activeSeparation = null;
+      updateSplitButton();
     }
 
   }
@@ -7048,94 +7174,6 @@ studio.style.display =
 // ========================================
 // ПРОГРЕСС DEMUCS
 // ========================================
-
-// Локальная функциональная операция этого блока.
-async function waitForSeparation(
-  jobId
-) {
-
-  while (true) {
-
-    const response =
-      await fetch(
-        "/progress/"
-        + jobId
-      );
-
-
-    if (!response.ok) {
-
-      throw new Error(
-        "Progress request failed"
-      );
-
-    }
-
-
-    const data =
-      await response.json();
-
-
-    const progress =
-      Number(
-        data.progress || 0
-      );
-
-
-    progressBar.style.width =
-      progress
-      + "%";
-
-
-    progressPercent.textContent =
-      progress
-      + "%";
-
-
-    status.textContent =
-      "Separating...";
-    status.className = "progress-status process";
-
-
-    if (
-      data.status === "done"
-    ) {
-
-      progressBar.style.width =
-        "100%";
-
-
-      progressPercent.textContent =
-        "100%";
-
-
-      return data;
-
-    }
-
-
-    if (
-      data.status === "error"
-    ) {
-
-      throw new Error(
-
-        data.error
-        || "Demucs error"
-
-      );
-
-    }
-
-
-    await sleep(
-      300
-    );
-
-  }
-
-}
-
 
 // Локальная функциональная операция этого блока.
 function sleep(
@@ -23330,8 +23368,8 @@ document.addEventListener("click", event => {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 6.1.0 | отмена автосплита и выбор языка");
-console.log("[SERVICE CONSOLE] MyNus 6.1.0 | отмена автосплита и выбор языка");
+console.log("MyNus 6.2.0 | Аборт Сепарации");
+console.log("[SERVICE CONSOLE] MyNus 6.2.0 | Аборт Сепарации");
 </script>
 
 <div class="row" id="build-down">
