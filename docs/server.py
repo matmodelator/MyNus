@@ -1,5 +1,5 @@
 # ========================================
-#  Аборт Сепарации - отдельные процессы севрера | 6.2.0 
+#  Один LanguageTool на процесс сервера. | 6.3.0 
 # ========================================
 
 # ========================================
@@ -1312,7 +1312,8 @@ def export_audio():
 # LYRICS AUTOFIX
 # ========================================
 
-_language_tools = {}
+_language_tool = None
+_language_tool_lock = threading.RLock()
 
 # Локальная серверная операция этого блока.
 def normalize_language(language):
@@ -1324,17 +1325,24 @@ def normalize_language(language):
 
 
 # Локальная серверная операция этого блока.
-def get_language_tool(language="ru-RU"):
+def check_language_tool(text, language="ru-RU"):
+    global _language_tool
+    # Initialization, language selection and check must be one critical section.
+    with _language_tool_lock:
+        if _language_tool is None:
+            _language_tool = language_tool_python.LanguageTool(normalize_language(language))
+        else:
+            _language_tool.language = normalize_language(language)
+        return _language_tool.check(text)
 
-    if language not in _language_tools:
 
-        _language_tools[language] = (
-            language_tool_python.LanguageTool(
-                language
-            )
-        )
+def close_language_tool():
+    global _language_tool
+    with _language_tool_lock:
+        if _language_tool is not None:
+            _language_tool.close()
+            _language_tool = None
 
-    return _language_tools[language]
 
 
 
@@ -1365,13 +1373,7 @@ def spellcheck():
             )
         )
 
-        tool = get_language_tool(
-            language
-        )
-
-        matches = tool.check(
-            text
-        )
+        matches = check_language_tool(text, language)
 
         result = []
 
@@ -2444,8 +2446,8 @@ def source_separation(db, uid):
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("MyNus Server 6.2.0")
-    print(r"Аборт Сепарации - отдельные процессы севрера | 6.2.0 ")
+    print("MyNus Server 6.3.0")
+    print(r"Один LanguageTool на процесс сервера. Создание, переключение языка и проверка текста защищены общей блокировкой. При штатном завершении сервера вызывается close(). | 6.3.0 ")
     print("=" * 72 + "\n")
 
     try:
@@ -2462,4 +2464,7 @@ if __name__ == "__main__":
         print(f"SERVER ERROR: {error}", file=sys.stderr)
         raise
     finally:
-        print_restart_command()
+        try:
+            close_language_tool()
+        finally:
+            print_restart_command()
