@@ -1,4 +1,4 @@
-<!-- MyNus 6.4.1 | fade&in\outFIX -->
+<!-- MyNus 6.4.2 | IN/OUT labels outside timeline clipping -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 6.4.1</title>
+  <title>MyNus 6.4.2</title>
 
 
  <style>
@@ -821,7 +821,7 @@ position: relative;
 
       height: 104px;
 
-      overflow: hidden;
+      overflow: visible;
 
       background: transparent;
 
@@ -1018,7 +1018,7 @@ position: relative;
 
     .project-trim-time {
       position: absolute;
-      top: 85px;
+      top: 80px;
       transform: translateX(-50%);
       min-width: 42px;
       text-align: center;
@@ -1031,8 +1031,54 @@ position: relative;
       z-index: 14;
     }
 
+    .selection-time-label {
+      position: absolute;
+      top: 7px;
+      min-width: 42px;
+      text-align: center;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      line-height: 18px;
+      font-weight: 700;
+      color: #00a844;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 17;
+    }
+
+    .selection-name-label {
+      position: absolute;
+      top: 66px;
+      min-width: 42px;
+      text-align: center;
+      font-family: Consolas, monospace;
+      font-size: 10px;
+      line-height: 15px;
+      font-weight: 700;
+      color: #00a844;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 17;
+    }
+
+
+/* IN — наружу влево + 4px от линии */
+.selection-time-label.in,
+.selection-name-label.in {
+  transform: translateX(calc(-100% - 4px));
+  text-align: right;
+}
+
+/* OUT — наружу вправо + 4px от линии */
+.selection-time-label.out,
+.selection-name-label.out {
+  transform: translateX(4px);
+  text-align: left;
+}
+
     .project-fade-time {
       position: absolute;
+      top: -5px;
       transform: translate(-50%, -3px);
       min-width: 42px;
       text-align: center;
@@ -1051,6 +1097,7 @@ position: relative;
       width: 18px;
       height: 15px;
       padding: 0;
+      opacity: 0.5;
       border: 1px solid #b72468;
       border-radius: 3px 3px 7px 7px;
       background: #e83e8c;
@@ -1077,6 +1124,7 @@ position: relative;
       width: 12px;
       height: 12px;
       padding: 0;
+      opacity: 0.5;
       border: 2px solid #b72468;
       border-radius: 50%;
       background: #fff;
@@ -4282,12 +4330,7 @@ position: relative;
           <div
             id="selectionRange"
             class="selection-range"
-          >
-            <span id="selectionInTime" class="selection-edge-label in time"></span>
-            <span class="selection-edge-label in name">IN</span>
-            <span id="selectionOutTime" class="selection-edge-label out time"></span>
-            <span class="selection-edge-label out name">OUT</span>
-          </div>
+          ></div>
 
           <div id="projectTrimMaskLeft" class="project-trim-mask"></div>
           <div id="projectTrimMaskRight" class="project-trim-mask"></div>
@@ -4311,6 +4354,10 @@ position: relative;
 
       <div id="projectFadeInTime" class="project-fade-time">0:00</div>
       <div id="projectFadeOutTime" class="project-fade-time">0:00</div>
+      <div id="selectionInTime" class="selection-time-label in">0:00</div>
+      <div id="selectionOutTime" class="selection-time-label out">0:00</div>
+      <div id="selectionInName" class="selection-name-label in">IN</div>
+      <div id="selectionOutName" class="selection-name-label out">OUT</div>
       <div id="projectTrimStartTime" class="project-trim-time">0:00</div>
       <div id="projectTrimEndTime" class="project-trim-time">0:00</div>
 
@@ -5270,6 +5317,12 @@ const selectionInTime =
 
 const selectionOutTime =
   document.getElementById("selectionOutTime");
+
+const selectionInName =
+  document.getElementById("selectionInName");
+
+const selectionOutName =
+  document.getElementById("selectionOutName");
 
 const masterState =
   document.getElementById("masterState");
@@ -14026,6 +14079,10 @@ function updateSelectionDisplay() {
 
   if (!hasSelection()) {
   selectionRange.style.display = "none";
+  if (selectionInTime) selectionInTime.style.display = "none";
+  if (selectionOutTime) selectionOutTime.style.display = "none";
+  if (selectionInName) selectionInName.style.display = "none";
+  if (selectionOutName) selectionOutName.style.display = "none";
   selectionInfo.textContent = "";
   updateSelectionButtons();
   updateTrackSelectionOverlays();
@@ -14039,9 +14096,32 @@ function updateSelectionDisplay() {
   selectionRange.style.left = startX + "px";
   selectionRange.style.width = Math.max(1, endX - startX) + "px";
 
-  // Верхние коды имеют ровно тот же формат, что и Trim.
-  if (selectionInTime) selectionInTime.textContent = formatTrimTime(fragmentStart);
-  if (selectionOutTime) selectionOutTime.textContent = formatTrimTime(fragmentEnd);
+  // IN / OUT time labels live outside masterTimeline so overflow:hidden cannot clip them.
+  const rowRect = masterTimeline.parentElement.getBoundingClientRect();
+  const timelineRect = masterTimeline.getBoundingClientRect();
+  const timelineOffsetX = timelineRect.left - rowRect.left;
+
+  if (selectionInTime) {
+    selectionInTime.textContent = formatTrimTime(fragmentStart);
+    selectionInTime.style.display = "block";
+    selectionInTime.style.left = (timelineOffsetX + startX) + "px";
+  }
+
+  if (selectionOutTime) {
+    selectionOutTime.textContent = formatTrimTime(fragmentEnd);
+    selectionOutTime.style.display = "block";
+    selectionOutTime.style.left = (timelineOffsetX + endX) + "px";
+  }
+
+  if (selectionInName) {
+    selectionInName.style.display = "block";
+    selectionInName.style.left = (timelineOffsetX + startX) + "px";
+  }
+
+  if (selectionOutName) {
+    selectionOutName.style.display = "block";
+    selectionOutName.style.left = (timelineOffsetX + endX) + "px";
+  }
 
   selectionInfo.textContent =
     "Selection: "
@@ -24621,8 +24701,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 6.4.1 | fade&in\outFIX ");
-console.log("[SERVICE CONSOLE] MyNus 6.4.1 | fade&in\outFIX ");
+console.log("6.4.2 | MyNus IN/OUT labels outside timeline clipping");
+console.log("[SERVICE CONSOLE] MyNus 6.4.2 | IN/OUT labels outside timeline clipping");
 </script>
 
 <div class="row" id="build-down">
