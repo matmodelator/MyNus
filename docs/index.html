@@ -1,4 +1,4 @@
-<!-- MyNus 6.4.0 | LOCAL SAVE&LOAD -->
+<!-- MyNus 6.4.1 | fade&in\outFIX -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 6.4.0</title>
+  <title>MyNus 6.4.1</title>
 
 
  <style>
@@ -976,11 +976,20 @@ position: relative;
       line-height: 1;
     }
 
-    .selection-edge-label.in { left: 4px; text-align: left; }
-    .selection-edge-label.out { right: 4px; text-align: right; }
+    .selection-edge-label.in {
+  left: auto;
+  right: calc(100% + 4px);
+  text-align: right;
+}
+
+.selection-edge-label.out {
+  right: auto;
+  left: calc(100% + 4px);
+  text-align: left;
+}
 
     /* selectionRange начинается на Y=22px. Trim-time стоит на Y=1px => -21px относительно Selection. */
-    .selection-edge-label.time { top: -21px; font-size: 12px; line-height: 18px; }
+    .selection-edge-label.time { top: -15px; font-size: 10px; line-height: 15px; }
 
     /* Trim-handle начинается на Y=66px => 44px относительно Selection. */
     .selection-edge-label.name { top: 44px; font-size: 10px; line-height: 15px; }
@@ -1009,7 +1018,7 @@ position: relative;
 
     .project-trim-time {
       position: absolute;
-      top: 82px;
+      top: 85px;
       transform: translateX(-50%);
       min-width: 42px;
       text-align: center;
@@ -1024,8 +1033,7 @@ position: relative;
 
     .project-fade-time {
       position: absolute;
-      top: 0;
-      transform: translateX(-50%);
+      transform: translate(-50%, -3px);
       min-width: 42px;
       text-align: center;
       font-family: Consolas, monospace;
@@ -6175,8 +6183,8 @@ let fragmentEnd = null;
 let projectTrimStart = 0;
 let projectTrimEnd = null;
 let projectTrimDragging = null;
-let projectFadeInEnd = null;
-let projectFadeOutStart = null;
+let projectFadeEnd = null;
+let projectFadeStart = null;
 let projectFadeDragging = null;
 
 // 5.4.13 | Separate Sequencer history. Session-only; never saved into Project JSON.
@@ -8029,8 +8037,8 @@ function updateProjectTrimDisplay() {
     formatTrimTime(end)
   );
 
-  const fadeInTime = projectFadeInEnd === null ? start : Math.max(start, Math.min(end, projectFadeInEnd));
-  const fadeOutTime = projectFadeOutStart === null ? end : Math.max(start, Math.min(end, projectFadeOutStart));
+  const fadeInTime = projectFadeEnd === null ? start : Math.max(start, Math.min(end, projectFadeEnd));
+  const fadeOutTime = projectFadeStart === null ? end : Math.max(start, Math.min(end, projectFadeStart));
   const fadeInX = fadeInTime * pixelsPerSecond;
   const fadeOutX = fadeOutTime * pixelsPerSecond;
 
@@ -8087,8 +8095,8 @@ function cloneSequencerHistoryState() {
     fxSettings: cloneSerializable(fxSettings, {}),
     trimStart: projectTrimStart,
     trimEnd: projectTrimEnd,
-    fadeInEnd: projectFadeInEnd,
-    fadeOutStart: projectFadeOutStart,
+    fadeEnd: projectFadeEnd,
+    fadeStart: projectFadeStart,
     originalVolume: Number(originalVolume?.value ?? 100),
     masterVolume: Number(masterVolume?.value ?? 100)
   };
@@ -8140,8 +8148,8 @@ function applySequencerHistoryState(state) {
     projectTrimEnd = state.trimEnd == null
       ? null
       : (Number.isFinite(Number(state.trimEnd)) ? Math.max(projectTrimStart, Number(state.trimEnd)) : null);
-    projectFadeInEnd = Number.isFinite(Number(state.fadeInEnd)) ? Number(state.fadeInEnd) : null;
-    projectFadeOutStart = Number.isFinite(Number(state.fadeOutStart)) ? Number(state.fadeOutStart) : null;
+    projectFadeEnd = Number.isFinite(Number(state.fadeEnd)) ? Number(state.fadeEnd) : null;
+    projectFadeStart = Number.isFinite(Number(state.fadeStart)) ? Number(state.fadeStart) : null;
 
     if (originalVolume && Number.isFinite(Number(state.originalVolume))) {
       originalVolume.value = String(state.originalVolume);
@@ -8239,14 +8247,14 @@ function setProjectTrimBoundary(which, rawTime) {
   if (which === "start") {
     const maxStart = Math.max(0, getProjectTrimEnd() - 1);
     projectTrimStart = Math.min(snapped, maxStart);
-    if (projectFadeInEnd !== null && projectFadeInEnd < projectTrimStart) projectFadeInEnd = null;
-    if (projectFadeOutStart !== null && projectFadeOutStart < projectTrimStart) projectFadeOutStart = projectTrimStart;
+    if (projectFadeEnd !== null && projectFadeEnd < projectTrimStart) projectFadeEnd = null;
+    if (projectFadeStart !== null && projectFadeStart < projectTrimStart) projectFadeStart = projectTrimStart;
     if (getCurrentTime() < projectTrimStart) setGlobalCursorTime(projectTrimStart);
   } else {
     const minEnd = Math.min(duration, getProjectTrimStart() + 1);
     projectTrimEnd = Math.max(minEnd, snapped);
-    if (projectFadeOutStart !== null && projectFadeOutStart > projectTrimEnd) projectFadeOutStart = null;
-    if (projectFadeInEnd !== null && projectFadeInEnd > projectTrimEnd) projectFadeInEnd = projectTrimEnd;
+    if (projectFadeStart !== null && projectFadeStart > projectTrimEnd) projectFadeStart = null;
+    if (projectFadeEnd !== null && projectFadeEnd > projectTrimEnd) projectFadeEnd = projectTrimEnd;
     if (getCurrentTime() > projectTrimEnd) setGlobalCursorTime(projectTrimEnd);
   }
   updateProjectTrimDisplay();
@@ -8297,9 +8305,9 @@ function setProjectFadeBoundary(which, rawTime) {
   const time = Math.max(start, Math.min(end, Number(rawTime) || 0));
 
   if (which === "in") {
-    projectFadeInEnd = Math.abs(time - start) < 0.01 ? null : time;
+    projectFadeEnd = Math.abs(time - start) < 0.01 ? null : time;
   } else {
-    projectFadeOutStart = Math.abs(time - end) < 0.01 ? null : time;
+    projectFadeStart = Math.abs(time - end) < 0.01 ? null : time;
   }
 
   updateProjectTrimDisplay();
@@ -11218,17 +11226,17 @@ function getMasterFadeGainAtTime(time) {
   const current = Number(time) || 0;
   const start = getProjectTrimStart();
   const end = getProjectTrimEnd();
-  const fadeInEnd = projectFadeInEnd === null ? start : Math.max(start, Math.min(end, projectFadeInEnd));
-  const fadeOutStart = projectFadeOutStart === null ? end : Math.max(start, Math.min(end, projectFadeOutStart));
+  const fadeEnd = projectFadeEnd === null ? start : Math.max(start, Math.min(end, projectFadeEnd));
+  const fadeStart = projectFadeStart === null ? end : Math.max(start, Math.min(end, projectFadeStart));
 
   let gain = 1;
 
-  if (fadeInEnd > start && current <= fadeInEnd) {
-    gain = Math.max(0, Math.min(1, (current - start) / (fadeInEnd - start)));
+  if (fadeEnd > start && current <= fadeEnd) {
+    gain = Math.max(0, Math.min(1, (current - start) / (fadeEnd - start)));
   }
 
-  if (fadeOutStart < end && current >= fadeOutStart) {
-    gain = Math.min(gain, Math.max(0, Math.min(1, (end - current) / (end - fadeOutStart))));
+  if (fadeStart < end && current >= fadeStart) {
+    gain = Math.min(gain, Math.max(0, Math.min(1, (end - current) / (end - fadeStart))));
   }
 
   return Math.max(0, Math.min(1, gain));
@@ -21272,8 +21280,8 @@ function projectStateJson() {
       fragmentEnd,
       trimStart: getProjectTrimStart(),
       trimEnd: Number.isFinite(Number(projectTrimEnd)) ? getProjectTrimEnd() : null,
-      fadeInEnd: projectFadeInEnd,
-      fadeOutStart: projectFadeOutStart,
+      fadeEnd: projectFadeEnd,
+      fadeStart: projectFadeStart,
       stemState: cloneSerializable(stemState, {}),
       stemCrop: cloneSerializable(stemCrop, {}),
       fxSettings: cloneSerializable(fxSettings, {}),
@@ -22088,8 +22096,8 @@ function resetProjectSequencerStateForLoad() {
   fragmentEnd = null;
   projectTrimStart = 0;
   projectTrimEnd = null;
-  projectFadeInEnd = null;
-  projectFadeOutStart = null;
+  projectFadeEnd = null;
+  projectFadeStart = null;
   mode = "original";
 }
 
@@ -22118,8 +22126,15 @@ function restoreProjectSequencerState(saved) {
         ? Math.max(projectTrimStart, Number(saved.trimEnd))
         : null
     );
-  projectFadeInEnd = Number.isFinite(Number(saved.fadeInEnd)) ? Number(saved.fadeInEnd) : null;
-  projectFadeOutStart = Number.isFinite(Number(saved.fadeOutStart)) ? Number(saved.fadeOutStart) : null;
+  projectFadeEnd =
+  saved.fadeEnd != null && Number.isFinite(Number(saved.fadeEnd))
+    ? Number(saved.fadeEnd)
+    : null;
+
+projectFadeStart =
+  saved.fadeStart != null && Number.isFinite(Number(saved.fadeStart))
+    ? Number(saved.fadeStart)
+    : null;
   if (["original", "mix", "master"].includes(saved.mode)) mode = saved.mode;
 }
 
@@ -22337,8 +22352,8 @@ function clearProjectState() {
   projectTrimStart = 0;
   projectTrimEnd = null;
   projectTrimDragging = null;
-  projectFadeInEnd = null;
-  projectFadeOutStart = null;
+  projectFadeEnd = null;
+  projectFadeStart = null;
   projectFadeDragging = null;
   loopEnabled = false;
   lyricsTransportMode = "master";
@@ -24606,8 +24621,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 6.4.0 | LOCAL SAVE&LOAD");
-console.log("[SERVICE CONSOLE] MyNus 6.4.0 | LOCAL SAVE&LOAD");
+console.log("MyNus 6.4.1 | fade&in\outFIX ");
+console.log("[SERVICE CONSOLE] MyNus 6.4.1 | fade&in\outFIX ");
 </script>
 
 <div class="row" id="build-down">
