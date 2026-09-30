@@ -1,4 +1,4 @@
-<!-- MyNus 6.3.3 | PlayList\CheckMaster\TrimFade -->
+<!-- MyNus 6.3.4 | fade\rec\color FIX -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 6.3.3</title>
+  <title>MyNus 6.3.4</title>
 
 
  <style>
@@ -5267,6 +5267,26 @@ const masterState =
   document.getElementById("masterState");
 
 
+function setMasterState(text) {
+
+  masterState.textContent =
+    text;
+
+  const colors = {
+    "No Records": "#2196F3",
+    "Rec armed — pre-roll": "#FFD600",
+    "Recording...": "#800020",
+    "Master recording error": "#FF0000",
+    "Recorded — not saved": "#FFD600",
+    "Saved successfully": "#00C853",
+    "Recover by History": "#00C853"
+  };
+
+  masterState.style.color =
+    colors[text] || "";
+}
+
+
 const fragmentStartBtn =
   document.getElementById("fragmentStartBtn");
 
@@ -7487,8 +7507,7 @@ function resetMaster() {
   clearSelection();
 
 
-  masterState.textContent =
-    "No Records";
+  setMasterState("No Records");
 
 
   recordMasterBtn.disabled =
@@ -11215,10 +11234,32 @@ function getMasterFadeGainAtTime(time) {
   return Math.max(0, Math.min(1, gain));
 }
 
-function updateMasterFadeGain(time = getCurrentTime()) {
-  if (!masterFadeGainNode || !mixAudioContext) return;
-  const gain = getMasterFadeGainAtTime(time);
-  masterFadeGainNode.gain.setValueAtTime(gain, mixAudioContext.currentTime);
+function updateMasterFadeGain(
+  time = getCurrentTime()
+) {
+
+  if (
+    !masterFadeGainNode
+    ||
+    !mixAudioContext
+  ) {
+    return;
+  }
+
+  // Fade принадлежит только
+  // воспроизведению MASTER.
+  //
+  // ORIGINAL и MIX всегда проходят
+  // без Fade.
+  const gain =
+    mode === "master"
+      ? getMasterFadeGainAtTime(time)
+      : 1;
+
+  masterFadeGainNode.gain.setValueAtTime(
+    gain,
+    mixAudioContext.currentTime
+  );
 }
 
 // ========================================
@@ -11255,7 +11296,9 @@ async function startMasterRecording() {
       masterRecordArmed = true;
       recordMasterBtn.disabled = true;
       stopMasterBtn.disabled = false;
-      masterState.textContent = "Rec armed — pre-roll";
+      setMasterState(
+  "Rec armed — pre-roll"
+);
       if (!isPlaying) playCurrentMode();
       return;
     }
@@ -11291,7 +11334,9 @@ function beginMasterCaptureAt(startTime) {
   recordMasterBtn.disabled = true;
   stopMasterBtn.disabled = false;
   saveAsMasterBtn.disabled = true;
-  masterState.textContent = "Recording...";
+  setMasterState(
+  "Recording..."
+);
   startMasterWaveformCapture();
 }
 
@@ -11303,8 +11348,7 @@ function stopMasterRecording() {
     masterRecordSelectionMode = false;
     recordMasterBtn.disabled = false;
     stopMasterBtn.disabled = true;
-    masterState.textContent = "Rec Off";
-    return;
+        return;
   }
 
   if (!masterRecording) return;
@@ -11332,10 +11376,7 @@ function stopMasterRecording() {
     true;
 
 
-  masterState.textContent =
-    "Processing recording...";
-
-
+  
   finishMasterRecording();
 
 }
@@ -11703,12 +11744,14 @@ async function finishMasterRecording() {
     );
 
 
-    masterState.textContent =
-      "Master recording error";
+    setMasterState(
+  "Master recording error"
+);
 
 
-    status.textContent =
-      "Master recording error";
+    setMasterState(
+  "Master recording error"
+);
     status.className = "progress-status error";
 
 
@@ -11717,8 +11760,9 @@ async function finishMasterRecording() {
   }
 
 
-  masterState.textContent =
-    "Recorded — not saved";
+  setMasterState(
+  "Recorded — not saved"
+);
 
 
   saveAsMasterBtn.disabled =
@@ -12646,7 +12690,9 @@ saveMasterRecBtn?.addEventListener("click", () => {
 
   savedMasterBlob = masterBlob;
 
-  masterState.textContent = "Saved successfully";
+  setMasterState(
+  "Saved successfully"
+);
   status.textContent = "Master Rec saved successfully";
   status.className = "progress-status success";
 
@@ -12702,8 +12748,7 @@ async function restoreMasterFromSegments() {
     clearMasterCanvas();
 
 
-    masterState.textContent =
-      "No Records";
+    setMasterState("No Records");
 
 
     saveAsMasterBtn.disabled =
@@ -12725,8 +12770,9 @@ async function restoreMasterFromSegments() {
   drawMasterCompositeWaveform();
 
 
-  masterState.textContent =
-    "Recover by History";
+  setMasterState(
+  "Recover by History"
+);
 
 
   saveAsMasterBtn.disabled =
@@ -19718,29 +19764,95 @@ function startAnimation() {
       }
 
       if (masterRecording) {
-        if (masterRecordSelectionMode && hasSelection()) {
-          if (getCurrentTime() >= fragmentEnd) {
-            if (loopEnabled) {
-              syncAllTo(fragmentStart);
-              updatePlayheads(); updateMasterCursor(); updateTimeDisplay(); updateLyricsMasterCounter();
-            } else {
-              syncAllTo(fragmentEnd);
-              stopMasterRecording();
-              updatePlayheads(); updateMasterCursor(); updateTimeDisplay(); updateLyricsMasterCounter();
-            }
-          }
-        } else {
-          const recordEnd = getProjectPlaybackEnd();
-          if (Number.isFinite(recordEnd) && getCurrentTime() >= recordEnd) {
-            syncAllTo(recordEnd);
-            updateMasterFadeGain(recordEnd);
-            stopMasterRecording();
-            pauseAll();
-            updatePlayheads(); updateMasterCursor(); updateTimeDisplay(); updateLyricsMasterCounter();
-            return;
-          }
-        }
+
+  if (
+    masterRecordSelectionMode
+    &&
+    hasSelection()
+  ) {
+
+    if (
+      getCurrentTime() >=
+      fragmentEnd
+    ) {
+
+      // Фиксируем окончание записи
+      // точно в OUT.
+      syncAllTo(
+        fragmentEnd
+      );
+
+      stopMasterRecording();
+
+      if (loopEnabled) {
+
+        // LOOP ON:
+        // OUT завершает запись
+        // и ставит транспорт на Pause.
+        pauseAll();
+
+        updatePlayheads();
+        updateMasterCursor();
+        updateTimeDisplay();
+        updateLyricsMasterCounter();
+
+        return;
+
       }
+
+      // LOOP OFF:
+      // запись закончилась,
+      // но PLAY должен продолжиться.
+      //
+      // stopMasterRecording() уже
+      // зафиксировал запись в OUT.
+      // Возвращать курсор назад нельзя —
+      // продолжаем воспроизведение от OUT.
+      syncAllTo(
+        fragmentEnd
+      );
+
+      if (!isPlaying) {
+        playCurrentMode();
+      }
+
+      updatePlayheads();
+      updateMasterCursor();
+      updateTimeDisplay();
+      updateLyricsMasterCounter();
+    }
+
+  } else {
+
+    const recordEnd =
+      getProjectPlaybackEnd();
+
+    if (
+      Number.isFinite(recordEnd)
+      &&
+      getCurrentTime() >= recordEnd
+    ) {
+
+      syncAllTo(
+        recordEnd
+      );
+
+      updateMasterFadeGain(
+        recordEnd
+      );
+
+      stopMasterRecording();
+      pauseAll();
+
+      updatePlayheads();
+      updateMasterCursor();
+      updateTimeDisplay();
+      updateLyricsMasterCounter();
+
+      return;
+    }
+  }
+}
 
 
       if (
@@ -20412,8 +20524,7 @@ function resetToInitialSplit() {
   syncTransportMirrors();
 
 
-  masterState.textContent =
-    "No Records";
+  setMasterState("No Records");
 
 
   status.textContent =
@@ -22289,7 +22400,9 @@ progressPercent.textContent = "100%";
         masterAudio.src = masterObjectURL;
         await waitForMetadata(masterAudio);
 
-        masterState.textContent = "Saved successfully";
+        setMasterState(
+  "Saved successfully"
+);
         saveAsMasterBtn.disabled = false;
         saveMasterSelectionBtn.disabled = !hasSelection();
         updateMasterHistoryButtons();
@@ -24203,7 +24316,6 @@ document.addEventListener("click", event => {
       if (zoomValueTop) zoomValueTop.textContent = zoomValue.textContent;
       sharedScrollInner.style.width = getTimelineWidth() + "px";
 
-      masterState.textContent = "Karaoke Master";
       saveAsMasterBtn.disabled = false;
       editLyricsBtn.disabled = false;
 
@@ -24349,7 +24461,6 @@ async function restoreMynusSnapshot(saved) {
   stemIds.forEach(id=>applyFxSettings(id));applyMix();
   updateMasterHistoryButtons();updateCropButtons();updateMixButtons();
   saveAsMasterBtn.disabled=false;editLyricsBtn.disabled=false;
-  masterState.textContent="Karaoke Master";
   setGlobalCursorTime(getProjectTrimStart());drawAllWaveforms();drawMasterTimeline();
   status.textContent="Project restored. Save Project to keep it.";
 }
@@ -24398,8 +24509,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 6.3.3 | PlayList\CheckMaster\TrimFade");
-console.log("[SERVICE CONSOLE] MyNus 6.3.3 | PlayList\CheckMaster\TrimFade");
+console.log("MyNus 6.3.4 | fade\rec\color FIX");
+console.log("[SERVICE CONSOLE] MyNus 6.3.4 | fade\rec\color FIX");
 </script>
 
 <div class="row" id="build-down">
