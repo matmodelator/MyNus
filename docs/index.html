@@ -1,4 +1,4 @@
-<!-- MyNus 6.3.4 | fade\rec\color FIX -->
+<!-- MyNus 6.4.0 | LOCAL SAVE&LOAD -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 6.3.4</title>
+  <title>MyNus 6.4.0</title>
 
 
  <style>
@@ -4817,7 +4817,7 @@ position: relative;
     <input id="saveProjectNameInput" type="text" autocomplete="off" style="width:100%; box-sizing:border-box; margin:0 0 12px;">
     <label for="saveProjectPathInput" style="display:block; margin:0 0 6px;">Save to</label>
     <div style="display:grid; grid-template-columns:1fr auto; gap:6px; margin-bottom:12px;">
-      <input id="saveProjectPathInput" type="text" autocomplete="off" value="C:\MyNus\Projects" style="width:100%; box-sizing:border-box;">
+      <input id="saveProjectPathInput" type="text" autocomplete="off" value="Browser downloads" readonly style="width:100%; box-sizing:border-box;">
       <button type="button" id="browseSaveProjectPathBtn">Browse…</button>
     </div>
     <div id="saveProjectMessage" style="min-height:18px; font-size:12px; margin-bottom:10px;"></div>
@@ -21263,7 +21263,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "5.5.2",
+    version: "6.4.0",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -21316,123 +21316,360 @@ function projectTrackFilename(trackId, source) {
 }
 
 // Сохранение текущего Project и связанных данных.
+// Local Project library and PlayList. Server receives no project-save requests.
+const localProjectMemory = new Map();
+let localProjectObjectURLs = [];
+let localProjectSaveHandle = null;
+function localProjectDb() {
+  return new Promise((resolve,reject)=>{
+    const r=indexedDB.open('mynus_local_projects_v1',1);
+    r.onupgradeneeded=()=>{r.result.createObjectStore('projects',{keyPath:'id'});r.result.createObjectStore('state');};
+    r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);
+  });
+}
+async function localDbAction(store,mode,operation) {
+  const db=await localProjectDb();
+  try {return await new Promise((resolve,reject)=>{
+    const tx=db.transaction(store,mode);let value;
+    const r=operation(tx.objectStore(store));r.onsuccess=()=>{value=r.result;};
+    tx.oncomplete=()=>resolve(value);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('Local storage aborted'));
+  });}finally{db.close();}
+}
+async function localRemember(record) {
+  localProjectMemory.set(record.id,record);
+  try{await localDbAction('projects','readwrite',store=>store.put(record));}
+  catch(error){status.textContent='Project file ready; browser library could not retain it: '+error.message;}
+}
+async function localRecord(id) {
+  const record=localProjectMemory.get(id)||await localDbAction('projects','readonly',s=>s.get(id));
+  if(!record)throw Error('Open this project archive from your computer first.');
+  return record;
+}
+async function localPlaylistState() {
+  return await localDbAction('state','readonly',s=>s.get('playlist'))||{current:null,queue:[],history:[]};
+}
+async function localPlaylistWrite(state) {
+  await localDbAction('state','readwrite',s=>s.put(state,'playlist'));
+}
+async function localProjectPayload(id) {
+  const record=await localRecord(id);
+  const next=[];const tracks={};
+  for(const [track,blob] of Object.entries(record.media)){tracks[track]=URL.createObjectURL(blob);next.push(tracks[track]);}
+  const old=localProjectObjectURLs;localProjectObjectURLs=next;
+  // The existing loader pauses playback before requesting this payload.
+  old.forEach(url=>URL.revokeObjectURL(url));
+  return {id:record.id,name:record.name,project:record.project,lyrics:record.lyrics,tracks};
+}
+async function localImportProject(file) {
+  const entries=await localReadProjectArchive(file);
+  const raw=entries.get('Project.json');if(!raw)throw Error('Not a full MyNus project archive.');
+  const m=JSON.parse(new TextDecoder().decode(raw));
+  if(m.format!=='MyNus Project'||m.format_version!==1||!m.project||!Array.isArray(m.lyrics?.lines)||!m.media?.original)throw Error('Invalid full project manifest');
+  const media={};
+  for(const [track,spec] of Object.entries(m.media)){
+    if(!projectTrackIds.includes(track)||!spec||typeof spec.file!=='string'||!entries.has(spec.file))throw Error('Invalid project track: '+track);
+    media[track]=new Blob([entries.get(spec.file)],{type:spec.mime||'application/octet-stream'});
+  }
+  const record={id:crypto.randomUUID(),name:String(m.name||file.name),project:m.project,lyrics:m.lyrics,media};
+  await localRemember(record);return record;
+}
+function localChooseProject() {
+  return new Promise(resolve=>{
+    const input=document.createElement('input');input.type='file';input.accept='.zip';input.hidden=true;document.body.appendChild(input);
+    input.onchange=()=>{const file=input.files[0]||null;input.remove();resolve(file);};
+    input.addEventListener('cancel',()=>{input.remove();resolve(null);},{once:true});input.click();
+  });
+}
+async function localOpenProject() {
+  const file=await localChooseProject();if(!file)return;
+  try{
+    const record=await localImportProject(file);
+    if(await loadProjectById(record.id)===false)return;
+    await markProjectInUse(record.id,postPlayLoadAnotherPending?Infinity:null,postPlayLoadAnotherPending?null:'open');
+    postPlayLoadAnotherPending=false;await refreshFullScreenPlaylist();
+  }catch(error){status.textContent=error.message;status.className='progress-status error';window.alert(error.message);}
+}
+
+  async function localWriteProjectArchive(entries) {
+    const encoder = new TextEncoder();
+    const parts = [];
+    const directory = [];
+    let offset = 0;
+
+    for (const [filename, blob] of entries) {
+      const name = encoder.encode(filename);
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+
+      if (offset + bytes.length + name.length + 30 > 0xffffffff) {
+        throw new Error("File exceeds ZIP size limit.");
+      }
+
+      let crc = 0xffffffff;
+      for (const byte of bytes) {
+        crc ^= byte;
+        for (let bit = 0; bit < 8; bit++) {
+          crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+        }
+      }
+      crc = (crc ^ 0xffffffff) >>> 0;
+
+      const header = new Uint8Array(30 + name.length);
+      const h = new DataView(header.buffer);
+      h.setUint32(0, 0x04034b50, true);
+      h.setUint16(4, 20, true);
+      h.setUint16(6, 0x800, true);
+      h.setUint32(14, crc, true);
+      h.setUint32(18, bytes.length, true);
+      h.setUint32(22, bytes.length, true);
+      h.setUint16(26, name.length, true);
+      header.set(name, 30);
+
+      const central = new Uint8Array(46 + name.length);
+      const c = new DataView(central.buffer);
+      c.setUint32(0, 0x02014b50, true);
+      c.setUint16(4, 20, true);
+      c.setUint16(6, 20, true);
+      c.setUint16(8, 0x800, true);
+      c.setUint32(16, crc, true);
+      c.setUint32(20, bytes.length, true);
+      c.setUint32(24, bytes.length, true);
+      c.setUint16(28, name.length, true);
+      c.setUint32(42, offset, true);
+      central.set(name, 46);
+
+      parts.push(header, blob);
+      directory.push(central);
+      offset += header.length + bytes.length;
+    }
+
+    const end = new Uint8Array(22);
+    const e = new DataView(end.buffer);
+    e.setUint32(0, 0x06054b50, true);
+    e.setUint16(8, entries.length, true);
+    e.setUint16(10, entries.length, true);
+    e.setUint32(
+      12,
+      directory.reduce((sum, entry) => sum + entry.length, 0),
+      true
+    );
+    e.setUint32(16, offset, true);
+
+    return new Blob([...parts, ...directory, end], {
+      type: "application/zip"
+    });
+  }
+
+  function crc32(bytes) {
+    let crc = 0xffffffff;
+    for (const byte of bytes) {
+      crc ^= byte;
+      for (let i = 0; i < 8; i++) {
+        crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+      }
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  // Читаем ZIP-контейнер, созданный предыдущей вставкой Save.
+  // Файлы внутри него записаны без дополнительного сжатия.
+
+async function localReadProjectArchive(file) {
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    const view = new DataView(buffer);
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+
+    function requireRange(offset, size) {
+      if (
+        !Number.isSafeInteger(offset) ||
+        !Number.isSafeInteger(size) ||
+        offset < 0 || size < 0 ||
+        offset + size > bytes.length
+      ) {
+        throw new Error("Damaged .mynus file.");
+      }
+    }
+
+    let end = -1;
+    for (
+      let p = bytes.length - 22;
+      p >= Math.max(0, bytes.length - 65557);
+      p--
+    ) {
+      if (
+        view.getUint32(p, true) === 0x06054b50 &&
+        p + 22 + view.getUint16(p + 20, true) === bytes.length
+      ) {
+        end = p;
+        break;
+      }
+    }
+
+    if (end < 0) throw new Error("Invalid .mynus archive.");
+
+    if (
+      view.getUint16(end + 4, true) !== 0 ||
+      view.getUint16(end + 6, true) !== 0
+    ) {
+      throw new Error("Multipart archives are not supported.");
+    }
+
+    const count = view.getUint16(end + 10, true);
+    const directorySize = view.getUint32(end + 12, true);
+    const directoryStart = view.getUint32(end + 16, true);
+
+    if ((count < 2 || count > 14) || directoryStart + directorySize !== end) {
+      throw new Error("Unsupported .mynus structure.");
+    }
+
+    const files = new Map();
+    let p = directoryStart;
+
+    for (let i = 0; i < count; i++) {
+      requireRange(p, 46);
+
+      if (view.getUint32(p, true) !== 0x02014b50) {
+        throw new Error("Damaged archive directory.");
+      }
+
+      const flags = view.getUint16(p + 8, true);
+      const method = view.getUint16(p + 10, true);
+      const checksum = view.getUint32(p + 16, true);
+      const packedSize = view.getUint32(p + 20, true);
+      const size = view.getUint32(p + 24, true);
+      const nameLength = view.getUint16(p + 28, true);
+      const extraLength = view.getUint16(p + 30, true);
+      const commentLength = view.getUint16(p + 32, true);
+      const localOffset = view.getUint32(p + 42, true);
+
+      if ((flags & 1) || method !== 0 || packedSize !== size) {
+        throw new Error("Unsupported .mynus encoding.");
+      }
+
+      requireRange(p + 46, nameLength + extraLength + commentLength);
+      const name = decoder.decode(bytes.subarray(p + 46, p + 46 + nameLength));
+
+      if (files.has(name)) throw new Error("Duplicate archive entry.");
+
+      requireRange(localOffset, 30);
+      if (view.getUint32(localOffset, true) !== 0x04034b50) {
+        throw new Error("Damaged archive entry.");
+      }
+
+      const localNameLength = view.getUint16(localOffset + 26, true);
+      const localExtraLength = view.getUint16(localOffset + 28, true);
+      requireRange(localOffset + 30, localNameLength + localExtraLength);
+
+      const localName = decoder.decode(
+        bytes.subarray(localOffset + 30, localOffset + 30 + localNameLength)
+      );
+      if (localName !== name) throw new Error("Archive entry mismatch.");
+
+      const start = localOffset + 30 + localNameLength + localExtraLength;
+      requireRange(start, size);
+      if (start + size > directoryStart) {
+        throw new Error("Damaged archive entry size.");
+      }
+
+      const content = bytes.subarray(start, start + size);
+      if (crc32(content) !== checksum) {
+        throw new Error("File checksum failed: " + name);
+      }
+
+      files.set(name, content);
+      p += 46 + nameLength + extraLength + commentLength;
+    }
+
+    if (p !== end) throw new Error("Invalid archive directory size.");
+
+    return files;
+}
+
 async function saveCurrentProject(projectName, savePath, conflictAction = "", options = {}) {
-  const fd = new FormData();
-  const name = String(projectName || "").trim() || projectSafeName();
-  const targetPath = String(savePath || "").trim();
-  fd.append("name", name);
-  fd.append("save_path", targetPath);
-  fd.append("conflict_action", conflictAction);
-  if (options.projectId) fd.append("project_id", String(options.projectId));
-  fd.append("lyrics_json", JSON.stringify(projectLyricsJson()));
-  fd.append("project_json", JSON.stringify(projectStateJson()));
-
-  // Используем существующий источник сохранения отдельной дорожки: getTrackBlob().
-  // 5.4.18 | Сохраняются девять исходных/рабочих дорожек + Master Rec.
-  // Три резервных слота остаются резервными.
-  const workingTrackIds = projectTrackIds.slice(0, 10);
-  for (const trackId of workingTrackIds) {
-    const source = await getTrackBlob(trackId);
-    if (!source?.blob) continue;
-    fd.append("track_" + trackId, source.blob, projectTrackFilename(trackId, source));
+  const name=String(projectName||"").trim()||projectSafeName();
+  const media={}, specs={}, entries=[];
+  const project=projectStateJson(), lyrics=projectLyricsJson();project.tracks={};
+  status.textContent="Preparing local project…";
+  for(const track of projectTrackIds.slice(0,10)) {
+    const source=await getTrackBlob(track);if(!source?.blob)continue;
+    const filename=projectTrackFilename(track,source);
+    media[track]=source.blob;specs[track]={file:filename,mime:source.blob.type};project.tracks[track]=filename;
+    entries.push([filename,source.blob]);
   }
-
-  status.textContent = "Saving project...";
-  status.className = "progress-status process";
-  const response = await fetch("/projects/save", { method: "POST", body: fd });
-  const data = await response.json().catch(() => ({}));
-  if (response.status === 409 && data.conflict) {
-    const error = new Error(data.error || "Project already exists");
-    error.projectConflict = data;
-    throw error;
+  if(!media.original)throw Error('Full Project requires Original. Restore Project first if only Karaoke is loaded.');
+  const id=options.projectId||activeProjectId||crypto.randomUUID();
+  const manifest={format:'MyNus Project',format_version:1,name,project,lyrics,media:specs};
+  entries.unshift(['Project.json',new Blob([JSON.stringify(manifest,null,2)],{type:'application/json'})]);
+  const archive=await localWriteProjectArchive(entries);
+  if(localProjectSaveHandle){
+    const writable=await localProjectSaveHandle.createWritable();
+    try{await writable.write(archive);await writable.close();}catch(error){await writable.abort().catch(()=>{});throw error;}
+    localProjectSaveHandle=null;
+  }else{
+    const url=URL.createObjectURL(archive),link=document.createElement('a');
+    link.href=url;link.download=name.replace(/[\\/:*?"<>|]+/g,'_')+'.mynus-project.zip';
+    document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
   }
-  if (!response.ok) throw new Error(data.error || "SAVE Project failed");
-
-  if (options.activateProject) {
-    setProjectActive(data.id || name);
-    currentPlaylistProject = data.id || name;
-    await markProjectInUse(data.id || name, Infinity);
-  }
-
-  const savedPath = data.path || targetPath || "C:\\MyNus\\Projects";
-  status.textContent = "Project saved: " + (data.name || name);
-  status.className = "progress-status success";
-  if (saveProjectMessage) saveProjectMessage.textContent = "Saved successfully: " + savedPath;
-  window.alert("Project saved successfully:\n" + savedPath);
-  return data;
+  await localRemember({id,name,project,lyrics,media});
+  setProjectActive(id);
+  if(options.activateProject)await markProjectInUse(id,Infinity);
+  status.textContent='Project archive sent to local file saving';status.className='progress-status success';
+  return {id,name,path:'Local computer'};
 }
 
 let karaokePlaylistSnapshot = [];
 
 // Работа с Play List и её текущим состоянием.
 async function fetchPlaylistProjects() {
-  const response = await fetch("/projects");
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "PlayList unavailable");
-  currentPlaylistProject = data.current || null;
-  if (data.state_file) playlistStatePath = data.state_file;
-  karaokePlaylistSnapshot = Array.isArray(data.projects) ? data.projects : [];
+  const state=await localPlaylistState(),records=await fetchSavedProjects();
+  const names=new Map(records.map(r=>[r.id,r.name]));
+  currentPlaylistProject=state.current;playlistStatePath='This browser';
+  karaokePlaylistSnapshot=[...state.history.map((id,i)=>({id,name:names.get(id)||id,status:'executed',source:'history',position:i-state.history.length})),
+    ...state.queue.map((id,i)=>({id,name:names.get(id)||id,status:'waiting',source:'playlist',position:i+1}))];
   return karaokePlaylistSnapshot;
 }
 
 // Сохранение текущего Project и связанных данных.
 async function fetchSavedProjects() {
-  const response = await fetch("/saved-projects");
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "Projects unavailable");
-  return Array.isArray(data.projects) ? data.projects : [];
+  const records=await localDbAction('projects','readonly',s=>s.getAll());
+  const all=new Map(records.map(r=>[r.id,r]));for(const [id,r] of localProjectMemory)all.set(id,r);
+  return [...all.values()].map(r=>({id:r.id,name:r.name}));
 }
 
 // Сохранение текущего Project и связанных данных.
 async function markProjectInUse(id, position = null, mode = null) {
-  const normalizedPosition = position === Infinity ? "inf" : position;
-  const response = await fetch("/projects/use", {
-    method: "POST",
-    headers: loadTraceHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ id, position: normalizedPosition, mode, trace_id: projectLoadTraceId || null })
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "PlayList update failed");
-  currentPlaylistProject = data.current || null;
-  if (data.state_file) playlistStatePath = data.state_file;
-  karaokePlaylistSnapshot = Array.isArray(data.projects) ? data.projects : karaokePlaylistSnapshot;
-  return data;
+  await localRecord(id);let state=await localPlaylistState();
+  if(mode==='open')state={current:id,history:[],queue:[]};
+  else{
+    if(Number.isFinite(position)&&position>0)state.queue.splice(position-1,1);
+    if(state.current&&state.current!==id){if(mode==='takeover')state.queue.unshift(state.current);else state.history.push(state.current);}
+    state.current=id;
+  }
+  await localPlaylistWrite(state);return {current:id,projects:await fetchPlaylistProjects()};
 }
 
 // Работа с Play List и её текущим состоянием.
 async function addProjectToPlaylist(id, position) {
-  const response = await fetch("/playlist/add", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id, position })
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "Add to PlayList failed");
-  return data;
+  await localRecord(id);const state=await localPlaylistState();
+  state.queue.splice(Math.max(0,Math.min(state.queue.length,Number(position)-1)),0,id);
+  await localPlaylistWrite(state);return {projects:await fetchPlaylistProjects()};
 }
 
 // Работа с Play List и её текущим состоянием.
 async function movePlaylistProject(fromPosition, toPosition) {
-  const response = await fetch("/playlist/move", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ from_position: fromPosition, to_position: toPosition })
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "PlayList reorder failed");
-  return data;
+  const state=await localPlaylistState();const from=Number(fromPosition)-1,to=Number(toPosition)-1;
+  if(from<0||to<0||from>=state.queue.length||to>=state.queue.length)throw Error('Invalid PlayList position');
+  const [id]=state.queue.splice(from,1);state.queue.splice(to,0,id);await localPlaylistWrite(state);
+  return {projects:await fetchPlaylistProjects()};
 }
 
 // Работа с Play List и её текущим состоянием.
 async function deletePlaylistEntry(section, position) {
-  const response = await fetch("/playlist/delete", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ section, position })
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "PlayList delete failed");
-  return data;
+  const state=await localPlaylistState();
+  const list=section==='history'?state.history:state.queue;
+  const index=section==='history'?Number(position)+list.length:Number(position)-1;
+  if(index>=0&&index<list.length)list.splice(index,1);
+  await localPlaylistWrite(state);return {projects:await fetchPlaylistProjects()};
 }
 
 let playlistEditMode = null;
@@ -21572,6 +21809,10 @@ function renderFullScreenPlaylist(projects = karaokePlaylistSnapshot) {
     lyricsFullScreenPlaylistMenu.querySelectorAll(".playlist-track-picker,.playlist-position-picker").forEach(node => node.remove());
     if (!opening) return;
 
+    const importButton=document.createElement("button");
+    importButton.type="button";importButton.className="lyrics-fullscreen-playlist-item";importButton.textContent="Import local project…";
+    importButton.onclick=async event=>{event.stopPropagation();const file=await localChooseProject();if(!file)return;try{const record=await localImportProject(file);await addProjectToPlaylist(record.id,waitingTracks.length+1);await refreshFullScreenPlaylist();}catch(error){window.alert(error.message);}};
+    actionRow.insertAdjacentElement("afterend",importButton);
     const savedTracks = await fetchSavedProjects();
     if (!savedTracks.length) {
       status.textContent = "Tracks list is empty";
@@ -21909,7 +22150,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "5.5.2";
+const MYNUS_CLIENT_VERSION = "6.4.0";
 const MYNUS_CLIENT_CHANGE = "Karaoke non-Full-Screen minimum 620x900; separate session-only Sequencer History with Undo/Redo; Lyrics History, Trim, startup Select File/Open Project, and server unchanged";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -21938,52 +22179,14 @@ function loadTraceHeaders(extra = {}) {
 }
 
 function withLoadTraceUrl(url, trackId = null) {
-  if (!url || !projectLoadTraceId) return url;
+  if (!url || String(url).startsWith("blob:") || !projectLoadTraceId) return url;
   const separator = String(url).includes("?") ? "&" : "?";
   return String(url) + separator
     + "trace_id=" + encodeURIComponent(projectLoadTraceId)
     + (trackId ? "&track_id=" + encodeURIComponent(trackId) : "");
 }
 
-async function reportProjectLoadTrace(stage, details = {}) {
-  projectLoadTraceEvent += 1;
-  const elapsedMs = projectLoadTraceStartedAt ? Math.round(performance.now() - projectLoadTraceStartedAt) : 0;
-  const payload = {
-    version: MYNUS_CLIENT_VERSION,
-    change: MYNUS_CLIENT_CHANGE,
-    trace_id: projectLoadTraceId || "no-trace",
-    event: projectLoadTraceEvent,
-    stage: String(stage || "UNKNOWN"),
-    project_id: projectLoadTraceProject,
-    source: projectLoadTraceSource,
-    ui_mode: uiMode,
-    project_loading: Boolean(projectLoading),
-    elapsed_ms: elapsedMs,
-    client_time: new Date().toISOString(),
-    command: details.command || null,
-    function: details.function || null,
-    parameters: details.parameters || null,
-    result: details.result ?? null,
-    details
-  };
-
-  // HTML Service Console перехватывает console.log и показывает тот же trace пользователю.
-  console.log(`[LOAD TRACE][${payload.trace_id}][${String(payload.event).padStart(3, "0")}] ${payload.stage}`, payload);
-
-  try {
-    const response = await fetch("/debug/load-trace", {
-      method: "POST",
-      headers: loadTraceHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify(payload)
-    });
-    if (!response.ok) {
-      console.warn(`[LOAD TRACE][${payload.trace_id}] server logger HTTP ${response.status}`);
-    }
-  } catch (error) {
-    // Диагностика не должна ломать сам LOAD даже при недоступном серверном логгере.
-    console.warn("[LOAD TRACE] server logger unavailable", error);
-  }
-}
+async function reportProjectLoadTrace(stage, details = {}) { /* Local load: no server dependency. */ }
 
 const projectLoadPhases = [
   { label: "Opening project", percent: 5 },
@@ -22246,18 +22449,7 @@ progressPercent.textContent = "100%";
   await showProjectLoader(id);
 
   try {
-    const projectUrl = "/saved-projects/" + encodeURIComponent(id);
-    await reportProjectLoadTrace("HTTP REQUEST", { command: "GET " + projectUrl, function: "fetch", parameters: { method: "GET", id }, result: "sending" });
-    const response = await fetch(projectUrl, { headers: loadTraceHeaders() });
-
-    const data = await response.json().catch(() => ({}));
-    await reportProjectLoadTrace("PROJECT PAYLOAD RESPONSE", {
-      command: "parse Project payload",
-      function: "Response.json",
-      parameters: { http_status: response.status, ok: response.ok, cancelled: Boolean(data.cancelled) },
-      result: response.ok ? "payload received" : "HTTP error"
-    });
-    if (!response.ok) throw new Error(data.error || "LOAD Project failed");
+    const data = await localProjectPayload(id);
     if (projectLoaderProject) projectLoaderProject.textContent = String(data.name || id || "").trim();
     if (data.cancelled) {
       status.textContent = "Project loading cancelled";
@@ -22497,75 +22689,7 @@ await reportProjectLoadTrace("PROJECT UI STATE", {
 }
 
 // Сохранение текущего Project и связанных данных.
-async function openLoadProjectDialog() {
-  await reportProjectLoadTrace("LOAD DIALOG OPEN REQUEST");
-  const projects = await fetchSavedProjects();
-  await reportProjectLoadTrace("LOAD DIALOG PROJECT LIST READY", { count: projects.length });
-  loadProjectList.replaceChildren();
-
-  if (!projects.length) {
-    const empty = document.createElement("div");
-    empty.className = "popup-state";
-    empty.textContent = "Projects is empty";
-    loadProjectList.appendChild(empty);
-  } else {
-    projects.forEach(project => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.textContent = project.name;
-      button.style.textAlign = "left";
-      button.title = "Load project";
-      button.addEventListener("click", async () => {
-        try {
-          // =====================================================================
-          // [5.4.13][СЦЕНАРИЙ 1 — OPEN PROJECT]
-          // Пользователь выбрал Project в обычном окне Open Project.
-          // Этот сценарий выполняет только выбор Project и получает его ID.
-          // Никаких специальных параметров загрузки, отдельных LOAD-функций или веток нет.
-          // После определения ID выполняется прямой переход в ЕДИНУЮ функцию loadProjectById(ID).
-          // =====================================================================
-          beginProjectLoadTrace("[5.4.13][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", project.id, "projects");
-          await reportProjectLoadTrace("[5.4.13][СЦЕНАРИЙ 1 — OPEN PROJECT] Выбран Project; дальше прямой переход в единую LOAD-функцию", {
-            command: "await loadProjectById(project.id)",
-            function: "loadProjectById",
-            parameters: { id: project.id, name: project.name },
-            result: "переход в единую LOAD-функцию"
-          });
-          const postPlayNumbering = postPlayLoadAnotherPending;
-          if (postPlayNumbering) setPlaylistTransitionLocked(true);
-          await loadProjectById(project.id);
-
-          // После успешного LOAD меняется только состояние PlayList; сам LOAD остаётся без изменений.
-          if (postPlayNumbering) {
-            try {
-              await markProjectInUse(project.id, Infinity);
-              await refreshFullScreenPlaylist();
-            } finally {
-              postPlayLoadAnotherPending = false;
-              setPlaylistTransitionLocked(false);
-            }
-          } else {
-            await reportProjectLoadTrace("PLAYLIST CURRENT UPDATE START", { mode: "open" });
-            await markProjectInUse(project.id, null, "open");
-            await reportProjectLoadTrace("PLAYLIST CURRENT UPDATE DONE", { mode: "open" });
-          }
-          loadProjectDialog.classList.remove("open");
-        } catch (error) {
-          if (postPlayLoadAnotherPending) {
-            postPlayLoadAnotherPending = false;
-            setPlaylistTransitionLocked(false);
-          }
-          console.error(error);
-          status.textContent = error.message;
-          status.className = "progress-status error";
-        }
-      });
-      loadProjectList.appendChild(button);
-    });
-  }
-
-  loadProjectDialog.classList.add("open");
-}
+async function openLoadProjectDialog() { await localOpenProject(); }
 
 // ============================================================================
 // 5.5.3 | SAVE PROJECT
@@ -22612,38 +22736,11 @@ saveProjectBtn?.addEventListener("click", () => {
 // ============================================================================
 
 browseSaveProjectPathBtn?.addEventListener("click", async () => {
-
-  browseSaveProjectPathBtn.disabled = true;
-
   try {
-
-    const response = await fetch("/projects/select-folder", {
-      method: "POST"
-    });
-
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      throw new Error(data.error || "Folder selection failed");
-    }
-
-    // Сервер вернул выбранную папку — записываем её в поле.
-    if (data.path) {
-      saveProjectPathInput.value = data.path;
-    }
-
-  } catch (error) {
-
-    console.error(error);
-
-    if (saveProjectMessage) {
-      saveProjectMessage.textContent = error.message;
-    }
-
-  } finally {
-
-    browseSaveProjectPathBtn.disabled = false;
-  }
+    if(!window.showSaveFilePicker){saveProjectPathInput.value="Browser downloads";return;}
+    localProjectSaveHandle=await window.showSaveFilePicker({suggestedName:(saveProjectNameInput.value||projectSafeName())+'.mynus-project.zip',types:[{description:'MyNus Project',accept:{'application/zip':['.zip']}}]});
+    saveProjectPathInput.value=localProjectSaveHandle.name;
+  }catch(error){if(error.name!=="AbortError")saveProjectMessage.textContent=error.message;}
 });
 
 
@@ -24509,8 +24606,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 6.3.4 | fade\rec\color FIX");
-console.log("[SERVICE CONSOLE] MyNus 6.3.4 | fade\rec\color FIX");
+console.log("MyNus 6.4.0 | LOCAL SAVE&LOAD");
+console.log("[SERVICE CONSOLE] MyNus 6.4.0 | LOCAL SAVE&LOAD");
 </script>
 
 <div class="row" id="build-down">
