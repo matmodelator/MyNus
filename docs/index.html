@@ -1,4 +1,4 @@
-<!-- MyNus 6.3.2 | manual-original-path -->
+<!-- MyNus 6.3.3 | PlayList\CheckMaster\TrimFade -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 6.3.2</title>
+  <title>MyNus 6.3.3</title>
 
 
  <style>
@@ -819,7 +819,7 @@ position: relative;
       width: 100%;
       margin-left: 0;
 
-      height: 84px;
+      height: 104px;
 
       overflow: hidden;
 
@@ -834,7 +834,7 @@ position: relative;
     .master-timeline-inner {
       position: relative;
 
-      height: 84px;
+      height: 104px;
 
       min-width: 100%;
 
@@ -948,24 +948,6 @@ position: relative;
       touch-action: none;
     }
 
-    .master-cursor::before {
-      content: "";
-
-      position: absolute;
-
-      top: 0;
-      left: 50%;
-
-      width: 14px;
-      height: 14px;
-
-      transform:
-        translateX(-50%);
-
-      background: #111;
-
-      border-radius: 50%;
-    }
 
 
     .selection-range {
@@ -1027,7 +1009,7 @@ position: relative;
 
     .project-trim-time {
       position: absolute;
-      top: 1px;
+      top: 82px;
       transform: translateX(-50%);
       min-width: 42px;
       text-align: center;
@@ -1038,6 +1020,21 @@ position: relative;
       color: #e83e8c;
       pointer-events: none;
       z-index: 14;
+    }
+
+    .project-fade-time {
+      position: absolute;
+      top: 0;
+      transform: translateX(-50%);
+      min-width: 42px;
+      text-align: center;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      line-height: 18px;
+      font-weight: 700;
+      color: #e83e8c;
+      pointer-events: none;
+      z-index: 17;
     }
 
     .project-trim-handle {
@@ -1053,6 +1050,32 @@ position: relative;
       cursor: ew-resize;
       touch-action: none;
       z-index: 15;
+    }
+
+    /* Master Fade: одна розовая линия соединяет нижнюю точку Trim с верхней точкой Fade. */
+    .project-fade-line {
+      position: absolute;
+      top: 22px;
+      height: 2px;
+      background: #e83e8c;
+      transform-origin: 0 50%;
+      pointer-events: none;
+      z-index: 13;
+    }
+
+    .project-fade-handle {
+      position: absolute;
+      top: 16px;
+      width: 12px;
+      height: 12px;
+      padding: 0;
+      border: 2px solid #b72468;
+      border-radius: 50%;
+      background: #fff;
+      transform: translateX(-50%);
+      cursor: ew-resize;
+      touch-action: none;
+      z-index: 16;
     }
 
     .project-trim-handle::before {
@@ -1851,118 +1874,154 @@ position: relative;
     }
 
     .lyrics-fullscreen-playlist-wrap {
-      position: relative;
-    }
+  position: relative;
+}
 
-    .lyrics-fullscreen-playlist-btn {
-      border: 0;
-      background: transparent;
-      color: #55aaff;
-      font-size: 12px;
-      font-weight: 700;
-      cursor: pointer;
-      padding: 1px 8px;
-    }
+.lyrics-fullscreen-playlist-btn {
+  border: 0;
+  background: transparent;
+  color: #55aaff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 1px 8px;
+}
 
-    .lyrics-fullscreen-playlist-menu {
-      position: absolute;
-      top: calc(100% + 4px);
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 50;
-      min-width: 280px;
-      max-width: min(520px, 80vw);
-      max-height: 45vh;
-      overflow: auto;
-      padding: 6px;
-      border: 1px solid rgba(255,255,255,.28);
-      border-radius: 7px;
-      background: rgba(18,18,18,.97);
-      box-shadow: 0 10px 30px rgba(0,0,0,.45);
-    }
+.lyrics-fullscreen-playlist-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  width: 480px;
+  max-width: calc(100vw - 24px);
+  max-height: 45vh;
+  box-sizing: border-box;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid rgba(255,255,255,.28);
+  border-radius: 7px;
+  background: rgba(18,18,18,.97);
+  box-shadow: 0 10px 30px rgba(0,0,0,.45);
+}
 
-    .lyrics-fullscreen-playlist-menu[hidden] { display: none !important; }
+.lyrics-fullscreen-playlist-menu[hidden] {
+  display: none !important;
+}
 
-    .lyrics-fullscreen-playlist-item {
-      display: block;
-      width: 100%;
-      border: 0;
-      border-radius: 5px;
-      padding: 7px 9px;
-      background: transparent;
-      color: #fff;
-      text-align: left;
-      cursor: pointer;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
+.lyrics-fullscreen-playlist-item {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 5px;
+  padding: 7px 9px;
+  background: transparent;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
-    .lyrics-fullscreen-playlist-item:hover { background: rgba(255,255,255,.12); }
-    .lyrics-fullscreen-playlist-item.current {
-      color: #7fd8ff;
-      cursor: default;
-      background: rgba(127,216,255,.08);
-    }
-    .lyrics-fullscreen-playlist-item.current:hover { background: rgba(127,216,255,.08); }
-    .lyrics-fullscreen-playlist-item.executed { color: #aaa; }
-    .lyrics-fullscreen-playlist-item.waiting { color: #fff; }
+.lyrics-fullscreen-playlist-item:hover {
+  background: rgba(255,255,255,.12);
+}
 
-    .playlist-action-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 6px;
-      margin-top: 6px;
-    }
+.lyrics-fullscreen-playlist-item.current,
+.lyrics-fullscreen-playlist-item.current:hover {
+  color: #7fd8ff;
+  cursor: default;
+  background: rgba(127,216,255,.08);
+}
 
-    .playlist-action-btn {
-      border: 0;
-      border-radius: 5px;
-      padding: 7px 6px;
-      font-size: 12px;
-      font-weight: 700;
-      cursor: pointer;
-      color: #111;
-    }
+.lyrics-fullscreen-playlist-item.executed {
+  color: #aaa;
+}
 
-    .playlist-action-btn.add { background: #59d66f; }
-    .playlist-action-btn.remove { background: #ff6a6a; }
-    .playlist-action-btn.reorder { background: #f0d85a; }
-    .playlist-action-btn.active { outline: 2px solid #fff; outline-offset: 1px; }
+.lyrics-fullscreen-playlist-item.waiting {
+  color: #fff;
+}
 
-    .playlist-track-picker,
-    .playlist-position-picker {
-      margin: 5px 0 2px;
-      padding: 5px;
-      border: 1px solid rgba(255,255,255,.18);
-      border-radius: 5px;
-      background: rgba(255,255,255,.06);
-    }
+.playlist-action-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(100px, 1fr));
+  gap: 6px;
+  margin-top: 6px;
+}
 
-    .playlist-position-picker {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-    }
+.playlist-action-btn {
+  width: 100%;
+  height: 36px;
+  box-sizing: border-box;
+  margin: 0 !important;
+  border: 0;
+  border-radius: 5px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  color: #111;
+}
 
-    .playlist-position-picker button {
-      min-width: 42px;
-      border: 0;
-      border-radius: 4px;
-      padding: 5px 7px;
-      cursor: pointer;
-      background: rgba(255,255,255,.14);
-      color: #fff;
-    }
+.playlist-action-btn.add {
+  background: #59d66f;
+}
 
-    .playlist-track-picker .lyrics-fullscreen-playlist-item {
-      padding-left: 7px;
-    }
+.playlist-action-btn.remove {
+  background: #ff6a6a;
+}
 
-    .lyrics-fullscreen-playlist-menu.playlist-transition-locked {
-      pointer-events: none;
-      opacity: .55;
-    }
+.playlist-action-btn.reorder {
+  background: #f0d85a;
+}
+
+#playlistSaveKaraokeBtn {
+  background: #1768bb;
+  color: #fff;
+}
+
+.playlist-action-btn.active {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+}
+
+.playlist-track-picker,
+.playlist-position-picker {
+  margin: 5px 0 2px;
+  padding: 5px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 5px;
+  background: rgba(255,255,255,.06);
+}
+
+.playlist-position-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.playlist-position-picker button {
+  min-width: 42px;
+  border: 0;
+  border-radius: 4px;
+  padding: 5px 7px;
+  cursor: pointer;
+  background: rgba(255,255,255,.14);
+  color: #fff;
+}
+
+.playlist-track-picker .lyrics-fullscreen-playlist-item {
+  padding-left: 7px;
+}
+
+.lyrics-fullscreen-playlist-menu.playlist-transition-locked {
+  pointer-events: none;
+  opacity: .55;
+}
+
 
     .project-loader {
       position: fixed;
@@ -3219,6 +3278,8 @@ position: relative;
   cursor: text;
 }
 
+
+
 </style>
 
 </head>
@@ -4225,9 +4286,12 @@ position: relative;
           <div id="projectTrimStartMarker" class="project-trim-marker"></div>
           <div id="projectTrimEndMarker" class="project-trim-marker"></div>
          
+          <div id="projectFadeInLine" class="project-fade-line"></div>
+          <div id="projectFadeOutLine" class="project-fade-line"></div>
+          <button type="button" id="projectFadeInHandle" class="project-fade-handle" aria-label="Fade In" title="Fade In"></button>
+          <button type="button" id="projectFadeOutHandle" class="project-fade-handle" aria-label="Fade Out" title="Fade Out"></button>
           <button type="button" id="projectTrimStartHandle" class="project-trim-handle" aria-label="Trim Start" title="Trim Start"></button>
           <button type="button" id="projectTrimEndHandle" class="project-trim-handle" aria-label="Trim End" title="Trim End"></button>
-
           <div
             id="masterCursor"
             class="master-cursor"
@@ -4237,8 +4301,10 @@ position: relative;
 
       </div> <!-- masterTimeline --> 
 
-          <div id="projectTrimStartTime" class="project-trim-time">0:00</div>
-          <div id="projectTrimEndTime" class="project-trim-time">0:00</div>
+      <div id="projectFadeInTime" class="project-fade-time">0:00</div>
+      <div id="projectFadeOutTime" class="project-fade-time">0:00</div>
+      <div id="projectTrimStartTime" class="project-trim-time">0:00</div>
+      <div id="projectTrimEndTime" class="project-trim-time">0:00</div>
 
     </div> <!-- master-timeline-row -->
 
@@ -5747,6 +5813,12 @@ const projectTrimStartTime = document.getElementById("projectTrimStartTime");
 const projectTrimEndTime = document.getElementById("projectTrimEndTime");
 const projectTrimStartHandle = document.getElementById("projectTrimStartHandle");
 const projectTrimEndHandle = document.getElementById("projectTrimEndHandle");
+const projectFadeInHandle = document.getElementById("projectFadeInHandle");
+const projectFadeOutHandle = document.getElementById("projectFadeOutHandle");
+const projectFadeInLine = document.getElementById("projectFadeInLine");
+const projectFadeOutLine = document.getElementById("projectFadeOutLine");
+const projectFadeInTime = document.getElementById("projectFadeInTime");
+const projectFadeOutTime = document.getElementById("projectFadeOutTime");
 
 
 const canvases = {
@@ -6051,6 +6123,8 @@ let masterRecordDestination = null;
 let masterRecorder = null;
 let masterRecordChunks = [];
 let masterRecording = false;
+let masterRecordArmed = false;
+let masterRecordSelectionMode = false;
 
 let masterRecordBus = null;
 let masterRecordProcessor = null;
@@ -6081,6 +6155,9 @@ let fragmentEnd = null;
 let projectTrimStart = 0;
 let projectTrimEnd = null;
 let projectTrimDragging = null;
+let projectFadeInEnd = null;
+let projectFadeOutStart = null;
+let projectFadeDragging = null;
 
 // 5.4.13 | Separate Sequencer history. Session-only; never saved into Project JSON.
 let sequencerUndoStack = [];
@@ -6196,6 +6273,7 @@ let masterLimiterNode = null;
 let masterFxOutputGainNode = null;
 
 let masterSourceNode = null;
+let masterFadeGainNode = null;
 
 
 
@@ -7907,35 +7985,64 @@ function updateProjectTrimDisplay() {
     if (node) node.style.left = endX + "px";
 });
 
-const scrollLeft = getSharedScrollLeft();
-const rowRect =
-    masterTimeline.parentElement.getBoundingClientRect();
+  const rowRect = masterTimeline.parentElement.getBoundingClientRect();
 
-if (projectTrimStartTime && projectTrimStartHandle) {
-    const handleRect =
-        projectTrimStartHandle.getBoundingClientRect();
+  const placeOutsideLabelAtHandle = (label, handle, text) => {
+    if (!label || !handle) return;
+    const handleRect = handle.getBoundingClientRect();
+    label.style.left = (
+      handleRect.left
+      + handleRect.width / 2
+      - rowRect.left
+    ) + "px";
+    label.textContent = text;
+  };
 
-    projectTrimStartTime.style.left =
-        (
-            handleRect.left
-            + handleRect.width / 2
-            - rowRect.left
-        ) + "px";
-}
+  placeOutsideLabelAtHandle(
+    projectTrimStartTime,
+    projectTrimStartHandle,
+    formatTrimTime(start)
+  );
 
-if (projectTrimEndTime && projectTrimEndHandle) {
-    const handleRect =
-        projectTrimEndHandle.getBoundingClientRect();
+  placeOutsideLabelAtHandle(
+    projectTrimEndTime,
+    projectTrimEndHandle,
+    formatTrimTime(end)
+  );
 
-    projectTrimEndTime.style.left =
-        (
-            handleRect.left
-            + handleRect.width / 2
-            - rowRect.left
-        ) + "px";
-}
-  if (projectTrimStartTime) projectTrimStartTime.textContent = formatTrimTime(start);
-  if (projectTrimEndTime) projectTrimEndTime.textContent = formatTrimTime(end);
+  const fadeInTime = projectFadeInEnd === null ? start : Math.max(start, Math.min(end, projectFadeInEnd));
+  const fadeOutTime = projectFadeOutStart === null ? end : Math.max(start, Math.min(end, projectFadeOutStart));
+  const fadeInX = fadeInTime * pixelsPerSecond;
+  const fadeOutX = fadeOutTime * pixelsPerSecond;
+
+  if (projectFadeInHandle) projectFadeInHandle.style.left = fadeInX + "px";
+  if (projectFadeOutHandle) projectFadeOutHandle.style.left = fadeOutX + "px";
+
+  placeOutsideLabelAtHandle(
+    projectFadeInTime,
+    projectFadeInHandle,
+    formatTrimTime(fadeInTime)
+  );
+
+  placeOutsideLabelAtHandle(
+    projectFadeOutTime,
+    projectFadeOutHandle,
+    formatTrimTime(fadeOutTime)
+  );
+
+  const setFadeLine = (line, trimX, fadeX) => {
+    if (!line) return;
+    const x1 = trimX, y1 = 73.5;
+    const x2 = fadeX, y2 = 22;
+    const dx = x2 - x1, dy = y2 - y1;
+    line.style.left = x1 + "px";
+    line.style.top = y1 + "px";
+    line.style.width = Math.hypot(dx, dy) + "px";
+    line.style.transform = "rotate(" + Math.atan2(dy, dx) + "rad)";
+  };
+
+  setFadeLine(projectFadeInLine, startX, fadeInX);
+  setFadeLine(projectFadeOutLine, endX, fadeOutX);
 
   ensureProjectTrimTrackOverlays();
   Object.values(timelines).forEach(timeline => {
@@ -7961,6 +8068,8 @@ function cloneSequencerHistoryState() {
     fxSettings: cloneSerializable(fxSettings, {}),
     trimStart: projectTrimStart,
     trimEnd: projectTrimEnd,
+    fadeInEnd: projectFadeInEnd,
+    fadeOutStart: projectFadeOutStart,
     originalVolume: Number(originalVolume?.value ?? 100),
     masterVolume: Number(masterVolume?.value ?? 100)
   };
@@ -8012,6 +8121,8 @@ function applySequencerHistoryState(state) {
     projectTrimEnd = state.trimEnd == null
       ? null
       : (Number.isFinite(Number(state.trimEnd)) ? Math.max(projectTrimStart, Number(state.trimEnd)) : null);
+    projectFadeInEnd = Number.isFinite(Number(state.fadeInEnd)) ? Number(state.fadeInEnd) : null;
+    projectFadeOutStart = Number.isFinite(Number(state.fadeOutStart)) ? Number(state.fadeOutStart) : null;
 
     if (originalVolume && Number.isFinite(Number(state.originalVolume))) {
       originalVolume.value = String(state.originalVolume);
@@ -8109,10 +8220,14 @@ function setProjectTrimBoundary(which, rawTime) {
   if (which === "start") {
     const maxStart = Math.max(0, getProjectTrimEnd() - 1);
     projectTrimStart = Math.min(snapped, maxStart);
+    if (projectFadeInEnd !== null && projectFadeInEnd < projectTrimStart) projectFadeInEnd = null;
+    if (projectFadeOutStart !== null && projectFadeOutStart < projectTrimStart) projectFadeOutStart = projectTrimStart;
     if (getCurrentTime() < projectTrimStart) setGlobalCursorTime(projectTrimStart);
   } else {
     const minEnd = Math.min(duration, getProjectTrimStart() + 1);
     projectTrimEnd = Math.max(minEnd, snapped);
+    if (projectFadeOutStart !== null && projectFadeOutStart > projectTrimEnd) projectFadeOutStart = null;
+    if (projectFadeInEnd !== null && projectFadeInEnd > projectTrimEnd) projectFadeInEnd = projectTrimEnd;
     if (getCurrentTime() > projectTrimEnd) setGlobalCursorTime(projectTrimEnd);
   }
   updateProjectTrimDisplay();
@@ -8155,6 +8270,50 @@ function bindProjectTrimHandle(handle, which) {
 
 bindProjectTrimHandle(projectTrimStartHandle, "start");
 bindProjectTrimHandle(projectTrimEndHandle, "end");
+
+function setProjectFadeBoundary(which, rawTime) {
+  if (!duration) return;
+  const start = getProjectTrimStart();
+  const end = getProjectTrimEnd();
+  const time = Math.max(start, Math.min(end, Number(rawTime) || 0));
+
+  if (which === "in") {
+    projectFadeInEnd = Math.abs(time - start) < 0.01 ? null : time;
+  } else {
+    projectFadeOutStart = Math.abs(time - end) < 0.01 ? null : time;
+  }
+
+  updateProjectTrimDisplay();
+  updateMasterFadeGain();
+}
+
+function bindProjectFadeHandle(handle, which) {
+  handle?.addEventListener("pointerdown", event => {
+    pushSequencerHistorySnapshot();
+    projectFadeDragging = which;
+    handle.setPointerCapture(event.pointerId);
+    event.stopPropagation();
+    event.preventDefault();
+  });
+  handle?.addEventListener("pointermove", event => {
+    if (projectFadeDragging !== which) return;
+    setProjectFadeBoundary(which, projectTrimTimeFromPointer(event));
+    event.stopPropagation();
+    event.preventDefault();
+  });
+  handle?.addEventListener("pointerup", event => {
+    if (projectFadeDragging !== which) return;
+    setProjectFadeBoundary(which, projectTrimTimeFromPointer(event));
+    projectFadeDragging = null;
+    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+    event.stopPropagation();
+    event.preventDefault();
+  });
+  handle?.addEventListener("pointercancel", () => { projectFadeDragging = null; });
+}
+
+bindProjectFadeHandle(projectFadeInHandle, "in");
+bindProjectFadeHandle(projectFadeOutHandle, "out");
 
 // ========================================
 // ОТРИСОВКА ВРЕМЕННОЙ ШКАЛЫ MASTER
@@ -10220,6 +10379,14 @@ function ensureMixAudioGraph() {
     2048;
 
 
+  masterFadeGainNode =
+    mixAudioContext.createGain();
+
+
+  masterFadeGainNode.gain.value =
+    1;
+
+
   masterRecordDestination =
     null;
 
@@ -10427,17 +10594,7 @@ function ensureMixAudioGraph() {
 
 
       stemChain.output.connect(
-        mixAudioContext.destination
-      );
-
-
-      stemChain.output.connect(
-        masterAnalyserNode
-      );
-
-
-      stemChain.output.connect(
-        masterRecordBus
+        masterFadeGainNode
       );
 
 
@@ -10467,7 +10624,22 @@ function ensureMixAudioGraph() {
 
 
   masterChain.output.connect(
+    masterFadeGainNode
+  );
+
+
+  masterFadeGainNode.connect(
     mixAudioContext.destination
+  );
+
+
+  masterFadeGainNode.connect(
+    masterAnalyserNode
+  );
+
+
+  masterFadeGainNode.connect(
+    masterRecordBus
   );
 
 
@@ -11022,6 +11194,33 @@ function applyFxSettings(
 }
 
 
+// Master Fade применяется только к итоговой MASTER-шине.
+function getMasterFadeGainAtTime(time) {
+  const current = Number(time) || 0;
+  const start = getProjectTrimStart();
+  const end = getProjectTrimEnd();
+  const fadeInEnd = projectFadeInEnd === null ? start : Math.max(start, Math.min(end, projectFadeInEnd));
+  const fadeOutStart = projectFadeOutStart === null ? end : Math.max(start, Math.min(end, projectFadeOutStart));
+
+  let gain = 1;
+
+  if (fadeInEnd > start && current <= fadeInEnd) {
+    gain = Math.max(0, Math.min(1, (current - start) / (fadeInEnd - start)));
+  }
+
+  if (fadeOutStart < end && current >= fadeOutStart) {
+    gain = Math.min(gain, Math.max(0, Math.min(1, (end - current) / (end - fadeOutStart))));
+  }
+
+  return Math.max(0, Math.min(1, gain));
+}
+
+function updateMasterFadeGain(time = getCurrentTime()) {
+  if (!masterFadeGainNode || !mixAudioContext) return;
+  const gain = getMasterFadeGainAtTime(time);
+  masterFadeGainNode.gain.setValueAtTime(gain, mixAudioContext.currentTime);
+}
+
 // ========================================
 // ЗАПИСЬ MASTER
 // ========================================
@@ -11039,151 +11238,84 @@ stopMasterBtn.addEventListener(
 
 // Работа с Master/Mix и итоговым аудиосостоянием.
 async function startMasterRecording() {
-
-  if (
-    masterRecording
-  ) {
-
-    return;
-
-  }
-
+  if (masterRecording || masterRecordArmed) return;
 
   activateMixMode();
-
-
   ensureMixAudioGraph();
+  if (mixAudioContext.state === "suspended") await mixAudioContext.resume();
 
+  masterRecordSelectionMode = hasSelection();
 
-  if (
-    mixAudioContext.state ===
-    "suspended"
-  ) {
-
-    await mixAudioContext.resume();
-
+  if (masterRecordSelectionMode) {
+    const current = getCurrentTime();
+    if (loopEnabled || current >= fragmentStart - 0.001) {
+      syncAllTo(fragmentStart);
+      updatePlayheads(); updateMasterCursor(); updateTimeDisplay();
+    } else {
+      masterRecordArmed = true;
+      recordMasterBtn.disabled = true;
+      stopMasterBtn.disabled = false;
+      masterState.textContent = "Rec armed — pre-roll";
+      if (!isPlaying) playCurrentMode();
+      return;
+    }
+  } else {
+    const start = getProjectTrimStart();
+    const end = getProjectPlaybackEnd();
+    let time = getCurrentTime();
+    if (time < start || time >= end - 0.001) time = start;
+    syncAllTo(time);
+    updatePlayheads(); updateMasterCursor(); updateTimeDisplay();
   }
 
-
-  // Фиксируем точную стартовую позицию на общей временной шкале песни.
-  masterRecordTimelineStart =
-    getCurrentTime();
-
-
-  masterRecordTimelineEnd =
-    masterRecordTimelineStart;
-
-
-  syncAllTo(
-    masterRecordTimelineStart
-  );
-
-
-  waveformData.master =
-    null;
-
-
-  masterBlob =
-    null;
-
-
-  // 5.4.18 | Save Rec — отдельный commit. Новая запись не уничтожает уже сохранённый commit.
-  masterLivePeaks =
-    [];
-
-
-  masterPcmChunks =
-    [];
-
-
-  masterPcmSampleRate =
-    mixAudioContext.sampleRate;
-
-
-  masterPcmChannels =
-    2;
-
-
-  masterPcmFrameCount =
-    0;
-
-
-  clearMasterCanvas();
-
-
-  // Сначала запускаем воспроизведение, при этом захват PCM пока выключен.
-  if (
-    !isPlaying
-  ) {
-
-    playCurrentMode();
-
-  }
-
-
-  // Непосредственно перед захватом повторно синхронизируем все шесть stems.
-  const lockedStart =
-    getCurrentTime();
-
-
-  syncAllTo(
-    lockedStart
-  );
-
-
-  masterRecordTimelineStart =
-    lockedStart;
-
-
-  masterRecordTimelineEnd =
-    lockedStart;
-
-
-  masterRecording =
-    true;
-
-
-  masterRecordStartTime =
-    performance.now();
-
-
-  recordMasterBtn.disabled =
-    true;
-
-
-  stopMasterBtn.disabled =
-    false;
-
-
-  saveAsMasterBtn.disabled =
-    true;
-
-
-  masterState.textContent =
-    "Recording...";
-
-
-  startMasterWaveformCapture();
-
+  beginMasterCaptureAt(getCurrentTime());
+  if (!isPlaying) playCurrentMode();
 }
 
+function beginMasterCaptureAt(startTime) {
+  const lockedStart = Number(startTime);
+  if (!Number.isFinite(lockedStart)) return;
+  masterRecordArmed = false;
+  masterRecordTimelineStart = lockedStart;
+  masterRecordTimelineEnd = lockedStart;
+  waveformData.master = null;
+  masterBlob = null;
+  masterLivePeaks = [];
+  masterPcmChunks = [];
+  masterPcmSampleRate = mixAudioContext.sampleRate;
+  masterPcmChannels = 2;
+  masterPcmFrameCount = 0;
+  clearMasterCanvas();
+  masterRecording = true;
+  masterRecordStartTime = performance.now();
+  recordMasterBtn.disabled = true;
+  stopMasterBtn.disabled = false;
+  saveAsMasterBtn.disabled = true;
+  masterState.textContent = "Recording...";
+  startMasterWaveformCapture();
+}
 
 // Управление транспортом и воспроизведением.
 function stopMasterRecording() {
 
-  if (
-    !masterRecording
-  ) {
-
+  if (masterRecordArmed && !masterRecording) {
+    masterRecordArmed = false;
+    masterRecordSelectionMode = false;
+    recordMasterBtn.disabled = false;
+    stopMasterBtn.disabled = true;
+    masterState.textContent = "Rec Off";
     return;
-
   }
+
+  if (!masterRecording) return;
 
 
   // Сначала прекращаем приём PCM.
   masterRecording =
     false;
 
+  masterRecordArmed = false;
+  masterRecordSelectionMode = false;
 
   masterRecordTimelineEnd =
     getCurrentTime();
@@ -13433,6 +13565,12 @@ function syncAllTo(
 function setGlobalCursorTime(time) {
   const numeric = Number(time);
   if (!Number.isFinite(numeric)) return;
+
+  // Любой явный перевод общего курсора во время REC немедленно выключает запись.
+  // PLAY при этом не останавливается и продолжает с новой позиции.
+  if ((masterRecording || masterRecordArmed) && Math.abs(numeric - getCurrentTime()) > 0.001) {
+    stopMasterRecording();
+  }
 
   syncAllTo(numeric);
 
@@ -19536,6 +19674,7 @@ function startAnimation() {
       keepTracksSynchronized();
 
       applyMix();
+      updateMasterFadeGain();
 
       // Во время воспроизведения источником является аудиотранспорт; все три визуальных курсора используют одно значение.
       masterCursorTime = getCurrentTime();
@@ -19572,8 +19711,42 @@ function startAnimation() {
       }
 
 
+      if (masterRecordArmed && hasSelection() && getCurrentTime() >= fragmentStart) {
+        syncAllTo(fragmentStart);
+        beginMasterCaptureAt(fragmentStart);
+        updatePlayheads(); updateMasterCursor(); updateTimeDisplay();
+      }
+
+      if (masterRecording) {
+        if (masterRecordSelectionMode && hasSelection()) {
+          if (getCurrentTime() >= fragmentEnd) {
+            if (loopEnabled) {
+              syncAllTo(fragmentStart);
+              updatePlayheads(); updateMasterCursor(); updateTimeDisplay(); updateLyricsMasterCounter();
+            } else {
+              syncAllTo(fragmentEnd);
+              stopMasterRecording();
+              updatePlayheads(); updateMasterCursor(); updateTimeDisplay(); updateLyricsMasterCounter();
+            }
+          }
+        } else {
+          const recordEnd = getProjectPlaybackEnd();
+          if (Number.isFinite(recordEnd) && getCurrentTime() >= recordEnd) {
+            syncAllTo(recordEnd);
+            updateMasterFadeGain(recordEnd);
+            stopMasterRecording();
+            pauseAll();
+            updatePlayheads(); updateMasterCursor(); updateTimeDisplay(); updateLyricsMasterCounter();
+            return;
+          }
+        }
+      }
+
+
       if (
   lyricsStructureTransportMode !== "loop"
+  &&
+  !masterRecording
   &&
   loopEnabled
   &&
@@ -19600,54 +19773,28 @@ function startAnimation() {
 
 
       if (getCurrentTime() >= getProjectPlaybackEnd()) {
+        const playbackEnd = getProjectPlaybackEnd();
 
-        if (isKaraokeUiMode()) {
-          pauseAll();
-          if (!karaokeFinishTriggered) {
-            karaokeFinishTriggered = true;
-            openKaraokeFinishedDialog();
-          }
-          return;
-        }
+        syncAllTo(playbackEnd);
+        updateMasterFadeGain(playbackEnd);
 
-        if (
-          lyricsEditorDialog
-          &&
-          !lyricsEditorDialog.classList.contains("hidden")
-        ) {
-
-          syncAllTo(getProjectTrimStart());
-
-          lyricsEditorSelectedLine =
-            lyricsEditorDraft.length
-            ? 0
-            : -1;
-
-          renderLyricsEditor();
-
-          if (lyricsEditorRows) {
-            lyricsEditorRows.scrollTop = 0;
-          }
-
-          updatePlayheads();
-          updateMasterCursor();
-          updateTimeDisplay();
-          updateLyricsMasterCounter();
-          updateLyricsStructurePlayhead();
-
-          animationFrame =
-            requestAnimationFrame(
-              update
-            );
-
-          return;
-
+        if (masterRecording) {
+          stopMasterRecording();
         }
 
         pauseAll();
+        updatePlayheads();
+        updateMasterCursor();
+        updateTimeDisplay();
+        updateLyricsMasterCounter();
+        updateLyricsStructurePlayhead();
+
+        if (isKaraokeUiMode() && !karaokeFinishTriggered) {
+          karaokeFinishTriggered = true;
+          openKaraokeFinishedDialog();
+        }
 
         return;
-
       }
 
 
@@ -21014,6 +21161,8 @@ function projectStateJson() {
       fragmentEnd,
       trimStart: getProjectTrimStart(),
       trimEnd: Number.isFinite(Number(projectTrimEnd)) ? getProjectTrimEnd() : null,
+      fadeInEnd: projectFadeInEnd,
+      fadeOutStart: projectFadeOutStart,
       stemState: cloneSerializable(stemState, {}),
       stemCrop: cloneSerializable(stemCrop, {}),
       fxSettings: cloneSerializable(fxSettings, {}),
@@ -21587,6 +21736,8 @@ function resetProjectSequencerStateForLoad() {
   fragmentEnd = null;
   projectTrimStart = 0;
   projectTrimEnd = null;
+  projectFadeInEnd = null;
+  projectFadeOutStart = null;
   mode = "original";
 }
 
@@ -21615,6 +21766,8 @@ function restoreProjectSequencerState(saved) {
         ? Math.max(projectTrimStart, Number(saved.trimEnd))
         : null
     );
+  projectFadeInEnd = Number.isFinite(Number(saved.fadeInEnd)) ? Number(saved.fadeInEnd) : null;
+  projectFadeOutStart = Number.isFinite(Number(saved.fadeOutStart)) ? Number(saved.fadeOutStart) : null;
   if (["original", "mix", "master"].includes(saved.mode)) mode = saved.mode;
 }
 
@@ -21870,6 +22023,9 @@ function clearProjectState() {
   projectTrimStart = 0;
   projectTrimEnd = null;
   projectTrimDragging = null;
+  projectFadeInEnd = null;
+  projectFadeOutStart = null;
+  projectFadeDragging = null;
   loopEnabled = false;
   lyricsTransportMode = "master";
   lyricsLoopPaused = false;
@@ -23397,7 +23553,7 @@ document.addEventListener("click", event => {
     button.id = "playlistSaveKaraokeBtn";
     button.type = "button";
     button.className = "playlist-action-btn";
-    button.textContent = "Save Karaoke";
+    button.textContent = "Save Track";
     button.style.cssText =
       "background:#1768bb;color:#fff;margin-left:auto";
 
@@ -23428,29 +23584,33 @@ document.addEventListener("click", event => {
     if (!busy) dialog.classList.remove("open");
   });
 
-  checkButton.addEventListener("click", async () => {
-    if (busy) return;
+  checkButton.addEventListener("click", () => {
+  if (busy) return;
 
-    if (!masterBlob?.size) {
-      message.textContent =
-        "Master is empty. Create Master in Sequencer first.";
-      return;
-    }
+  originalReference = originalInput.value.trim();
 
-    originalReference = originalInput.value.trim();
-    dialog.classList.remove("open");
+  pauseAll();
+  dialog.classList.remove("open");
+  closeKaraokeFinishedDialog();
+  closeLyricsEditor();
 
-    closeLyricsEditor();
-    pauseAll();
-    switchMode("master");
-    setGlobalCursorTime(0);
+  studio.style.display = "block";
 
-    try {
-      await masterAudio.play();
-    } catch (error) {
-      status.textContent = error.message;
-    }
-  });
+  loopEnabled = false;
+  loopBtn.classList.remove("active");
+  lyricsStructureTransportMode = "play";
+  lyricsStructureLoopStart = null;
+  lyricsStructureLoopEnd = null;
+  fragmentStart = null;
+  fragmentEnd = null;
+
+  switchMode("master");
+  setGlobalCursorTime(0);
+  syncScrollTo(0);
+  syncTransportMirrors();
+  updateLyricsTransportButtons();
+});
+
 
   // ZIP без сторонних библиотек.
   // Встроенный media-файл в архиве только один: Master.
@@ -23603,7 +23763,7 @@ document.addEventListener("click", event => {
       const url = URL.createObjectURL(archive);
       const link = document.createElement("a");
       link.href = url;
-      link.download = name + ".mynus";
+      link.download = name + ".mynus.zip";
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -23665,7 +23825,7 @@ document.addEventListener("click", event => {
 
   const picker = document.createElement("input");
   picker.type = "file";
-  picker.accept = ".mynus";
+  picker.accept = ".mynus,.zip";
   picker.hidden = true;
   document.body.appendChild(picker);
 
@@ -24232,8 +24392,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 6.3.2 | manual-original-path");
-console.log("[SERVICE CONSOLE] MyNus 6.3.2 | manual-original-path");
+console.log("MyNus 6.3.3 | PlayList\CheckMaster\TrimFade");
+console.log("[SERVICE CONSOLE] MyNus 6.3.3 | PlayList\CheckMaster\TrimFade");
 </script>
 
 <div class="row" id="build-down">
