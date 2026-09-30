@@ -23604,7 +23604,13 @@ document.addEventListener("click", event => {
   fragmentStart = null;
   fragmentEnd = null;
 
-  switchMode("master");
+  if (mode === "master" && !masterBlob?.size) {
+  if (originalAudio.getAttribute("src")) {
+    switchMode("original");
+  } else if (stemTrackIsAvailable("vocals")) {
+    switchMode("mix");
+  }
+}
   setGlobalCursorTime(0);
   syncScrollTo(0);
   syncTransportMirrors();
