@@ -1,5 +1,5 @@
 # ========================================
-#  Один LanguageTool на процесс сервера. | 6.3.0 
+#  LOCAL SAVE&LOAD | 6.4.0 
 # ========================================
 
 # ========================================
@@ -2444,10 +2444,21 @@ def source_separation(db, uid):
 
 
 
+
+# 6.4.0: Project and PlayList persistence belongs to the browser.
+@app.before_request
+def reject_legacy_project_storage():
+    path = request.path
+    if (path == "/projects" or path.startswith("/projects/") or
+        path == "/saved-projects" or path.startswith("/saved-projects/") or
+        path.startswith("/opened-projects/") or path.startswith("/playlist/") or
+        path == "/lyrics/save-current"):
+        return jsonify(error="Project save/load is local in MyNus 6.4.0"), 410
+
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("MyNus Server 6.3.0")
-    print(r"Один LanguageTool на процесс сервера. Создание, переключение языка и проверка текста защищены общей блокировкой. При штатном завершении сервера вызывается close(). | 6.3.0 ")
+    print("LOCAL SAVE&LOAD | 6.4.0 ")
+    print(r"LOCAL SAVE&LOAD | 6.4.0")
     print("=" * 72 + "\n")
 
     try:
