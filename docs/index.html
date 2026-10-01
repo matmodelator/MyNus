@@ -1,4 +1,4 @@
-<!-- MyNus MyNus 7.0.1 | Account -->
+<!--MyNus 7.1.1 | ChangeAcc@Pay -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 7.0.1</title>
+  <title>MyNus 7.1.1</title>
 
 
  <style>
@@ -21343,7 +21343,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.0.0",
+    version: "7.0.2",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -22237,8 +22237,8 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.0.0";
-const MYNUS_CLIENT_CHANGE = "Karaoke non-Full-Screen minimum 620x900; separate session-only Sequencer History with Undo/Redo; Lyrics History, Trim, startup Select File/Open Project, and server unchanged";
+const MYNUS_CLIENT_VERSION = "7.0.2";
+const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
 let projectLoadTraceSource = null;
@@ -23425,6 +23425,8 @@ document.addEventListener("click", event => {
   }
 
   #mnLoginDialog {
+    max-height: calc(100dvh - 80px);
+    overflow-y: auto;
     width: min(340px, calc(100vw - 40px));
     padding: 24px;
     border: 1px solid #666;
@@ -23441,6 +23443,8 @@ document.addEventListener("click", event => {
     display: grid;
     gap: 12px;
   }
+
+  #mnAccountEditor label {display:grid;gap:4px;margin:10px 0;}
 
   #mnLoginForm input {
     box-sizing: border-box;
@@ -23482,24 +23486,54 @@ document.addEventListener("click", event => {
 <dialog id="mnLoginDialog">
   <form id="mnLoginForm">
     <strong id="mnAuthTitle">MyNus — REG / LOG</strong>
-    <section id="mnAccount" hidden aria-label="Аккаунт"><dl id="mnAccountDetails" style="margin:0; overflow-wrap:anywhere"></dl></section>
+        <section id="mnAccount" hidden aria-label="Account">
+      <h3>Account details</h3>
+      <dl id="mnAccountDetails" style="margin:0; overflow-wrap:anywhere"></dl>
+      <button id="mnAccountChange" type="button">Change</button>
+      <div id="mnAccountEditor" hidden>
+        <p>Every change requires a confirmation code sent to your current verified email.</p>
+        <label>First name <input id="mnEditFirst" maxlength="120" autocomplete="given-name"></label>
+        <label>Last name <input id="mnEditLast" maxlength="120" autocomplete="family-name"></label>
+        <label>Email <input id="mnEditEmail" type="email" maxlength="254" autocomplete="email"></label>
+        <label>Phone <input id="mnEditPhone" type="tel" maxlength="40" autocomplete="tel"></label>
+        <label>Country <input id="mnEditCountry" maxlength="120" autocomplete="country-name"></label>
+        <button id="mnAccountSave" type="button">Save — send confirmation code</button>
+      </div>
+      <div id="mnAccountCodeStep" hidden>
+        <p id="mnAccountCodeHelp"></p>
+        <label id="mnAccountCodeLabel">Confirmation code</label>
+        <input id="mnAccountCode" aria-labelledby="mnAccountCodeLabel" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6">
+        <button id="mnAccountConfirm" type="button">Confirm changes</button>
+        <button id="mnAccountResend" type="button">Resend code</button>
+      </div>
+      <button id="mnAccountCancel" type="button" hidden>Cancel changes</button>
+      <section aria-label="Payments" style="border-top:1px solid #666;margin-top:18px;padding-top:12px">
+        <h3>Payments</h3>
+        <p id="mnPaymentSummary">Loading payment details…</p>
+        <button id="mnChangePlan" type="button">Change plan</button>
+        <button id="mnManageSubscription" type="button">Manage subscription</button>
+        <p id="mnPaymentNotice" role="status"></p>
+        <div id="mnPaymentHistory"></div>
+      </section>
+    </section>
+
     <div id="mnLoginMethods">
       <button type="button" id="mnLogMode" class="selected">LOG</button>
       <button type="button" id="mnRegMode">REG</button>
     </div>
     <label id="mnAuthEmailLabel">Email <input id="mnAuthEmail" type="email" autocomplete="email" maxlength="254" required></label>
     <div id="mnRegFields" hidden>
-      <label>Телефон <input name="phone" type="tel" autocomplete="tel" maxlength="40"></label>
-      <label>Имя <input name="first_name" autocomplete="given-name" maxlength="120"></label>
-      <label>Фамилия <input name="last_name" autocomplete="family-name" maxlength="120"></label>
-      <label>Страна <input name="country" autocomplete="country-name" maxlength="120"></label>
-      <button id="mnSendCode" type="button">Отправить код на email</button>
-      <label>Код из письма <input id="mnAuthCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6"></label>
+      <label>Phone <input name="phone" type="tel" autocomplete="tel" maxlength="40"></label>
+      <label>First name <input name="first_name" autocomplete="given-name" maxlength="120"></label>
+      <label>Last name <input name="last_name" autocomplete="family-name" maxlength="120"></label>
+      <label>Country <input name="country" autocomplete="country-name" maxlength="120"></label>
+      <button id="mnSendCode" type="button">Send code to email</button>
+      <label>Code from email <input id="mnAuthCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6"></label>
     </div>
     <div id="mnLoginError" role="status" aria-live="polite"></div>
-    <button id="mnLoginSubmit" type="submit">Войти</button>
-    <button id="mnLogout" type="button" hidden>Выйти</button>
-    <button id="mnAuthClose" type="button" hidden>Закрыть</button>
+    <button id="mnLoginSubmit" type="submit">Log in</button>
+    <button id="mnLogout" type="button" hidden>Log out</button>
+    <button id="mnAuthClose" type="button" hidden>Close</button>
   </form>
 </dialog>
 <script>
@@ -23521,7 +23555,7 @@ document.addEventListener("click", event => {
     fields.querySelectorAll('input').forEach(input => input.required = reg);
     document.getElementById('mnLogMode').classList.toggle('selected', !reg);
     document.getElementById('mnRegMode').classList.toggle('selected', reg);
-    submit.textContent = reg ? 'Подтвердить и зарегистрироваться' : 'Войти';
+    submit.textContent = reg ? 'Confirm and register' : 'Log in';
     message.textContent = '';
   }
   function setBusy(value) {
@@ -23536,12 +23570,109 @@ document.addEventListener("click", event => {
     const response = await fetch(path, {method:'POST', credentials:'same-origin',
       headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
     if (!response.headers.get('content-type')?.includes('application/json')) {
-      throw new Error('Сервер вернул HTML вместо ответа REG/LOG (HTTP ' + response.status + '). Откройте MyNus через http://127.0.0.1:5000 и проверьте, что запущен server 7.0.0.');
+      throw new Error('Server returned HTML instead of a REG/LOG response (HTTP ' + response.status + '). Open MyNus at http://127.0.2.1:5000 and make sure server 7.0.2 is running.');
     }
     const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Ошибка сервера');
+    if (!response.ok) {const error = new Error(result.error || 'Server error'); error.result = result; throw error;}
     return result;
   }
+  let accountUser = null, accountRequest = null;
+  const editFields = {first_name:'mnEditFirst', last_name:'mnEditLast',
+    email:'mnEditEmail', phone:'mnEditPhone', country:'mnEditCountry'};
+  const accountEditor = document.getElementById('mnAccountEditor');
+  const accountStep = document.getElementById('mnAccountCodeStep');
+  const accountCode = document.getElementById('mnAccountCode');
+  const accountCancel = document.getElementById('mnAccountCancel');
+  const changeButton = document.getElementById('mnAccountChange');
+  function resetAccountEdit() {
+    accountRequest = null; accountEditor.hidden = true; accountStep.hidden = true;
+    accountCancel.hidden = true; changeButton.hidden = false; accountCode.value = '';
+    Object.values(editFields).forEach(id => document.getElementById(id).required = false);
+    accountCode.required = false;
+  }
+  function acceptAccountStep(result) {
+    if (!result.request_id) return;
+    accountRequest = result.request_id;
+    accountEditor.hidden = true; accountStep.hidden = false; accountCode.required = true;
+    Object.values(editFields).forEach(id => document.getElementById(id).required = false);
+    const verification = result.stage === 'verification';
+    document.getElementById('mnAccountCodeLabel').textContent = verification ? 'Verification code' : 'Confirmation code';
+    document.getElementById('mnAccountCodeHelp').textContent = verification
+      ? 'Enter the code sent to your new email. Your current email and profile remain unchanged until verification succeeds.'
+      : 'Enter the code sent to your current verified email. If you changed email, a separate verification code will then be sent to the new address.';
+    document.getElementById('mnAccountConfirm').textContent = verification ? 'Verify new email and save' : 'Confirm changes';
+    accountCode.value = '';
+  }
+  async function accountAction(action) {
+    if (busy) return;
+    setBusy(true); message.textContent = '';
+    try {await action();}
+    catch (error) {if (error.result) acceptAccountStep(error.result); message.textContent = error.message;}
+    finally {setBusy(false);}
+  }
+  changeButton.onclick = () => {
+    if (busy || !accountUser) return;
+    resetAccountEdit(); accountEditor.hidden = false; accountCancel.hidden = false;
+    changeButton.hidden = true; message.textContent = '';
+    for (const [field,id] of Object.entries(editFields)) {
+      const input = document.getElementById(id); input.value = accountUser[field] || ''; input.required = true;
+    }
+    document.getElementById('mnEditFirst').focus();
+  };
+  accountCancel.onclick = () => accountAction(async () => {
+    if (accountRequest) await api('/api/account/cancel', {request_id:accountRequest});
+    resetAccountEdit(); message.textContent = 'Changes cancelled. Your account was not changed.';
+  });
+  document.getElementById('mnAccountSave').onclick = () => {
+    for (const id of Object.values(editFields)) if (!document.getElementById(id).reportValidity()) return;
+    const profile = Object.fromEntries(Object.entries(editFields).map(([field,id]) => [field,document.getElementById(id).value.trim()]));
+    accountAction(async () => {
+      const result = await api('/api/account/change-code', profile);
+      acceptAccountStep(result); message.textContent = result.message;
+    });
+  };
+  document.getElementById('mnAccountConfirm').onclick = () => {
+    if (!accountCode.reportValidity()) return;
+    accountAction(async () => {
+      const result = await api('/api/account/confirm', {request_id:accountRequest, code:accountCode.value});
+      if (result.stage === 'complete') {window.location.reload(); return;}
+      acceptAccountStep(result); message.textContent = result.message;
+    });
+  };
+  document.getElementById('mnAccountResend').onclick = () => accountAction(async () => {
+    const result = await api('/api/account/resend-code', {request_id:accountRequest});
+    acceptAccountStep(result); message.textContent = result.message;
+  });
+  for (const id of ['mnChangePlan','mnManageSubscription']) {
+    document.getElementById(id).onclick = () => {
+      document.getElementById('mnPaymentNotice').textContent = id === 'mnChangePlan'
+        ? 'Plan changes are not available yet. The configured Paddle plans have not been connected to this server. Your plan is unchanged.'
+        : 'Subscription and payment management are not available yet. Paddle Customer Portal has not been connected to this server. No payment action was taken.';
+    };
+  }
+  async function loadPayments() {
+    try {
+      const response = await fetch('/api/account/payments', {credentials:'same-origin', cache:'no-store'});
+      if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error('Unable to load payment details.');
+      const data = await response.json();
+      const sub = data.subscription;
+      document.getElementById('mnPaymentSummary').textContent = sub
+        ? 'Plan: ' + sub.plan_name + ' · Status: ' + sub.status + ' · Current period ends: ' + sub.ends_at
+        : 'Plan: — · Status: No subscription';
+      document.getElementById('mnPaymentNotice').textContent = data.message;
+      const history = document.getElementById('mnPaymentHistory'); history.replaceChildren();
+      const title = document.createElement('h4'); title.textContent = 'Recent payments'; history.append(title);
+      if (!data.payments.length) {const p = document.createElement('p'); p.textContent = 'No payments recorded.'; history.append(p);}
+      for (const payment of data.payments) {
+        const p = document.createElement('p');
+        // Show the stored amount explicitly: currencies do not all use two decimals.
+        p.textContent = payment.created_at + ' · ' + payment.amount_minor + ' minor units ' + payment.currency + ' · ' + payment.status
+          + (payment.refunded_minor ? ' · Refunded: ' + payment.refunded_minor + ' minor units' : '');
+        history.append(p);
+      }
+    } catch(error) {document.getElementById('mnPaymentSummary').textContent = error.message;}
+  }
+
   open.addEventListener('click', () => {
     if (!dialog.open) dialog.showModal();
     if (authenticated) document.getElementById('mnAuthClose').focus();
@@ -23554,7 +23685,7 @@ document.addEventListener("click", event => {
   send.onclick = async () => {
     if (busy || !email.reportValidity()) return;
     for (const input of fields.querySelectorAll('input:not(#mnAuthCode)')) if (!input.reportValidity()) return;
-    setBusy(true); message.textContent = 'Отправка…';
+    setBusy(true); message.textContent = 'Sending…';
     try {const result = await api('/api/auth/register-code', {email:email.value, ...profile()}); message.textContent = result.message; code.focus();}
     catch (error) {message.textContent = error.message;}
     finally {setBusy(false);}
@@ -23575,7 +23706,7 @@ document.addEventListener("click", event => {
     catch (error) {message.textContent = error.message; setBusy(false);}
   };
   if (location.protocol === 'file:') {
-    message.textContent = 'Для REG/LOG откройте MyNus через http://127.0.0.1:5000 после запуска сервера. HTML-файл напрямую не подключается к серверу.';
+    message.textContent = 'For REG/LOG, open MyNus at http://127.0.2.1:5000 after starting the server. Opening the HTML file directly does not connect to the server.';
     if (!dialog.open) dialog.showModal();
     setBusy(true);
     return;
@@ -23583,13 +23714,13 @@ document.addEventListener("click", event => {
   fetch('/api/current-user', {credentials:'same-origin', cache:'no-store'})
     .then(async response => {
       if (response.status === 401) {dialog.showModal(); email.focus(); return;}
-      if (!response.ok) throw new Error('Не удалось проверить вход');
-      if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('Откройте MyNus через http://127.0.0.1:5000 и проверьте версию сервера.');
-      const user = await response.json(); authenticated = true;
+      if (!response.ok) throw new Error('Unable to verify login');
+      if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('Open MyNus at http://127.0.2.1:5000 and check the server version.');
+      const user = await response.json(); authenticated = true; accountUser = user; loadPayments();
       email.value = user.email || ''; open.textContent = user.name || user.email || 'REG / LOG';
-      open.title = 'Открыть аккаунт';
-      open.setAttribute('aria-label', 'Аккаунт: ' + (user.name || user.email || user.user_id));
-      document.getElementById('mnAuthTitle').textContent = 'MyNus — Аккаунт';
+      open.title = 'Open account';
+      open.setAttribute('aria-label', 'Account: ' + (user.name || user.email || user.user_id));
+      document.getElementById('mnAuthTitle').textContent = 'MyNus — Account';
       document.getElementById('mnLoginMethods').hidden = true;
       document.getElementById('mnLoginMethods').style.display = 'none';
       document.getElementById('mnAuthEmailLabel').hidden = true;
@@ -23599,16 +23730,16 @@ document.addEventListener("click", event => {
       submit.hidden = true;
       document.getElementById('mnAccount').hidden = false;
       const details = document.getElementById('mnAccountDetails');
-      const statuses = {none:'Нет подписки', pending:'Ожидает активации', active:'Активна', expired:'Истекла', cancelled:'Отменена'};
+      const statuses = {none:'No subscription', pending:'Pending activation', active:'Active', expired:'Expired', cancelled:'Cancelled'};
       const registered = user.created_at ? new Date(user.created_at) : null;
       const rows = [
-        ['User ID', user.user_id], ['Имя', user.first_name || user.name],
-        ['Фамилия', user.last_name], ['Email', user.email], ['Телефон', user.phone],
-        ['Страна', user.country],
-        ['Дата регистрации', registered && !Number.isNaN(registered.getTime()) ? registered.toLocaleString('ru-RU') : user.created_at],
-        ['Email подтверждён', user.email_verified_at ? 'Да' : 'Нет'],
-        ['Тариф', user.subscription?.plan_name],
-        ['Статус подписки', statuses[user.subscription?.status] || user.subscription?.status]
+        ['User ID', user.user_id], ['First name', user.first_name || user.name],
+        ['Last name', user.last_name], ['Email', user.email], ['Phone', user.phone],
+        ['Country', user.country],
+        ['Registration date', registered && !Number.isNaN(registered.getTime()) ? registered.toLocaleString('en-US') : user.created_at],
+        ['Email verified', user.email_verified_at ? 'Yes' : 'No'],
+        ['Plan', user.subscription?.plan_name],
+        ['Subscription status', statuses[user.subscription?.status] || user.subscription?.status]
       ];
       details.replaceChildren();
       for (const [label, value] of rows) {
@@ -23632,138 +23763,7 @@ document.addEventListener("click", event => {
 // ============================================================================
 
 
-<style>
-  #mnStartDialog {
-    width: min(380px, calc(100vw - 40px));
-    padding: 24px;
-    border: 1px solid #666;
-    border-radius: 10px;
-    background: #222;
-    color: #fff;
-  }
 
-  #mnStartDialog::backdrop {
-    background: rgba(0, 0, 0, .8);
-  }
-
-  #mnStartActions {
-    display: grid;
-    gap: 14px;
-  }
-
-  #mnStartActions button {
-    width: 100%;
-    padding: 14px;
-    font-size: 16px;
-  }
-
-  #mnStartActions button:disabled {
-    opacity: .4;
-    cursor: not-allowed;
-  }
-
-  #mnStartUser {
-    margin-bottom: 18px;
-    text-align: center;
-  }
-</style>
-
-<dialog id="mnStartDialog">
-  <div id="mnStartUser"></div>
-
-  <div id="mnStartActions">
-    <button id="mnStartSeparate" type="button">
-      Separate audio track
-    </button>
-
-    <button type="button" disabled title="Пока недоступно">
-      Load file MyNus
-    </button>
-
-    <button id="mnStartOpenProject" type="button">
-      Open project MyNus
-    </button>
-  </div>
-</dialog>
-
-<script>
-(() => {
-  const dialog = document.getElementById("mnStartDialog");
-  const userLabel = document.getElementById("mnStartUser");
-  const audioInput = document.getElementById("audioFile");
-  const splitButton = document.getElementById("splitBtn");
-  const openProjectButton = document.getElementById("openProjectStartBtn");
-
-  function showStart() {
-    if (!dialog.open) dialog.showModal();
-  }
-
-  document.getElementById("mnStartSeparate")
-    .addEventListener("click", () => {
-      if (!audioInput || !splitButton || splitButton.disabled) return;
-
-      function cleanup() {
-        audioInput.removeEventListener("change", selected);
-        audioInput.removeEventListener("cancel", cancelled);
-      }
-
-      function selected() {
-        cleanup();
-
-        if (!audioInput.files?.length) {
-          showStart();
-          return;
-        }
-
-        // Штатный обработчик выбора файла уже выполнился.
-        // Запускаем существующую сепарацию.
-        // splitButton.click();
-      }
-
-      function cancelled() {
-        cleanup();
-        showStart();
-      }
-
-      audioInput.addEventListener("change", selected);
-      audioInput.addEventListener("cancel", cancelled);
-
-      // Позволяет повторно выбрать тот же файл.
-      audioInput.value = "";
-      dialog.close();
-      audioInput.click();
-    });
-
-  document.getElementById("mnStartOpenProject")
-    .addEventListener("click", () => {
-      if (!openProjectButton || openProjectButton.disabled) return;
-
-      dialog.close();
-      openProjectButton.click();
-    });
-
-  // После входа предыдущий блок перезагружает страницу.
-  // Здесь показываем выбор действий уже вошедшему пользователю.
-  fetch("/api/current-user", {
-    credentials: "same-origin",
-    cache: "no-store"
-  })
-    .then(async response => {
-      if (!response.ok) return;
-
-      const user = await response.json();
-      userLabel.textContent =
-        "User ID: " + user.user_id +
-        (user.name ? " — " + user.name : "");
-
-      const loginDialog = document.getElementById("mnLoginDialog");
-      if (!loginDialog?.open) showStart();
-    })
-    .catch(error => {
-      console.error("Не удалось открыть стартовое меню:", error);
-    });
-})();
-</script>
 
 
 
@@ -24707,8 +24707,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 7.0.1 | Account");
-console.log("[SERVICE CONSOLE] MyNus 7.0.1 | Account");
+console.log("MyNus 7.1.1 | ChangeAcc@Pay");
+console.log("[SERVICE CONSOLE] MyNus 7.1.1 | ChangeAcc@Pay");
 </script>
 
 <div class="row" id="build-down">
