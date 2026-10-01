@@ -1,4 +1,4 @@
-<!-- MyNus 7.0.0 | REG\LOG -->
+<!-- MyNus MyNus 7.0.1 | Account -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 7.0.0</title>
+  <title>MyNus 7.0.1</title>
 
 
  <style>
@@ -23481,12 +23481,13 @@ document.addEventListener("click", event => {
 <button id="mnLoginButton" type="button">REG / LOG</button>
 <dialog id="mnLoginDialog">
   <form id="mnLoginForm">
-    <strong>MyNus — REG / LOG</strong>
+    <strong id="mnAuthTitle">MyNus — REG / LOG</strong>
+    <section id="mnAccount" hidden aria-label="Аккаунт"><dl id="mnAccountDetails" style="margin:0; overflow-wrap:anywhere"></dl></section>
     <div id="mnLoginMethods">
       <button type="button" id="mnLogMode" class="selected">LOG</button>
       <button type="button" id="mnRegMode">REG</button>
     </div>
-    <label>Email <input id="mnAuthEmail" type="email" autocomplete="email" maxlength="254" required></label>
+    <label id="mnAuthEmailLabel">Email <input id="mnAuthEmail" type="email" autocomplete="email" maxlength="254" required></label>
     <div id="mnRegFields" hidden>
       <label>Телефон <input name="phone" type="tel" autocomplete="tel" maxlength="40"></label>
       <label>Имя <input name="first_name" autocomplete="given-name" maxlength="120"></label>
@@ -23541,7 +23542,11 @@ document.addEventListener("click", event => {
     if (!response.ok) throw new Error(result.error || 'Ошибка сервера');
     return result;
   }
-  open.addEventListener('click', () => {if (!dialog.open) dialog.showModal(); email.focus();});
+  open.addEventListener('click', () => {
+    if (!dialog.open) dialog.showModal();
+    if (authenticated) document.getElementById('mnAuthClose').focus();
+    else email.focus();
+  });
   dialog.addEventListener('cancel', event => {if (!authenticated || busy) event.preventDefault();});
   document.getElementById('mnAuthClose').onclick = () => dialog.close();
   document.getElementById('mnLogMode').onclick = () => mode(false);
@@ -23556,7 +23561,7 @@ document.addEventListener("click", event => {
   };
   form.onsubmit = async event => {
     event.preventDefault();
-    if (busy || !form.reportValidity()) return;
+    if (authenticated || busy || !form.reportValidity()) return;
     setBusy(true); message.textContent = '';
     try {
       await api(registration ? '/api/auth/register' : '/api/auth/login', {email:email.value, code:code.value});
@@ -23582,6 +23587,39 @@ document.addEventListener("click", event => {
       if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('Откройте MyNus через http://127.0.0.1:5000 и проверьте версию сервера.');
       const user = await response.json(); authenticated = true;
       email.value = user.email || ''; open.textContent = user.name || user.email || 'REG / LOG';
+      open.title = 'Открыть аккаунт';
+      open.setAttribute('aria-label', 'Аккаунт: ' + (user.name || user.email || user.user_id));
+      document.getElementById('mnAuthTitle').textContent = 'MyNus — Аккаунт';
+      document.getElementById('mnLoginMethods').hidden = true;
+      document.getElementById('mnLoginMethods').style.display = 'none';
+      document.getElementById('mnAuthEmailLabel').hidden = true;
+      email.required = false;
+      fields.hidden = true;
+      fields.querySelectorAll('input').forEach(input => input.required = false);
+      submit.hidden = true;
+      document.getElementById('mnAccount').hidden = false;
+      const details = document.getElementById('mnAccountDetails');
+      const statuses = {none:'Нет подписки', pending:'Ожидает активации', active:'Активна', expired:'Истекла', cancelled:'Отменена'};
+      const registered = user.created_at ? new Date(user.created_at) : null;
+      const rows = [
+        ['User ID', user.user_id], ['Имя', user.first_name || user.name],
+        ['Фамилия', user.last_name], ['Email', user.email], ['Телефон', user.phone],
+        ['Страна', user.country],
+        ['Дата регистрации', registered && !Number.isNaN(registered.getTime()) ? registered.toLocaleString('ru-RU') : user.created_at],
+        ['Email подтверждён', user.email_verified_at ? 'Да' : 'Нет'],
+        ['Тариф', user.subscription?.plan_name],
+        ['Статус подписки', statuses[user.subscription?.status] || user.subscription?.status]
+      ];
+      details.replaceChildren();
+      for (const [label, value] of rows) {
+        const term = document.createElement('dt');
+        term.textContent = label; term.style.cssText = 'margin-top:10px;color:#aaa;font-size:13px';
+        const description = document.createElement('dd');
+        description.textContent = value == null || value === '' ? '—' : String(value);
+        description.style.margin = '3px 0 0';
+        details.append(term, description);
+      }
+
       document.getElementById('mnLogout').hidden = false;
       document.getElementById('mnAuthClose').hidden = false;
     }).catch(error => {message.textContent = error.message; if (!dialog.open) dialog.showModal();});
@@ -24669,8 +24707,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 7.0.0 | REG\LOG");
-console.log("[SERVICE CONSOLE] MyNus 7.0.0 | REG\LOG");
+console.log("MyNus 7.0.1 | Account");
+console.log("[SERVICE CONSOLE] MyNus 7.0.1 | Account");
 </script>
 
 <div class="row" id="build-down">
