@@ -1,4 +1,4 @@
-<!-- MyNus 6.4.3 | Independent IN/OUT dragging -->
+<!-- MyNus 6.4.4 | Select Track + top-bar Load Karaoke -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 6.4.3</title>
+  <title>MyNus 6.4.4</title>
 
 
  <style>
@@ -821,7 +821,7 @@ position: relative;
 
       height: 104px;
 
-      overflow: visible;
+      overflow: hidden;
 
       background: transparent;
 
@@ -1018,7 +1018,7 @@ position: relative;
 
     .project-trim-time {
       position: absolute;
-      top: 80px;
+      top: 85px;
       transform: translateX(-50%);
       min-width: 42px;
       text-align: center;
@@ -1034,6 +1034,7 @@ position: relative;
     .selection-time-label {
       position: absolute;
       top: 7px;
+      transform: translateX(-50%);
       min-width: 42px;
       text-align: center;
       font-family: Consolas, monospace;
@@ -1049,6 +1050,7 @@ position: relative;
     .selection-name-label {
       position: absolute;
       top: 66px;
+      transform: translateX(-50%);
       min-width: 42px;
       text-align: center;
       font-family: Consolas, monospace;
@@ -1061,24 +1063,9 @@ position: relative;
       z-index: 17;
     }
 
-
-/* IN — наружу влево + 4px от линии */
-.selection-time-label.in,
-.selection-name-label.in {
-  transform: translateX(calc(-100% - 4px));
-  text-align: right;
-}
-
-/* OUT — наружу вправо + 4px от линии */
-.selection-time-label.out,
-.selection-name-label.out {
-  transform: translateX(4px);
-  text-align: left;
-}
-
     .project-fade-time {
       position: absolute;
-      top: -5px;
+      top: -100px;
       transform: translate(-50%, -3px);
       min-width: 42px;
       text-align: center;
@@ -1097,7 +1084,6 @@ position: relative;
       width: 18px;
       height: 15px;
       padding: 0;
-      opacity: 0.5;
       border: 1px solid #b72468;
       border-radius: 3px 3px 7px 7px;
       background: #e83e8c;
@@ -1124,7 +1110,6 @@ position: relative;
       width: 12px;
       height: 12px;
       padding: 0;
-      opacity: 0.5;
       border: 2px solid #b72468;
       border-radius: 50%;
       background: #fff;
@@ -3364,7 +3349,7 @@ position: relative;
       type="button"
       id="selectFileBtn"
     >
-      Select File
+      Select Track
     </button>
 
     <button
@@ -3372,6 +3357,13 @@ position: relative;
       id="openProjectStartBtn"
     >
       Open Project
+    </button>
+
+    <button
+      type="button"
+      id="loadKaraokeTopBtn"
+    >
+      Load Karaoke
     </button>
 
     <div id="fileName">
@@ -4354,10 +4346,10 @@ position: relative;
 
       <div id="projectFadeInTime" class="project-fade-time">0:00</div>
       <div id="projectFadeOutTime" class="project-fade-time">0:00</div>
-      <div id="selectionInTime" class="selection-time-label in">0:00</div>
-      <div id="selectionOutTime" class="selection-time-label out">0:00</div>
-      <div id="selectionInName" class="selection-name-label in">IN</div>
-      <div id="selectionOutName" class="selection-name-label out">OUT</div>
+      <div id="selectionInTime" class="selection-time-label">0:00</div>
+      <div id="selectionOutTime" class="selection-time-label">0:00</div>
+      <div id="selectionInName" class="selection-name-label">IN</div>
+      <div id="selectionOutName" class="selection-name-label">OUT</div>
       <div id="projectTrimStartTime" class="project-trim-time">0:00</div>
       <div id="projectTrimEndTime" class="project-trim-time">0:00</div>
 
@@ -6249,7 +6241,6 @@ let loopEnabled = false;
 let selectionDragging = false;
 let selectionPointerStartX = 0;
 let selectionMoved = false;
-let selectionDragEdge = null; // 6.4.3 | null / in / out
 
 let exportTargetTrack = "master";
 let exportTargetScope = "full";
@@ -13861,32 +13852,51 @@ masterTimelineInner.addEventListener(
   "pointerdown",
   event => {
 
-    if (event.target === masterCursor) return;
+    if (
+      event.target === masterCursor
+    ) {
 
-    selectionDragging = true;
-    selectionMoved = false;
-    selectionDragEdge = null;
+      return;
 
-    const rect = masterTimelineInner.getBoundingClientRect();
+    }
+
+
+    selectionDragging =
+      true;
+
+
+    selectionMoved =
+      false;
+
+
+    const rect =
+      masterTimelineInner
+        .getBoundingClientRect();
+
+
+    // 5.4.18 | Начало Selection не может оказаться за пределами Project Trim.
     const trimStartX = getProjectTrimStart() / duration * rect.width;
     const trimEndX = getProjectTrimEnd() / duration * rect.width;
-    const x = Math.max(trimStartX, Math.min(trimEndX, event.clientX - rect.left));
 
-    selectionPointerStartX = x;
-    const edgeGrabPx = 12;
+    selectionPointerStartX =
+      Math.max(
+        trimStartX,
+        Math.min(
+          trimEndX,
+          event.clientX
+          - rect.left
+        )
+      );
 
-    if (fragmentStart !== null) {
-      const inX = fragmentStart / duration * rect.width;
-      if (Math.abs(x - inX) <= edgeGrabPx) selectionDragEdge = "in";
-    }
 
-    if (selectionDragEdge === null && fragmentEnd !== null) {
-      const outX = fragmentEnd / duration * rect.width;
-      if (Math.abs(x - outX) <= edgeGrabPx) selectionDragEdge = "out";
-    }
+    masterTimelineInner
+      .setPointerCapture(
+        event.pointerId
+      );
 
-    masterTimelineInner.setPointerCapture(event.pointerId);
+
     event.preventDefault();
+
   }
 );
 
@@ -13895,39 +13905,79 @@ masterTimelineInner.addEventListener(
   "pointermove",
   event => {
 
-    if (!selectionDragging) return;
+    if (!selectionDragging) {
+      return;
+    }
 
-    const rect = masterTimelineInner.getBoundingClientRect();
+
+    const rect =
+      masterTimelineInner
+        .getBoundingClientRect();
+
+
+    // 5.4.18 | Оба края мышиного Selection жёстко ограничены Trim.
     const trimStartX = getProjectTrimStart() / duration * rect.width;
     const trimEndX = getProjectTrimEnd() / duration * rect.width;
-    let x = Math.max(trimStartX, Math.min(trimEndX, event.clientX - rect.left));
 
-    if (Math.abs(x - selectionPointerStartX) > 4) selectionMoved = true;
-    if (!selectionMoved) return;
+    const x =
+      Math.max(
+        trimStartX,
+        Math.min(
+          trimEndX,
+          event.clientX
+          - rect.left
+        )
+      );
 
-    if (selectionDragEdge === "in") {
-      if (fragmentEnd !== null) {
-        const outX = fragmentEnd / duration * rect.width;
-        x = Math.min(x, outX);
-      }
-      fragmentStart = x / rect.width * duration;
 
-    } else if (selectionDragEdge === "out") {
-      if (fragmentStart !== null) {
-        const inX = fragmentStart / duration * rect.width;
-        x = Math.max(x, inX);
-      }
-      fragmentEnd = x / rect.width * duration;
+    if (
+      Math.abs(
+        x - selectionPointerStartX
+      )
+      > 4
+    ) {
 
-    } else {
-      const startX = Math.min(selectionPointerStartX, x);
-      const endX = Math.max(selectionPointerStartX, x);
-      fragmentStart = startX / rect.width * duration;
-      fragmentEnd = endX / rect.width * duration;
+      selectionMoved =
+        true;
+
     }
+
+
+    if (!selectionMoved) {
+      return;
+    }
+
+
+    const startX =
+      Math.min(
+        selectionPointerStartX,
+        x
+      );
+
+
+    const endX =
+      Math.max(
+        selectionPointerStartX,
+        x
+      );
+
+
+    // Мышью задаём тот же диапазон, что и кнопками IN / OUT.
+    fragmentStart =
+      startX
+      / rect.width
+      * duration; // длительность
+
+
+    fragmentEnd =
+      endX
+      / rect.width
+      * duration; // длительность
+
 
     updateSelectionDisplay();
     updateTimeDisplay();
+
   }
 );
 
@@ -13936,20 +13986,43 @@ masterTimelineInner.addEventListener(
   "pointerup",
   event => {
 
-    if (!selectionDragging) return;
-
-    selectionDragging = false;
-    selectionDragEdge = null;
-
-    if (masterTimelineInner.hasPointerCapture(event.pointerId)) {
-      masterTimelineInner.releasePointerCapture(event.pointerId);
+    if (!selectionDragging) {
+      return;
     }
+
+
+    selectionDragging =
+      false;
+
+
+    if (
+      masterTimelineInner
+        .hasPointerCapture(
+          event.pointerId
+        )
+    ) {
+
+      masterTimelineInner
+        .releasePointerCapture(
+          event.pointerId
+        );
+
+    }
+
 
     if (!selectionMoved) {
-      seekFromMasterTimeline(event);
+
+      // 5.4.18 | Обычный клик по Master Timeline только переводит курсор.
+      // Selection / IN / OUT таким кликом НЕ снимаются.
+      seekFromMasterTimeline(
+        event
+      );
+
     }
 
+
     updateSelectionButtons();
+
   }
 );
 
@@ -21270,7 +21343,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "6.4.3",
+    version: "6.4.0",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -22164,7 +22237,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "6.4.3";
+const MYNUS_CLIENT_VERSION = "6.4.0";
 const MYNUS_CLIENT_CHANGE = "Karaoke non-Full-Screen minimum 620x900; separate session-only Sequencer History with Undo/Redo; Lyrics History, Trim, startup Select File/Open Project, and server unchanged";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -24300,11 +24373,16 @@ document.addEventListener("click", event => {
     };
   }
 
-  button.addEventListener("click", () => {
+  function openKaraokePicker() {
     if (loading || projectLoading || activeSeparation) return;
     picker.value = "";
     picker.click();
-  });
+  }
+
+  button.addEventListener("click", openKaraokePicker);
+
+  const topButton = document.getElementById("loadKaraokeTopBtn");
+  topButton?.addEventListener("click", openKaraokePicker);
 
   picker.addEventListener("change", async () => {
     const file = picker.files[0];
@@ -24312,6 +24390,7 @@ document.addEventListener("click", event => {
 
     loading = true;
     button.disabled = true;
+    if (topButton) topButton.disabled = true;
     cancelKaraokePostPlayAutoNext();
 
     let committed = false;
@@ -24459,6 +24538,7 @@ document.addEventListener("click", event => {
     } finally {
       loading = false;
       button.disabled = false;
+      if (topButton) topButton.disabled = false;
     }
   });
 })();
@@ -24620,8 +24700,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("6.4.3 | MyNus independent IN/OUT dragging");
-console.log("[SERVICE CONSOLE] MyNus 6.4.3 | Independent IN/OUT dragging");
+console.log("MyNus 6.4.4 | Select Track + top-bar Load Karaoke");
+console.log("[SERVICE CONSOLE] MyNus 6.4.4 | Select Track + top-bar Load Karaoke");
 </script>
 
 <div class="row" id="build-down">
