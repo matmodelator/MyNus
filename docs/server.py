@@ -1,5 +1,5 @@
 # ========================================
-#  LOCAL SAVE&LOAD | 6.4.0 
+#  REG@LOG | 7.0.0 
 # ========================================
 
 # ========================================
@@ -107,7 +107,7 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "6.2.0", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "7.0.0", "trace_id": trace_id})
 
 
 # ========================================
@@ -149,11 +149,6 @@ def debug_client_console():
 
 @app.route("/")
 def index():
-    if session.get("user_id") is None:
-        return redirect("/test-users")
-
-    current_user_id()
-
     # Play List history belongs to the current index session only.
     # Reloading index clears -N history but preserves current and queue.
     state = _read_playlist_state()
@@ -171,6 +166,9 @@ def index():
         BASE_DIR,
         "index.html"
     )
+
+    if not os.path.isfile(index_path):
+        index_path = os.path.join(BASE_DIR, "index_7.0.0.html")
 
     with open(
         index_path,
@@ -2022,7 +2020,7 @@ def save_project():
         if not track_files.get("original"):
             raise ValueError("Original track not received")
 
-        project_json["version"] = "6.2.0"
+        project_json["version"] = "7.0.0"
         project_json["id"] = project_id
         project_json["name"] = project_name
         project_json["tracks"] = track_files
@@ -2227,7 +2225,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlsplit, unquote
-from flask import session, redirect, render_template_string, abort
+from flask import session, abort
 
 DB_PATH = Path(BASE_DIR) / "mynus.db"
 app.secret_key = app.secret_key or secrets.token_hex(32)
@@ -2270,7 +2268,7 @@ def current_user_id():
             (uid,),
         ).fetchone()
     if row is None:
-        abort(401, description="Выберите пользователя: /test-users")
+        abort(401, description="Войдите в MyNus по email")
     return row["user_id"]
 
 
@@ -2282,66 +2280,204 @@ def write_log(db, uid, event, message, sid=None, pid=None, level="info"):
     db.execute(
         """INSERT INTO diagnostic_logs
            (user_id,separation_id,project_id,app_version,level,event,message)
-           VALUES (?,?,?,'5.6.1',?,?,?)""",
+           VALUES (?,?,?,'7.0.0',?,?,?)""",
         (uid, sid, pid, level, event, str(message)[:8000]),
     )
 
 
-@app.route("/test-users", methods=["GET", "POST"])
-def choose_user():
-    session.setdefault("csrf_token", secrets.token_hex(32))
+# MyNus 7.0.0: email REG/LOG, session cookie only (no remember token).
+import smtplib
+import ssl
+import hashlib
+from email.message import EmailMessage
 
-    if request.method == "POST":
-        if not secrets.compare_digest(
-            request.form.get("csrf", ""),
-            session["csrf_token"],
-        ):
-            abort(403)
+AUTH_CONFIG_PATH = Path(BASE_DIR) / "mynus_config_7.0.0.json"
+pending_registrations = {}
+auth_lock = threading.Lock()
 
-        try:
-            uid = int(request.form["user_id"])
-        except (KeyError, ValueError):
-            abort(400)
 
-        with db_connection() as db:
-            row = db.execute(
-                "SELECT 1 FROM users WHERE user_id=?",
-                (uid,),
-            ).fetchone()
-            if row is None:
-                abort(404)
-
-        session["user_id"] = uid
-        return redirect("/")
-
+def migrate_registration_fields():
+    # Extend existing users without replacing IDs, projects or subscriptions.
     with db_connection() as db:
-        users = db.execute(
-            "SELECT user_id,name FROM users ORDER BY user_id"
-        ).fetchall()
+        columns = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
+        for column in ("email", "phone", "email_verified_at", "first_name", "last_name", "country"):
+            if column not in columns:
+                db.execute("ALTER TABLE users ADD COLUMN " + column + " TEXT")
+        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_email_normalized "
+                   "ON users(lower(trim(email))) WHERE email IS NOT NULL AND trim(email) <> ''")
 
-    return render_template_string(
-        """<!doctype html>
-        <html lang="ru">
-        <meta charset="utf-8">
-        <title>MyNus — пользователь</title>
-        <h2>Тестовый пользователь</h2>
-        <form method="post">
-            <input type="hidden" name="csrf" value="{{ csrf }}">
-            <select name="user_id" required>
-                {% for u in users %}
-                <option value="{{ u.user_id }}"
-                    {% if u.user_id == selected %}selected{% endif %}>
-                    {{ u.user_id }} — {{ u.name }}
-                </option>
-                {% endfor %}
-            </select>
-            <button>Открыть MyNus</button>
-        </form>
-        </html>""",
-        users=users,
-        selected=session.get("user_id"),
-        csrf=session["csrf_token"],
-    )
+
+def auth_email(value):
+    email = str(value or "").strip().lower()
+    if len(email) > 254 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+        raise ValueError("Укажите корректный email")
+    return email
+
+
+def send_registration_code(email, code):
+    with AUTH_CONFIG_PATH.open(encoding="utf-8-sig") as file:
+        config = json.load(file)
+    smtp = config["smtp"]
+    password = os.environ.get("MYNUS_SMTP_PASSWORD") or smtp.get("password", "")
+    if not password or password == "PASTE_SMTP_KEY_HERE":
+        raise RuntimeError("Вставьте SMTP-ключ Brevo в mynus_config_7.0.0.json")
+    message = EmailMessage()
+    message["From"] = smtp["sender"]
+    message["To"] = email
+    message["Subject"] = "MyNus — подтверждение email"
+    message.set_content("Код подтверждения MyNus: " + code +
+                        "\nКод действует 10 минут. Если вы не регистрировались, проигнорируйте письмо.")
+    with smtplib.SMTP(smtp["host"], int(smtp["port"]), timeout=20) as client:
+        client.ehlo()
+        client.starttls(context=ssl.create_default_context())
+        client.ehlo()
+        client.login(smtp["login"], password)
+        client.send_message(message)
+
+
+def auth_request_data():
+    # JSON plus same-origin check prevents cross-site login/registration forms.
+    if not request.is_json:
+        abort(415)
+    origin = request.headers.get("Origin")
+    expected_origin = request.host_url.rstrip("/")
+    # Local cloudflared terminates HTTPS and forwards HTTP to Flask.
+    # Accept its forwarded scheme only when the connection is from loopback.
+    if request.remote_addr in ("127.0.0.1", "::1"):
+        forwarded_scheme = request.headers.get("X-Forwarded-Proto", "")
+        if forwarded_scheme in ("http", "https"):
+            expected_origin = forwarded_scheme + "://" + request.host
+    if origin and origin.rstrip("/") != expected_origin:
+        abort(403, description="Адрес страницы не совпадает с адресом сервера. Откройте MyNus через сервер или его Cloudflare-ссылку.")
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        abort(400)
+    return data
+
+
+@app.route("/api/auth/register-code", methods=["POST"])
+def register_code():
+    data = auth_request_data()
+    try:
+        email = auth_email(data.get("email"))
+        profile = {field: str(data.get(field) or "").strip()
+                   for field in ("phone", "first_name", "last_name", "country")}
+        if any(not value or len(value) > 120 for value in profile.values()):
+            raise ValueError("Заполните телефон, имя, фамилию и страну (до 120 символов)")
+        if not re.fullmatch(r"[+()\d .-]{5,40}", profile["phone"]):
+            raise ValueError("Укажите корректный телефон")
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    with db_connection() as db:
+        if db.execute("SELECT 1 FROM users WHERE lower(trim(email))=?", (email,)).fetchone():
+            return jsonify(error="Этот email уже зарегистрирован. Используйте LOG."), 409
+    now = time.monotonic()
+    with auth_lock:
+        for key in list(pending_registrations):
+            if pending_registrations[key]["expires"] < now:
+                del pending_registrations[key]
+        previous = pending_registrations.get(email)
+        if previous and now - previous["sent"] < 60:
+            return jsonify(error="Повторная отправка возможна через минуту"), 429
+        if len(pending_registrations) >= 1000:
+            return jsonify(error="Попробуйте позже"), 429
+        code = f"{secrets.randbelow(1000000):06d}"
+        pending = dict(profile, digest=hashlib.sha256(code.encode()).hexdigest(),
+                       expires=now + 600, sent=now, attempts=0, ready=False)
+        pending_registrations[email] = pending
+    try:
+        send_registration_code(email, code)
+    except Exception as exc:
+        with auth_lock:
+            if pending_registrations.get(email) is pending:
+                del pending_registrations[email]
+        # Do not log SMTP credentials, message body or verification code.
+        print("[REG EMAIL] Sending failed: " + type(exc).__name__, flush=True)
+        return jsonify(error="Не удалось отправить письмо. Проверьте настройки Brevo на сервере."), 503
+    with auth_lock:
+        pending["ready"] = True
+    return jsonify(ok=True, message="Код отправлен на email. Действует 10 минут.")
+
+
+@app.route("/api/auth/register", methods=["POST"])
+def register_user():
+    data = auth_request_data()
+    try:
+        email = auth_email(data.get("email"))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    code = str(data.get("code") or "").strip()
+    with auth_lock:
+        pending = pending_registrations.get(email)
+        if not pending or not pending["ready"] or pending["expires"] < time.monotonic():
+            return jsonify(error="Запросите новый код"), 400
+        pending["attempts"] += 1
+        if pending["attempts"] > 5:
+            del pending_registrations[email]
+            return jsonify(error="Слишком много попыток. Запросите новый код."), 429
+        if not secrets.compare_digest(pending["digest"], hashlib.sha256(code.encode()).hexdigest()):
+            return jsonify(error="Неверный код"), 400
+        try:
+            with db_connection() as db:
+                uid = db.execute(
+                    "INSERT INTO users (name,email,phone,email_verified_at,first_name,last_name,country) "
+                    "VALUES (?,?,?,?,?,?,?)",
+                    (pending["first_name"] + " " + pending["last_name"], email,
+                     pending["phone"], utc_now(), pending["first_name"],
+                     pending["last_name"], pending["country"]),
+                ).lastrowid
+                write_log(db, uid, "user.registered", "Email подтверждён")
+        except sqlite3.IntegrityError:
+            return jsonify(error="Email уже зарегистрирован"), 409
+        del pending_registrations[email]
+    session.clear()
+    session.permanent = False
+    session["user_id"] = uid
+    return jsonify(ok=True, user_id=uid)
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def login_email():
+    data = auth_request_data()
+    try:
+        email = auth_email(data.get("email"))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    with db_connection() as db:
+        row = db.execute("SELECT user_id FROM users WHERE lower(trim(email))=?", (email,)).fetchone()
+    if row is None:
+        return jsonify(error="Email не зарегистрирован. Используйте REG."), 404
+    session.clear()
+    session.permanent = False
+    session["user_id"] = row["user_id"]
+    return jsonify(ok=True, user_id=row["user_id"])
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def logout_user():
+    auth_request_data()
+    session.clear()
+    return jsonify(ok=True)
+
+
+migrate_registration_fields()
+
+
+from werkzeug.exceptions import HTTPException
+
+
+@app.errorhandler(HTTPException)
+def auth_http_error(error):
+    if request.path.startswith("/api/auth/") or request.path == "/api/current-user":
+        return jsonify(error=error.description), error.code
+    return error
+
+
+@app.errorhandler(500)
+def auth_server_error(error):
+    if request.path.startswith("/api/auth/") or request.path == "/api/current-user":
+        return jsonify(error="Ошибка сервера REG/LOG. Проверьте журнал сервера."), 500
+    return error
 
 
 @app.route("/api/current-user")
@@ -2349,10 +2485,17 @@ def current_user():
     uid = current_user_id()
     with db_connection() as db:
         row = db.execute(
-            "SELECT user_id,name FROM users WHERE user_id=?",
+            "SELECT user_id,name,email,phone,first_name,last_name,country,created_at,email_verified_at "
+            "FROM users WHERE user_id=?",
             (uid,),
         ).fetchone()
-        return jsonify(dict(row))
+        user = dict(row)
+        subscription = db.execute(
+            "SELECT plan_name,status FROM subscriptions WHERE user_id=? "
+            "ORDER BY subscription_id DESC LIMIT 1", (uid,),
+        ).fetchone()
+        user["subscription"] = dict(subscription) if subscription else {"plan_name": None, "status": "none"}
+        return jsonify(user)
 
 
 # Проверяем существующую БД. Пустую базу вместо отсутствующей не создаём.
@@ -2445,7 +2588,7 @@ def source_separation(db, uid):
 
 
 
-# 6.4.0: Project and PlayList persistence belongs to the browser.
+# 7.0.0: Project and PlayList persistence belongs to the browser.
 @app.before_request
 def reject_legacy_project_storage():
     path = request.path
@@ -2453,12 +2596,12 @@ def reject_legacy_project_storage():
         path == "/saved-projects" or path.startswith("/saved-projects/") or
         path.startswith("/opened-projects/") or path.startswith("/playlist/") or
         path == "/lyrics/save-current"):
-        return jsonify(error="Project save/load is local in MyNus 6.4.0"), 410
+        return jsonify(error="Project save/load is local in MyNus 7.0.0"), 410
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("LOCAL SAVE&LOAD | 6.4.0 ")
-    print(r"LOCAL SAVE&LOAD | 6.4.0")
+    print("REG@LOG | 7.0.0 ")
+    print(r"REG@LOG | 7.0.0")
     print("=" * 72 + "\n")
 
     try:
