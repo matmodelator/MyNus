@@ -1,4 +1,4 @@
-<!-- MyNus 6.4.4 | Select Track + top-bar Load Karaoke -->
+<!-- MyNus 7.0.0 | REG\LOG -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 6.4.4</title>
+  <title>MyNus 7.0.0</title>
 
 
  <style>
@@ -21343,7 +21343,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "6.4.0",
+    version: "7.0.0",
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -22237,7 +22237,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "6.4.0";
+const MYNUS_CLIENT_VERSION = "7.0.0";
 const MYNUS_CLIENT_CHANGE = "Karaoke non-Full-Screen minimum 620x900; separate session-only Sequencer History with Undo/Redo; Lyrics History, Trim, startup Select File/Open Project, and server unchanged";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -23478,144 +23478,113 @@ document.addEventListener("click", event => {
 }
 </style>
 
-<button id="mnLoginButton" type="button">Вход</button>
-
+<button id="mnLoginButton" type="button">REG / LOG</button>
 <dialog id="mnLoginDialog">
   <form id="mnLoginForm">
-    <strong>Вход в MyNus</strong>
-
-<div id="mnLoginMethods" role="group" aria-label="Способ входа">
-  <button type="button" class="selected" aria-pressed="true">
-    По ID
-  </button>
-
-  <button type="button" disabled title="Пока недоступно">
-    По имени
-  </button>
-
-  <button type="button" disabled title="Пока недоступно">
-    По email
-  </button>
-</div>
-
-    <label for="mnLoginId">User ID</label>
-    <input
-      id="mnLoginId"
-      type="text"
-      inputmode="numeric"
-      pattern="[0-9]+"
-      autocomplete="username"
-      placeholder="Например: 0"
-      required
-    >
-
-    <label for="mnLoginPassword">Пароль</label>
-    <input
-      id="mnLoginPassword"
-      type="password"
-      autocomplete="current-password"
-      placeholder="Пока не используется"
-      disabled
-    >
-
-    <div id="mnLoginError" role="alert"></div>
+    <strong>MyNus — REG / LOG</strong>
+    <div id="mnLoginMethods">
+      <button type="button" id="mnLogMode" class="selected">LOG</button>
+      <button type="button" id="mnRegMode">REG</button>
+    </div>
+    <label>Email <input id="mnAuthEmail" type="email" autocomplete="email" maxlength="254" required></label>
+    <div id="mnRegFields" hidden>
+      <label>Телефон <input name="phone" type="tel" autocomplete="tel" maxlength="40"></label>
+      <label>Имя <input name="first_name" autocomplete="given-name" maxlength="120"></label>
+      <label>Фамилия <input name="last_name" autocomplete="family-name" maxlength="120"></label>
+      <label>Страна <input name="country" autocomplete="country-name" maxlength="120"></label>
+      <button id="mnSendCode" type="button">Отправить код на email</button>
+      <label>Код из письма <input id="mnAuthCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6"></label>
+    </div>
+    <div id="mnLoginError" role="status" aria-live="polite"></div>
     <button id="mnLoginSubmit" type="submit">Войти</button>
+    <button id="mnLogout" type="button" hidden>Выйти</button>
+    <button id="mnAuthClose" type="button" hidden>Закрыть</button>
   </form>
 </dialog>
-
 <script>
 (() => {
-  const dialog = document.getElementById("mnLoginDialog");
-  const form = document.getElementById("mnLoginForm");
-  const idInput = document.getElementById("mnLoginId");
-  const message = document.getElementById("mnLoginError");
-  const submit = document.getElementById("mnLoginSubmit");
-  const openButton = document.getElementById("mnLoginButton");
-
-  function openLogin() {
-    message.textContent = "";
-    if (!dialog.open) dialog.showModal();
-    idInput.focus();
+  const dialog = document.getElementById('mnLoginDialog');
+  const form = document.getElementById('mnLoginForm');
+  const email = document.getElementById('mnAuthEmail');
+  const code = document.getElementById('mnAuthCode');
+  const fields = document.getElementById('mnRegFields');
+  const message = document.getElementById('mnLoginError');
+  const submit = document.getElementById('mnLoginSubmit');
+  const send = document.getElementById('mnSendCode');
+  const open = document.getElementById('mnLoginButton');
+  let registration = false, authenticated = false, busy = false;
+  function mode(reg) {
+    if (busy) return;
+    registration = reg;
+    fields.hidden = !reg;
+    fields.querySelectorAll('input').forEach(input => input.required = reg);
+    document.getElementById('mnLogMode').classList.toggle('selected', !reg);
+    document.getElementById('mnRegMode').classList.toggle('selected', reg);
+    submit.textContent = reg ? 'Подтвердить и зарегистрироваться' : 'Войти';
+    message.textContent = '';
   }
-
-  openButton.addEventListener("click", openLogin);
-
-  form.addEventListener("submit", async event => {
-    event.preventDefault();
-    if (!form.reportValidity()) return;
-
-    submit.disabled = true;
-    idInput.readOnly = true;
-    message.textContent = "";
-
-    try {
-      // Получаем защитный код существующей формы сервера.
-      const page = await fetch("/test-users", {
-        credentials: "same-origin",
-        cache: "no-store"
-      });
-
-      if (!page.ok) {
-        throw new Error("Не удалось получить форму входа.");
-      }
-
-      const documentCopy = new DOMParser().parseFromString(
-        await page.text(),
-        "text/html"
-      );
-
-      const csrf = documentCopy.querySelector(
-        'input[name="csrf"]'
-      )?.value;
-
-      if (!csrf) {
-        throw new Error("Сервер не вернул защитный код формы.");
-      }
-
-      // Используем существующий вход по ID.
-      const response = await fetch("/test-users", {
-        method: "POST",
-        credentials: "same-origin",
-        body: new URLSearchParams({
-          user_id: idInput.value,
-          csrf
-        })
-      });
-
-      if (response.status === 404) {
-        throw new Error("Пользователь не найден.");
-      }
-
-      if (!response.ok) {
-        throw new Error("Вход не выполнен. Код: " + response.status);
-      }
-
-      window.location.reload();
-    } catch (error) {
-      message.textContent = error.message || "Ошибка соединения.";
-    } finally {
-      submit.disabled = false;
-      idInput.readOnly = false;
+  function setBusy(value) {
+    busy = value;
+    form.querySelectorAll('button').forEach(button => button.disabled = value);
+    form.querySelectorAll('input').forEach(input => input.readOnly = value);
+  }
+  function profile() {
+    return Object.fromEntries(['phone','first_name','last_name','country'].map(name => [name, form.elements[name].value.trim()]));
+  }
+  async function api(path, data) {
+    const response = await fetch(path, {method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+    if (!response.headers.get('content-type')?.includes('application/json')) {
+      throw new Error('Сервер вернул HTML вместо ответа REG/LOG (HTTP ' + response.status + '). Откройте MyNus через http://127.0.0.1:5000 и проверьте, что запущен server 7.0.0.');
     }
-  });
-
-  fetch("/api/current-user", {
-    credentials: "same-origin",
-    cache: "no-store"
-  })
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Ошибка сервера');
+    return result;
+  }
+  open.addEventListener('click', () => {if (!dialog.open) dialog.showModal(); email.focus();});
+  dialog.addEventListener('cancel', event => {if (!authenticated || busy) event.preventDefault();});
+  document.getElementById('mnAuthClose').onclick = () => dialog.close();
+  document.getElementById('mnLogMode').onclick = () => mode(false);
+  document.getElementById('mnRegMode').onclick = () => mode(true);
+  send.onclick = async () => {
+    if (busy || !email.reportValidity()) return;
+    for (const input of fields.querySelectorAll('input:not(#mnAuthCode)')) if (!input.reportValidity()) return;
+    setBusy(true); message.textContent = 'Отправка…';
+    try {const result = await api('/api/auth/register-code', {email:email.value, ...profile()}); message.textContent = result.message; code.focus();}
+    catch (error) {message.textContent = error.message;}
+    finally {setBusy(false);}
+  };
+  form.onsubmit = async event => {
+    event.preventDefault();
+    if (busy || !form.reportValidity()) return;
+    setBusy(true); message.textContent = '';
+    try {
+      await api(registration ? '/api/auth/register' : '/api/auth/login', {email:email.value, code:code.value});
+      window.location.reload();
+    } catch (error) {message.textContent = error.message; setBusy(false);}
+  };
+  document.getElementById('mnLogout').onclick = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {await api('/api/auth/logout', {}); window.location.reload();}
+    catch (error) {message.textContent = error.message; setBusy(false);}
+  };
+  if (location.protocol === 'file:') {
+    message.textContent = 'Для REG/LOG откройте MyNus через http://127.0.0.1:5000 после запуска сервера. HTML-файл напрямую не подключается к серверу.';
+    if (!dialog.open) dialog.showModal();
+    setBusy(true);
+    return;
+  }
+  fetch('/api/current-user', {credentials:'same-origin', cache:'no-store'})
     .then(async response => {
-      if (response.status === 401) {
-        openLogin();
-        return;
-      }
-
-      if (!response.ok) return;
-
-      const user = await response.json();
-      idInput.value = String(user.user_id);
-      openButton.textContent = "User ID: " + user.user_id;
-    })
-    .catch(() => {});
+      if (response.status === 401) {dialog.showModal(); email.focus(); return;}
+      if (!response.ok) throw new Error('Не удалось проверить вход');
+      if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('Откройте MyNus через http://127.0.0.1:5000 и проверьте версию сервера.');
+      const user = await response.json(); authenticated = true;
+      email.value = user.email || ''; open.textContent = user.name || user.email || 'REG / LOG';
+      document.getElementById('mnLogout').hidden = false;
+      document.getElementById('mnAuthClose').hidden = false;
+    }).catch(error => {message.textContent = error.message; if (!dialog.open) dialog.showModal();});
 })();
 </script>
 
@@ -24700,8 +24669,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 6.4.4 | Select Track + top-bar Load Karaoke");
-console.log("[SERVICE CONSOLE] MyNus 6.4.4 | Select Track + top-bar Load Karaoke");
+console.log("MyNus 7.0.0 | REG\LOG");
+console.log("[SERVICE CONSOLE] MyNus 7.0.0 | REG\LOG");
 </script>
 
 <div class="row" id="build-down">
