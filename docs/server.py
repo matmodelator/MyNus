@@ -1,5 +1,5 @@
 # ========================================
-#  REG@LOG | 7.0.0 
+#  ChangeAcc@Pay | 7.1.0 
 # ========================================
 
 # ========================================
@@ -107,7 +107,7 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "7.0.0", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "7.0.2", "trace_id": trace_id})
 
 
 # ========================================
@@ -168,7 +168,7 @@ def index():
     )
 
     if not os.path.isfile(index_path):
-        index_path = os.path.join(BASE_DIR, "index_7.0.0.html")
+        index_path = os.path.join(BASE_DIR, "index_7.0.2.html")
 
     with open(
         index_path,
@@ -2020,7 +2020,7 @@ def save_project():
         if not track_files.get("original"):
             raise ValueError("Original track not received")
 
-        project_json["version"] = "7.0.0"
+        project_json["version"] = "7.0.2"
         project_json["id"] = project_id
         project_json["name"] = project_name
         project_json["tracks"] = track_files
@@ -2268,7 +2268,7 @@ def current_user_id():
             (uid,),
         ).fetchone()
     if row is None:
-        abort(401, description="Войдите в MyNus по email")
+        abort(401, description="Please log in to MyNus.")
     return row["user_id"]
 
 
@@ -2280,18 +2280,20 @@ def write_log(db, uid, event, message, sid=None, pid=None, level="info"):
     db.execute(
         """INSERT INTO diagnostic_logs
            (user_id,separation_id,project_id,app_version,level,event,message)
-           VALUES (?,?,?,'7.0.0',?,?,?)""",
+           VALUES (?,?,?,'7.0.2',?,?,?)""",
         (uid, sid, pid, level, event, str(message)[:8000]),
     )
 
 
-# MyNus 7.0.0: email REG/LOG, session cookie only (no remember token).
+# MyNus 7.0.2: email REG/LOG, session cookie only (no remember token).
 import smtplib
 import ssl
 import hashlib
 from email.message import EmailMessage
 
-AUTH_CONFIG_PATH = Path(BASE_DIR) / "mynus_config_7.0.0.json"
+AUTH_CONFIG_PATH = Path(BASE_DIR) / "mynus_config_7.0.2.json"
+if not AUTH_CONFIG_PATH.exists():
+    AUTH_CONFIG_PATH = Path(BASE_DIR) / "mynus_config_7.0.0.json"
 pending_registrations = {}
 auth_lock = threading.Lock()
 
@@ -2310,7 +2312,7 @@ def migrate_registration_fields():
 def auth_email(value):
     email = str(value or "").strip().lower()
     if len(email) > 254 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
-        raise ValueError("Укажите корректный email")
+        raise ValueError("Enter a valid email address.")
     return email
 
 
@@ -2320,13 +2322,13 @@ def send_registration_code(email, code):
     smtp = config["smtp"]
     password = os.environ.get("MYNUS_SMTP_PASSWORD") or smtp.get("password", "")
     if not password or password == "PASTE_SMTP_KEY_HERE":
-        raise RuntimeError("Вставьте SMTP-ключ Brevo в mynus_config_7.0.0.json")
+        raise RuntimeError("Configure the SMTP key on the server.")
     message = EmailMessage()
     message["From"] = smtp["sender"]
     message["To"] = email
-    message["Subject"] = "MyNus — подтверждение email"
-    message.set_content("Код подтверждения MyNus: " + code +
-                        "\nКод действует 10 минут. Если вы не регистрировались, проигнорируйте письмо.")
+    message["Subject"] = "MyNus — email verification"
+    message.set_content("MyNus verification code: " + code +
+                        "\nThis code expires in 10 minutes. If you did not register, ignore this email.")
     with smtplib.SMTP(smtp["host"], int(smtp["port"]), timeout=20) as client:
         client.ehlo()
         client.starttls(context=ssl.create_default_context())
@@ -2348,7 +2350,7 @@ def auth_request_data():
         if forwarded_scheme in ("http", "https"):
             expected_origin = forwarded_scheme + "://" + request.host
     if origin and origin.rstrip("/") != expected_origin:
-        abort(403, description="Адрес страницы не совпадает с адресом сервера. Откройте MyNus через сервер или его Cloudflare-ссылку.")
+        abort(403, description="The page and server addresses do not match. Open MyNus through the server or its Cloudflare link.")
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         abort(400)
@@ -2363,14 +2365,14 @@ def register_code():
         profile = {field: str(data.get(field) or "").strip()
                    for field in ("phone", "first_name", "last_name", "country")}
         if any(not value or len(value) > 120 for value in profile.values()):
-            raise ValueError("Заполните телефон, имя, фамилию и страну (до 120 символов)")
+            raise ValueError("Complete phone, first name, last name and country (up to 120 characters).")
         if not re.fullmatch(r"[+()\d .-]{5,40}", profile["phone"]):
-            raise ValueError("Укажите корректный телефон")
+            raise ValueError("Enter a valid phone number.")
     except ValueError as exc:
         return jsonify(error=str(exc)), 400
     with db_connection() as db:
         if db.execute("SELECT 1 FROM users WHERE lower(trim(email))=?", (email,)).fetchone():
-            return jsonify(error="Этот email уже зарегистрирован. Используйте LOG."), 409
+            return jsonify(error="This email is already registered. Use LOG."), 409
     now = time.monotonic()
     with auth_lock:
         for key in list(pending_registrations):
@@ -2378,9 +2380,9 @@ def register_code():
                 del pending_registrations[key]
         previous = pending_registrations.get(email)
         if previous and now - previous["sent"] < 60:
-            return jsonify(error="Повторная отправка возможна через минуту"), 429
+            return jsonify(error="Please wait one minute before resending."), 429
         if len(pending_registrations) >= 1000:
-            return jsonify(error="Попробуйте позже"), 429
+            return jsonify(error="Please try again later."), 429
         code = f"{secrets.randbelow(1000000):06d}"
         pending = dict(profile, digest=hashlib.sha256(code.encode()).hexdigest(),
                        expires=now + 600, sent=now, attempts=0, ready=False)
@@ -2393,10 +2395,10 @@ def register_code():
                 del pending_registrations[email]
         # Do not log SMTP credentials, message body or verification code.
         print("[REG EMAIL] Sending failed: " + type(exc).__name__, flush=True)
-        return jsonify(error="Не удалось отправить письмо. Проверьте настройки Brevo на сервере."), 503
+        return jsonify(error="Unable to send the email. Check the server SMTP configuration."), 503
     with auth_lock:
         pending["ready"] = True
-    return jsonify(ok=True, message="Код отправлен на email. Действует 10 минут.")
+    return jsonify(ok=True, message="Code sent to your email. It expires in 10 minutes.")
 
 
 @app.route("/api/auth/register", methods=["POST"])
@@ -2410,13 +2412,13 @@ def register_user():
     with auth_lock:
         pending = pending_registrations.get(email)
         if not pending or not pending["ready"] or pending["expires"] < time.monotonic():
-            return jsonify(error="Запросите новый код"), 400
+            return jsonify(error="Request a new code."), 400
         pending["attempts"] += 1
         if pending["attempts"] > 5:
             del pending_registrations[email]
-            return jsonify(error="Слишком много попыток. Запросите новый код."), 429
+            return jsonify(error="Слишком много попыток. Request a new code.."), 429
         if not secrets.compare_digest(pending["digest"], hashlib.sha256(code.encode()).hexdigest()):
-            return jsonify(error="Неверный код"), 400
+            return jsonify(error="Incorrect code."), 400
         try:
             with db_connection() as db:
                 uid = db.execute(
@@ -2428,7 +2430,7 @@ def register_user():
                 ).lastrowid
                 write_log(db, uid, "user.registered", "Email подтверждён")
         except sqlite3.IntegrityError:
-            return jsonify(error="Email уже зарегистрирован"), 409
+            return jsonify(error="This email is already registered."), 409
         del pending_registrations[email]
     session.clear()
     session.permanent = False
@@ -2446,7 +2448,7 @@ def login_email():
     with db_connection() as db:
         row = db.execute("SELECT user_id FROM users WHERE lower(trim(email))=?", (email,)).fetchone()
     if row is None:
-        return jsonify(error="Email не зарегистрирован. Используйте REG."), 404
+        return jsonify(error="This email is not registered. Use REG."), 404
     session.clear()
     session.permanent = False
     session["user_id"] = row["user_id"]
@@ -2463,20 +2465,225 @@ def logout_user():
 migrate_registration_fields()
 
 
+# MyNus 7.0.2: staged account changes. The live profile stays unchanged
+# until the current address confirms and, for an email change, the new one verifies.
+def migrate_account_changes():
+    with db_connection() as db:
+        db.execute("""CREATE TABLE IF NOT EXISTS account_changes (
+            request_id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(user_id),
+            session_key TEXT NOT NULL,
+            original_email TEXT NOT NULL,
+            original_updated_at TEXT NOT NULL,
+            profile_json TEXT NOT NULL,
+            stage TEXT NOT NULL CHECK(stage IN ('confirmation','verification')),
+            digest TEXT NOT NULL,
+            expires_at REAL NOT NULL,
+            sent_at REAL NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            ready INTEGER NOT NULL DEFAULT 0
+        )""")
+        db.execute("CREATE INDEX IF NOT EXISTS account_changes_user ON account_changes(user_id)")
+
+
+def account_send_code(email, code, stage):
+    with AUTH_CONFIG_PATH.open(encoding="utf-8-sig") as file:
+        smtp = json.load(file)["smtp"]
+    password = os.environ.get("MYNUS_SMTP_PASSWORD") or smtp.get("password", "")
+    if not password or password == "PASTE_SMTP_KEY_HERE":
+        raise RuntimeError("SMTP is not configured")
+    message = EmailMessage()
+    message["From"] = smtp["sender"]
+    message["To"] = email
+    label = "Confirmation" if stage == "confirmation" else "Verification"
+    message["Subject"] = "MyNus — " + label + " code"
+    message.set_content(label + " code: " + code + "\nExpires in 10 minutes. "
+                        "If you did not request an account change, ignore this email.")
+    with smtplib.SMTP(smtp["host"], int(smtp["port"]), timeout=20) as client:
+        client.ehlo()
+        client.starttls(context=ssl.create_default_context())
+        client.ehlo()
+        client.login(smtp["login"], password)
+        client.send_message(message)
+
+
+def account_code_digest(code):
+    return hashlib.sha256(code.encode()).hexdigest()
+
+
+def account_deliver(request_id, email, code, stage):
+    try:
+        account_send_code(email, code, stage)
+    except Exception as exc:
+        app.logger.warning("Account code delivery failed: %s", type(exc).__name__)
+        return jsonify(error="Unable to send the email. Wait one minute and use Resend code.", request_id=request_id, stage=stage), 503
+    with db_connection() as db:
+        db.execute("UPDATE account_changes SET ready=1 WHERE request_id=? AND digest=?",
+                   (request_id, account_code_digest(code)))
+    return jsonify(ok=True, request_id=request_id, stage=stage,
+                   message=("Confirmation code sent to your current verified email."
+                            if stage == "confirmation" else
+                            "Verification code sent to your new email. Your account is unchanged until verification."))
+
+
+@app.route("/api/account/change-code", methods=["POST"])
+def account_change_code():
+    data = auth_request_data()
+    uid = current_user_id()
+    try:
+        profile = {field: str(data.get(field) or "").strip()
+                   for field in ("first_name", "last_name", "phone", "country")}
+        if any(not value or len(value) > 120 for value in profile.values()):
+            raise ValueError("Complete first name, last name, phone and country (up to 120 characters).")
+        if not re.fullmatch(r"[+()\d .-]{5,40}", profile["phone"]):
+            raise ValueError("Enter a valid phone number.")
+        try:
+            profile["email"] = auth_email(data.get("email"))
+        except ValueError:
+            raise ValueError("Enter a valid email address.")
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    session_key = session.get("account_change_key") or secrets.token_urlsafe(32)
+    session["account_change_key"] = session_key
+    now = time.time()
+    request_id, code = secrets.token_urlsafe(32), f"{secrets.randbelow(1000000):06d}"
+    with db_connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        db.execute("DELETE FROM account_changes WHERE expires_at<?", (now,))
+        user = db.execute("SELECT * FROM users WHERE user_id=?", (uid,)).fetchone()
+        if not user["email"] or not user["email_verified_at"]:
+            return jsonify(error="A current verified email is required to change this account."), 403
+        if all(profile[field] == (user[field] or "") for field in profile):
+            return jsonify(error="No changes to save."), 400
+        if db.execute("SELECT 1 FROM users WHERE lower(trim(email))=? AND user_id<>?",
+                      (profile["email"], uid)).fetchone():
+            return jsonify(error="This email is already registered."), 409
+        previous = db.execute("SELECT sent_at FROM account_changes WHERE user_id=? ORDER BY sent_at DESC LIMIT 1", (uid,)).fetchone()
+        if previous and now - previous["sent_at"] < 60:
+            return jsonify(error="Please wait one minute before requesting another code."), 429
+        db.execute("DELETE FROM account_changes WHERE user_id=?", (uid,))
+        db.execute("""INSERT INTO account_changes
+            (request_id,user_id,session_key,original_email,original_updated_at,profile_json,
+             stage,digest,expires_at,sent_at) VALUES (?,?,?,?,?,?,'confirmation',?,?,?)""",
+            (request_id, uid, session_key, user["email"], user["updated_at"],
+             json.dumps(profile), account_code_digest(code), now + 600, now))
+    return account_deliver(request_id, user["email"], code, "confirmation")
+
+
+@app.route("/api/account/confirm", methods=["POST"])
+def account_confirm_change():
+    data = auth_request_data()
+    uid = current_user_id()
+    request_id = str(data.get("request_id") or "")
+    code = str(data.get("code") or "").strip()
+    now = time.time()
+    delivery = None
+    with db_connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        pending = db.execute("SELECT * FROM account_changes WHERE request_id=? AND user_id=? AND session_key=?",
+            (request_id, uid, session.get("account_change_key", ""))).fetchone()
+        if not pending or not pending["ready"] or pending["expires_at"] < now:
+            return jsonify(error="Request a new code. This request is unavailable or expired."), 400
+        if pending["attempts"] >= 5:
+            return jsonify(error="Too many attempts. Request a new code."), 429
+        db.execute("UPDATE account_changes SET attempts=attempts+1 WHERE request_id=?", (request_id,))
+        if not secrets.compare_digest(pending["digest"], account_code_digest(code)):
+            return jsonify(error="Incorrect code."), 400
+        user = db.execute("SELECT * FROM users WHERE user_id=?", (uid,)).fetchone()
+        if (user["email"] != pending["original_email"] or
+                user["updated_at"] != pending["original_updated_at"] or not user["email_verified_at"]):
+            db.execute("DELETE FROM account_changes WHERE request_id=?", (request_id,))
+            return jsonify(error="Your account has changed. Start again."), 409
+        profile = json.loads(pending["profile_json"])
+        if pending["stage"] == "confirmation" and profile["email"] != user["email"]:
+            next_code = f"{secrets.randbelow(1000000):06d}"
+            while next_code == code:
+                next_code = f"{secrets.randbelow(1000000):06d}"
+            db.execute("""UPDATE account_changes SET stage='verification',digest=?,
+                expires_at=?,sent_at=?,attempts=0,ready=0 WHERE request_id=?""",
+                (account_code_digest(next_code), now+600, now, request_id))
+            delivery = (request_id, profile["email"], next_code, "verification")
+        else:
+            try:
+                db.execute("""UPDATE users SET first_name=?,last_name=?,name=?,phone=?,country=?,
+                    email=?,email_verified_at=?,updated_at=? WHERE user_id=?""",
+                    (profile["first_name"], profile["last_name"],
+                     profile["first_name"] + " " + profile["last_name"], profile["phone"],
+                     profile["country"], profile["email"],
+                     utc_now() if pending["stage"] == "verification" else user["email_verified_at"], utc_now(), uid))
+            except sqlite3.IntegrityError:
+                db.execute("DELETE FROM account_changes WHERE request_id=?", (request_id,))
+                return jsonify(error="This email is already registered. Start again."), 409
+            db.execute("DELETE FROM account_changes WHERE user_id=?", (uid,))
+            write_log(db, uid, "account.updated", "Account change confirmed")
+    if delivery:
+        return account_deliver(*delivery)
+    return jsonify(ok=True, stage="complete", message="Account changes saved.")
+
+
+@app.route("/api/account/resend-code", methods=["POST"])
+def account_resend_code():
+    data = auth_request_data()
+    uid = current_user_id()
+    request_id = str(data.get("request_id") or "")
+    now = time.time()
+    code = f"{secrets.randbelow(1000000):06d}"
+    with db_connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        pending = db.execute("SELECT * FROM account_changes WHERE request_id=? AND user_id=? AND session_key=?",
+            (request_id, uid, session.get("account_change_key", ""))).fetchone()
+        if not pending or pending["expires_at"] < now or pending["attempts"] >= 5:
+            return jsonify(error="Start again to request a new code."), 400
+        if now - pending["sent_at"] < 60:
+            return jsonify(error="Please wait one minute before resending."), 429
+        profile = json.loads(pending["profile_json"])
+        target = pending["original_email"] if pending["stage"] == "confirmation" else profile["email"]
+        db.execute("UPDATE account_changes SET digest=?,expires_at=?,sent_at=?,ready=0 WHERE request_id=?",
+                   (account_code_digest(code), now+600, now, request_id))
+    return account_deliver(request_id, target, code, pending["stage"])
+
+
+@app.route("/api/account/cancel", methods=["POST"])
+def account_cancel_change():
+    data = auth_request_data()
+    uid = current_user_id()
+    with db_connection() as db:
+        db.execute("UPDATE account_changes SET ready=0,attempts=5 WHERE request_id=? AND user_id=? AND session_key=?",
+                   (str(data.get("request_id") or ""), uid, session.get("account_change_key", "")))
+    return jsonify(ok=True)
+
+
+@app.route("/api/account/payments")
+def account_payments():
+    uid = current_user_id()
+    with db_connection() as db:
+        subscription = db.execute("SELECT plan_name,status,starts_at,ends_at FROM subscriptions WHERE user_id=? ORDER BY subscription_id DESC LIMIT 1", (uid,)).fetchone()
+        payments = db.execute("SELECT amount_minor,currency,status,created_at,refunded_minor FROM payments WHERE user_id=? ORDER BY payment_id DESC LIMIT 20", (uid,)).fetchall()
+    # This installation has no Paddle IDs, customer/subscription mapping or API integration.
+    # Never substitute local subscription_id for a Paddle subscription ID.
+    return jsonify(subscription=dict(subscription) if subscription else None,
+                   payments=[dict(row) for row in payments],
+                   change_plan_available=False, manage_subscription_available=False,
+                   message="Payment management is not connected yet. No charge or subscription change will be made.")
+
+
+migrate_account_changes()
+
+
 from werkzeug.exceptions import HTTPException
 
 
 @app.errorhandler(HTTPException)
 def auth_http_error(error):
-    if request.path.startswith("/api/auth/") or request.path == "/api/current-user":
+    if request.path.startswith(("/api/auth/", "/api/account/")) or request.path == "/api/current-user":
         return jsonify(error=error.description), error.code
     return error
 
 
 @app.errorhandler(500)
 def auth_server_error(error):
-    if request.path.startswith("/api/auth/") or request.path == "/api/current-user":
-        return jsonify(error="Ошибка сервера REG/LOG. Проверьте журнал сервера."), 500
+    if request.path.startswith(("/api/auth/", "/api/account/")) or request.path == "/api/current-user":
+        return jsonify(error="Server error. Please check the server log."), 500
     return error
 
 
@@ -2588,7 +2795,7 @@ def source_separation(db, uid):
 
 
 
-# 7.0.0: Project and PlayList persistence belongs to the browser.
+# ChangeAcc@Pay | 7.1.0 .
 @app.before_request
 def reject_legacy_project_storage():
     path = request.path
@@ -2596,12 +2803,12 @@ def reject_legacy_project_storage():
         path == "/saved-projects" or path.startswith("/saved-projects/") or
         path.startswith("/opened-projects/") or path.startswith("/playlist/") or
         path == "/lyrics/save-current"):
-        return jsonify(error="Project save/load is local in MyNus 7.0.0"), 410
+        return jsonify(error="Project save/load is local in MyNus 7.0.2"), 410
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("REG@LOG | 7.0.0 ")
-    print(r"REG@LOG | 7.0.0")
+    print("ChangeAcc@Pay | 7.1.0  ")
+    print(r"ChangeAcc@Pay | 7.1.0 ")
     print("=" * 72 + "\n")
 
     try:
