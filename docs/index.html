@@ -1,4 +1,4 @@
-<!--MyNus 7.1.1 | ChangeAcc@Pay -->
+<!--MyNus 7.1.2 | FIX Account -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 7.1.1</title>
+  <title>MyNus 7.1.2</title>
 
 
  <style>
@@ -23439,12 +23439,191 @@ document.addEventListener("click", event => {
     background: rgba(0, 0, 0, .8);
   }
 
+  #mnLoginDialog.mnAccountDropdown {
+    position: fixed;
+    inset: auto 12px auto auto;
+    top: 42px;
+    margin: 0;
+    width: min(330px, calc(100vw - 24px));
+    max-height: calc(100dvh - 54px);
+    padding: 16px;
+    border-radius: 8px;
+    box-shadow: 0 8px 28px rgba(0,0,0,.45);
+    z-index: 5001;
+  }
+  #mnLoginDialog.mnAccountDropdown::backdrop {
+    background: transparent;
+    pointer-events: none;
+  }
+
   #mnLoginForm {
     display: grid;
     gap: 12px;
   }
 
-  #mnAccountEditor label {display:grid;gap:4px;margin:10px 0;}
+  /* ===== ACCOUNT: ONE GEOMETRY FOR MENU / PROFILE / EDIT / CODE / PAYMENTS ===== */
+  #mnAccount {
+    width:100%;
+    display:grid;
+    gap:12px;
+    box-sizing:border-box;
+  }
+  #mnAccount[hidden], #mnProfilePanel[hidden], #mnPaymentsPanel[hidden],
+  #mnAccountMenu[hidden], #mnAccountEditor[hidden], #mnAccountCodeStep[hidden] {
+    display:none!important;
+  }
+
+  #mnAccountMenu,
+  #mnProfilePanel,
+  #mnPaymentsPanel,
+  #mnAccountEditor,
+  #mnAccountCodeStep {
+    width:100%;
+    box-sizing:border-box;
+  }
+
+  #mnAccountMenu {display:grid;gap:8px;}
+  #mnAccountMenu button {width:100%;min-height:34px;}
+
+  #mnProfilePanel, #mnPaymentsPanel {
+    display:grid;
+    gap:10px;
+  }
+
+  #mnAccountDetails {
+    display:grid;
+    grid-template-columns:105px minmax(0,1fr);
+    gap:7px 12px;
+    align-items:center;
+    margin:0!important;
+  }
+  #mnAccountDetails dt {
+    margin:0!important;
+    color:#aaa;
+    font-size:13px;
+    line-height:1.25;
+  }
+  #mnAccountDetails dd {
+    margin:0!important;
+    min-width:0;
+    line-height:1.25;
+    overflow-wrap:anywhere;
+  }
+
+  #mnAccountEditor {
+    display:grid;
+    grid-template-columns:105px minmax(0,1fr);
+    gap:8px 12px;
+    align-items:center;
+    padding-top:10px;
+    border-top:1px solid #444;
+  }
+  #mnAccountEditor > p {
+    grid-column:1 / -1;
+    margin:0 0 4px;
+    font-size:13px;
+    line-height:1.35;
+    color:#bbb;
+  }
+  #mnAccountEditor label {
+    display:contents;
+  }
+  #mnAccountEditor label input {
+    width:100%;
+    min-width:0;
+    height:36px;
+    box-sizing:border-box;
+    padding:7px 9px;
+  }
+  #mnAccountEditor label::before {
+    font-size:13px;
+    color:#ccc;
+  }
+  #mnAccountEditor label:nth-of-type(1)::before {content:"First name";}
+  #mnAccountEditor label:nth-of-type(2)::before {content:"Last name";}
+  #mnAccountEditor label:nth-of-type(3)::before {content:"Email";}
+  #mnAccountEditor label:nth-of-type(4)::before {content:"Phone";}
+  #mnAccountEditor label:nth-of-type(5)::before {content:"Country";}
+  #mnAccountEditor label {
+    font-size:0;
+  }
+  #mnAccountEditor label input {
+    font-size:16px;
+  }
+  #mnAccountSave {
+    grid-column:1 / -1;
+    width:100%;
+    min-height:34px;
+    margin-top:2px;
+  }
+
+  #mnAccountCodeStep {
+    display:grid;
+    gap:8px;
+    padding-top:10px;
+    border-top:1px solid #444;
+  }
+  #mnAccountCodeStep p {margin:0;font-size:13px;line-height:1.35;color:#bbb;}
+  #mnAccountCodeStep label {font-size:13px;color:#ccc;}
+  #mnAccountCodeStep input {width:100%;height:36px;box-sizing:border-box;}
+  #mnAccountCodeStep button {width:100%;min-height:34px;}
+
+  #mnProfileMainActions,
+  .mnAccountActions {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    margin:0;
+  }
+  #mnProfileMainActions button,
+  .mnAccountActions button {
+    width:100%;
+    min-height:34px;
+  }
+  #mnAccountCancel:only-child {
+    grid-column:1 / -1;
+  }
+
+  #mnPaymentSummary {
+    margin:0!important;
+    padding:8px 0;
+    border-bottom:1px solid #444;
+    line-height:1.35;
+  }
+  #mnPaymentsPanel #mnChangePlan,
+  #mnPaymentsPanel #mnManageSubscription {
+    width:100%;
+    min-height:34px;
+    margin:0;
+  }
+  #mnPaymentHistory {
+    border-top:1px solid #444;
+    padding-top:9px;
+  }
+  #mnPaymentHistory h4 {margin:0 0 7px;font-size:15px;}
+  #mnPaymentHistory p {margin:5px 0;line-height:1.35;}
+
+  .mnAccountSwitch,
+  .mnAccountBack {
+    width:100%;
+    min-height:34px;
+    margin:2px 0 0;
+  }
+
+  .mnAccountStatus {
+    display:none;
+    margin:0!important;
+    padding:0;
+    border-radius:6px;
+    white-space:pre-wrap;
+    text-align:center;
+    line-height:1.35;
+    font-size:13px;
+  }
+  .mnAccountStatus.show {display:block;padding:8px 9px;}
+  .mnAccountStatus.success {background:#173d24;color:#9ff0b5;}
+  .mnAccountStatus.error {background:#4a1f24;color:#ffb2b8;}
+  .mnAccountStatus.info {background:#343016;color:#ffe58a;}
 
   #mnLoginForm input {
     box-sizing: border-box;
@@ -23480,40 +23659,61 @@ document.addEventListener("click", event => {
   opacity: .4;
   cursor: not-allowed;
 }
+  #mnLoginDialog.mnAccountDropdown #mnLogout,
+  #mnLoginDialog.mnAccountDropdown #mnAuthClose {
+    width:100%;
+    min-height:32px;
+    margin-top:4px;
+  }
+  #mnLoginDialog.mnAccountDropdown #mnLoginForm {
+    gap:10px;
+  }
 </style>
 
 <button id="mnLoginButton" type="button">REG / LOG</button>
 <dialog id="mnLoginDialog">
   <form id="mnLoginForm">
     <strong id="mnAuthTitle">MyNus — REG / LOG</strong>
-        <section id="mnAccount" hidden aria-label="Account">
-      <h3>Account details</h3>
-      <dl id="mnAccountDetails" style="margin:0; overflow-wrap:anywhere"></dl>
-      <button id="mnAccountChange" type="button">Change</button>
-      <div id="mnAccountEditor" hidden>
-        <p>Every change requires a confirmation code sent to your current verified email.</p>
-        <label>First name <input id="mnEditFirst" maxlength="120" autocomplete="given-name"></label>
-        <label>Last name <input id="mnEditLast" maxlength="120" autocomplete="family-name"></label>
-        <label>Email <input id="mnEditEmail" type="email" maxlength="254" autocomplete="email"></label>
-        <label>Phone <input id="mnEditPhone" type="tel" maxlength="40" autocomplete="tel"></label>
-        <label>Country <input id="mnEditCountry" maxlength="120" autocomplete="country-name"></label>
-        <button id="mnAccountSave" type="button">Save — send confirmation code</button>
+    <section id="mnAccount" hidden aria-label="Account">
+      <div id="mnAccountMenu">
+        <button id="mnOpenProfile" type="button">Profile</button>
+        <button id="mnOpenPayments" type="button">Payments</button>
       </div>
-      <div id="mnAccountCodeStep" hidden>
-        <p id="mnAccountCodeHelp"></p>
-        <label id="mnAccountCodeLabel">Confirmation code</label>
-        <input id="mnAccountCode" aria-labelledby="mnAccountCodeLabel" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6">
-        <button id="mnAccountConfirm" type="button">Confirm changes</button>
-        <button id="mnAccountResend" type="button">Resend code</button>
-      </div>
-      <button id="mnAccountCancel" type="button" hidden>Cancel changes</button>
-      <section aria-label="Payments" style="border-top:1px solid #666;margin-top:18px;padding-top:12px">
-        <h3>Payments</h3>
+      <section id="mnProfilePanel" hidden aria-label="Profile">
+        <dl id="mnAccountDetails" style="margin:0;overflow-wrap:anywhere"></dl>
+        <div id="mnProfileMainActions" class="mnAccountActions">
+          <button id="mnAccountChange" type="button">Change</button>
+          <button id="mnProfileBack" type="button">Back</button>
+        </div>
+        <div id="mnAccountEditor" hidden>
+          <p>Every change requires a confirmation code sent to your current verified email.</p>
+          <label>First name <input id="mnEditFirst" maxlength="120" autocomplete="given-name"></label>
+          <label>Last name <input id="mnEditLast" maxlength="120" autocomplete="family-name"></label>
+          <label>Email <input id="mnEditEmail" type="email" maxlength="254" autocomplete="email"></label>
+          <label>Phone <input id="mnEditPhone" type="tel" maxlength="40" autocomplete="tel"></label>
+          <label>Country <input id="mnEditCountry" maxlength="120" autocomplete="country-name"></label>
+          <button id="mnAccountSave" type="button">Save — send confirmation code</button>
+        </div>
+        <div id="mnAccountCodeStep" hidden>
+          <p id="mnAccountCodeHelp"></p>
+          <label id="mnAccountCodeLabel">Confirmation code</label>
+          <input id="mnAccountCode" aria-labelledby="mnAccountCodeLabel" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6">
+          <button id="mnAccountConfirm" type="button">Confirm changes</button>
+          <button id="mnAccountResend" type="button">Resend code</button>
+        </div>
+        <p id="mnProfileStatus" class="mnAccountStatus" role="status" aria-live="polite"></p>
+        <div class="mnAccountActions">
+          <button id="mnAccountCancel" type="button" hidden>Cancel changes</button>
+        </div>
+        <button id="mnProfileToPayments" class="mnAccountSwitch" type="button">Payments</button>
+      </section>
+      <section id="mnPaymentsPanel" hidden aria-label="Payments">
         <p id="mnPaymentSummary">Loading payment details…</p>
         <button id="mnChangePlan" type="button">Change plan</button>
         <button id="mnManageSubscription" type="button">Manage subscription</button>
-        <p id="mnPaymentNotice" role="status"></p>
+        <p id="mnPaymentNotice" class="mnAccountStatus" role="status" aria-live="polite"></p>
         <div id="mnPaymentHistory"></div>
+        <button id="mnPaymentsToProfile" class="mnAccountSwitch" type="button">Profile</button>
       </section>
     </section>
 
@@ -23577,6 +23777,12 @@ document.addEventListener("click", event => {
     return result;
   }
   let accountUser = null, accountRequest = null;
+  function accountStatus(targetId, text, kind='info') {
+    const el=document.getElementById(targetId);
+    if(!el) return;
+    el.textContent=text || '';
+    el.className='mnAccountStatus' + (text ? ' show ' + kind : '');
+  }
   const editFields = {first_name:'mnEditFirst', last_name:'mnEditLast',
     email:'mnEditEmail', phone:'mnEditPhone', country:'mnEditCountry'};
   const accountEditor = document.getElementById('mnAccountEditor');
@@ -23586,14 +23792,25 @@ document.addEventListener("click", event => {
   const changeButton = document.getElementById('mnAccountChange');
   function resetAccountEdit() {
     accountRequest = null; accountEditor.hidden = true; accountStep.hidden = true;
-    accountCancel.hidden = true; changeButton.hidden = false; accountCode.value = '';
+    accountCancel.hidden = true;
+    changeButton.hidden = false;
+    document.getElementById('mnProfileBack').hidden = false;
+    document.getElementById('mnAccountDetails').hidden = false;
+    document.getElementById('mnProfileMainActions').hidden = false;
+    document.getElementById('mnProfileToPayments').hidden = false;
+    accountCode.value = '';
     Object.values(editFields).forEach(id => document.getElementById(id).required = false);
     accountCode.required = false;
   }
   function acceptAccountStep(result) {
     if (!result.request_id) return;
     accountRequest = result.request_id;
-    accountEditor.hidden = true; accountStep.hidden = false; accountCode.required = true;
+    accountEditor.hidden = true;
+    accountStep.hidden = false;
+    document.getElementById('mnAccountDetails').hidden = true;
+    document.getElementById('mnProfileMainActions').hidden = true;
+    document.getElementById('mnProfileToPayments').hidden = true;
+    accountCode.required = true;
     Object.values(editFields).forEach(id => document.getElementById(id).required = false);
     const verification = result.stage === 'verification';
     document.getElementById('mnAccountCodeLabel').textContent = verification ? 'Verification code' : 'Confirmation code';
@@ -23607,13 +23824,20 @@ document.addEventListener("click", event => {
     if (busy) return;
     setBusy(true); message.textContent = '';
     try {await action();}
-    catch (error) {if (error.result) acceptAccountStep(error.result); message.textContent = error.message;}
+    catch (error) {if (error.result) acceptAccountStep(error.result); accountStatus('mnProfileStatus',error.message,'error');}
     finally {setBusy(false);}
   }
   changeButton.onclick = () => {
     if (busy || !accountUser) return;
-    resetAccountEdit(); accountEditor.hidden = false; accountCancel.hidden = false;
-    changeButton.hidden = true; message.textContent = '';
+    resetAccountEdit();
+    accountEditor.hidden = false;
+    accountCancel.hidden = false;
+    document.getElementById('mnAccountDetails').hidden = true;
+    document.getElementById('mnProfileMainActions').hidden = true;
+    document.getElementById('mnProfileToPayments').hidden = true;
+    changeButton.hidden = true;
+    document.getElementById('mnProfileBack').hidden = true;
+    accountStatus('mnProfileStatus','');
     for (const [field,id] of Object.entries(editFields)) {
       const input = document.getElementById(id); input.value = accountUser[field] || ''; input.required = true;
     }
@@ -23621,35 +23845,51 @@ document.addEventListener("click", event => {
   };
   accountCancel.onclick = () => accountAction(async () => {
     if (accountRequest) await api('/api/account/cancel', {request_id:accountRequest});
-    resetAccountEdit(); message.textContent = 'Changes cancelled. Your account was not changed.';
+    resetAccountEdit(); accountStatus('mnProfileStatus','Changes cancelled. Your account was not changed.','info');
   });
   document.getElementById('mnAccountSave').onclick = () => {
     for (const id of Object.values(editFields)) if (!document.getElementById(id).reportValidity()) return;
     const profile = Object.fromEntries(Object.entries(editFields).map(([field,id]) => [field,document.getElementById(id).value.trim()]));
     accountAction(async () => {
       const result = await api('/api/account/change-code', profile);
-      acceptAccountStep(result); message.textContent = result.message;
+      acceptAccountStep(result); accountStatus('mnProfileStatus',result.message,'success');
     });
   };
   document.getElementById('mnAccountConfirm').onclick = () => {
     if (!accountCode.reportValidity()) return;
     accountAction(async () => {
       const result = await api('/api/account/confirm', {request_id:accountRequest, code:accountCode.value});
-      if (result.stage === 'complete') {window.location.reload(); return;}
-      acceptAccountStep(result); message.textContent = result.message;
+      if (result.stage === 'complete') {
+        sessionStorage.setItem('mnAccountSuccess', result.message || 'Profile changes verified and saved successfully.');
+        window.location.reload();
+        return;
+      }
+      acceptAccountStep(result); accountStatus('mnProfileStatus',result.message,'success');
     });
   };
   document.getElementById('mnAccountResend').onclick = () => accountAction(async () => {
     const result = await api('/api/account/resend-code', {request_id:accountRequest});
-    acceptAccountStep(result); message.textContent = result.message;
+    acceptAccountStep(result); accountStatus('mnProfileStatus',result.message,'success');
   });
   for (const id of ['mnChangePlan','mnManageSubscription']) {
     document.getElementById(id).onclick = () => {
-      document.getElementById('mnPaymentNotice').textContent = id === 'mnChangePlan'
+      accountStatus('mnPaymentNotice', id === 'mnChangePlan'
         ? 'Plan changes are not available yet. The configured Paddle plans have not been connected to this server. Your plan is unchanged.'
-        : 'Subscription and payment management are not available yet. Paddle Customer Portal has not been connected to this server. No payment action was taken.';
+        : 'Subscription and payment management are not available yet. Paddle Customer Portal has not been connected to this server. No payment action was taken.', 'info');
     };
   }
+  const accountMenu=document.getElementById('mnAccountMenu');
+  const profilePanel=document.getElementById('mnProfilePanel');
+  const paymentsPanel=document.getElementById('mnPaymentsPanel');
+  function showAccountMenu(){resetAccountEdit();accountMenu.hidden=false;profilePanel.hidden=true;paymentsPanel.hidden=true;document.getElementById('mnAuthTitle').textContent='MyNus — Account';message.textContent='';}
+  function showProfile(){accountMenu.hidden=true;profilePanel.hidden=false;paymentsPanel.hidden=true;document.getElementById('mnAuthTitle').textContent='MyNus — Profile';message.textContent='';accountStatus('mnProfileStatus','');}
+  function showPayments(){accountMenu.hidden=true;profilePanel.hidden=true;paymentsPanel.hidden=false;document.getElementById('mnAuthTitle').textContent='MyNus — Payments';message.textContent='';accountStatus('mnPaymentNotice','');loadPayments();}
+  document.getElementById('mnOpenProfile').onclick=showProfile;
+  document.getElementById('mnOpenPayments').onclick=showPayments;
+  document.getElementById('mnProfileBack').onclick=showAccountMenu;
+  document.getElementById('mnProfileToPayments').onclick=showPayments;
+  document.getElementById('mnPaymentsToProfile').onclick=showProfile;
+
   async function loadPayments() {
     try {
       const response = await fetch('/api/account/payments', {credentials:'same-origin', cache:'no-store'});
@@ -23659,7 +23899,7 @@ document.addEventListener("click", event => {
       document.getElementById('mnPaymentSummary').textContent = sub
         ? 'Plan: ' + sub.plan_name + ' · Status: ' + sub.status + ' · Current period ends: ' + sub.ends_at
         : 'Plan: — · Status: No subscription';
-      document.getElementById('mnPaymentNotice').textContent = data.message;
+      accountStatus('mnPaymentNotice',data.message || 'Payment information loaded successfully.','success');
       const history = document.getElementById('mnPaymentHistory'); history.replaceChildren();
       const title = document.createElement('h4'); title.textContent = 'Recent payments'; history.append(title);
       if (!data.payments.length) {const p = document.createElement('p'); p.textContent = 'No payments recorded.'; history.append(p);}
@@ -23670,16 +23910,36 @@ document.addEventListener("click", event => {
           + (payment.refunded_minor ? ' · Refunded: ' + payment.refunded_minor + ' minor units' : '');
         history.append(p);
       }
-    } catch(error) {document.getElementById('mnPaymentSummary').textContent = error.message;}
+    } catch(error) {document.getElementById('mnPaymentSummary').textContent = 'Unable to load payment details.'; accountStatus('mnPaymentNotice',error.message,'error');}
   }
 
-  open.addEventListener('click', () => {
+  function openAuthDialog() {
+    dialog.classList.remove('mnAccountDropdown');
     if (!dialog.open) dialog.showModal();
-    if (authenticated) document.getElementById('mnAuthClose').focus();
-    else email.focus();
+  }
+  function openAccountDropdown() {
+    dialog.classList.add('mnAccountDropdown');
+    if (!dialog.open) dialog.show();
+  }
+  open.addEventListener('click', () => {
+    if (authenticated) {
+      if (dialog.open) { dialog.close(); return; }
+      showAccountMenu();
+      openAccountDropdown();
+      document.getElementById('mnOpenProfile').focus();
+    } else {
+      openAuthDialog();
+      email.focus();
+    }
   });
-  dialog.addEventListener('cancel', event => {if (!authenticated || busy) event.preventDefault();});
+  dialog.addEventListener('cancel', event => {if (!authenticated && busy) event.preventDefault();});
   document.getElementById('mnAuthClose').onclick = () => dialog.close();
+  document.addEventListener('pointerdown', event => {
+    if (!authenticated || !dialog.open || !dialog.classList.contains('mnAccountDropdown')) return;
+    if (dialog.contains(event.target) || open.contains(event.target)) return;
+    dialog.close();
+  }, true);
+
   document.getElementById('mnLogMode').onclick = () => mode(false);
   document.getElementById('mnRegMode').onclick = () => mode(true);
   send.onclick = async () => {
@@ -23707,20 +23967,21 @@ document.addEventListener("click", event => {
   };
   if (location.protocol === 'file:') {
     message.textContent = 'For REG/LOG, open MyNus at http://127.0.2.1:5000 after starting the server. Opening the HTML file directly does not connect to the server.';
-    if (!dialog.open) dialog.showModal();
+    if (!dialog.open) openAuthDialog();
     setBusy(true);
     return;
   }
   fetch('/api/current-user', {credentials:'same-origin', cache:'no-store'})
     .then(async response => {
-      if (response.status === 401) {dialog.showModal(); email.focus(); return;}
+      if (response.status === 401) {openAuthDialog(); email.focus(); return;}
       if (!response.ok) throw new Error('Unable to verify login');
       if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('Open MyNus at http://127.0.2.1:5000 and check the server version.');
-      const user = await response.json(); authenticated = true; accountUser = user; loadPayments();
+      const user = await response.json(); authenticated = true; accountUser = user;
       email.value = user.email || ''; open.textContent = user.name || user.email || 'REG / LOG';
       open.title = 'Open account';
       open.setAttribute('aria-label', 'Account: ' + (user.name || user.email || user.user_id));
       document.getElementById('mnAuthTitle').textContent = 'MyNus — Account';
+      showAccountMenu();
       document.getElementById('mnLoginMethods').hidden = true;
       document.getElementById('mnLoginMethods').style.display = 'none';
       document.getElementById('mnAuthEmailLabel').hidden = true;
@@ -23730,30 +23991,31 @@ document.addEventListener("click", event => {
       submit.hidden = true;
       document.getElementById('mnAccount').hidden = false;
       const details = document.getElementById('mnAccountDetails');
-      const statuses = {none:'No subscription', pending:'Pending activation', active:'Active', expired:'Expired', cancelled:'Cancelled'};
-      const registered = user.created_at ? new Date(user.created_at) : null;
       const rows = [
-        ['User ID', user.user_id], ['First name', user.first_name || user.name],
-        ['Last name', user.last_name], ['Email', user.email], ['Phone', user.phone],
-        ['Country', user.country],
-        ['Registration date', registered && !Number.isNaN(registered.getTime()) ? registered.toLocaleString('en-US') : user.created_at],
-        ['Email verified', user.email_verified_at ? 'Yes' : 'No'],
-        ['Plan', user.subscription?.plan_name],
-        ['Subscription status', statuses[user.subscription?.status] || user.subscription?.status]
+        ['First name', user.first_name || user.name],
+        ['Last name', user.last_name], ['Email', user.email],
+        ['Phone', user.phone], ['Country', user.country]
       ];
       details.replaceChildren();
       for (const [label, value] of rows) {
         const term = document.createElement('dt');
-        term.textContent = label; term.style.cssText = 'margin-top:10px;color:#aaa;font-size:13px';
+        term.textContent = label;
         const description = document.createElement('dd');
         description.textContent = value == null || value === '' ? '—' : String(value);
-        description.style.margin = '3px 0 0';
+        
         details.append(term, description);
       }
 
       document.getElementById('mnLogout').hidden = false;
       document.getElementById('mnAuthClose').hidden = false;
-    }).catch(error => {message.textContent = error.message; if (!dialog.open) dialog.showModal();});
+      const savedSuccess = sessionStorage.getItem('mnAccountSuccess');
+      if (savedSuccess) {
+        sessionStorage.removeItem('mnAccountSuccess');
+        showProfile();
+        accountStatus('mnProfileStatus', savedSuccess, 'success');
+        if (!dialog.open) openAccountDropdown();
+      }
+    }).catch(error => {message.textContent = error.message; if (!dialog.open) openAuthDialog();});
 })();
 </script>
 
@@ -24707,8 +24969,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 7.1.1 | ChangeAcc@Pay");
-console.log("[SERVICE CONSOLE] MyNus 7.1.1 | ChangeAcc@Pay");
+console.log("MyNus 7.1.2 | FIX Account");
+console.log("[SERVICE CONSOLE] MyNus 7.1.2 | FIX Account");
 </script>
 
 <div class="row" id="build-down">
