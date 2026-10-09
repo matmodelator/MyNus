@@ -1,4 +1,4 @@
-<!--MyNus 7.2.3 | Fix сдвижки трека -->
+<!--MyNus 7.2.3 | Track Tone -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -7698,7 +7698,8 @@ studio.style.display =
 
       resetTransport();
 
-          drawAllWaveforms();
+          await fitEntireProjectTimeline();
+      drawAllWaveforms();
       renderSingerSegments();
 
       drawMasterTimeline();
@@ -7718,6 +7719,7 @@ studio.style.display =
       status.className = "progress-status success";
 
       if (run.restore) await restoreMynusSnapshot(run.restore);
+      await fitEntireProjectTimeline();
       run.succeeded = true;
 
       // Разделение завершено. Предлагаем создать Project для полной работы Karaoke.
@@ -20736,6 +20738,28 @@ zoomOutBtn.addEventListener(
 
 
 // Локальная функциональная операция этого блока.
+async function fitEntireProjectTimeline() {
+  // Measure only after the studio and loaded tracks have completed layout.
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const viewports = [masterTimeline, sharedScroll, ...document.querySelectorAll('.timeline-scroll')];
+  const widths = viewports.map(node => node.clientWidth).filter(width => width > 0);
+  if (!(duration > 0) || !widths.length) return;
+  const width = Math.max(1, Math.min(...widths) - 2);
+  pixelsPerSecond = width / duration;
+  zoomValue.textContent = pixelsPerSecond.toFixed(1) + ' px/s';
+  if (zoomValueTop) zoomValueTop.textContent = zoomValue.textContent;
+  sharedScroll.scrollLeft = 0;
+  drawAllWaveforms();
+  drawMasterTimeline();
+  renderSingerSegments();
+  sharedScrollInner.style.width = getTimelineWidth() + 'px';
+  syncScrollTo(0);
+  updateProjectTrimDisplay();
+  updateSelectionDisplay();
+  updatePlayheads();
+  updateMasterCursor();
+}
+
 function changeZoom(
   value
 ) {
@@ -23162,11 +23186,7 @@ progressPercent.textContent = "100%";
       }
     }
 
-    const savedZoom = Number(project.sequencer?.pixelsPerSecond);
-    const fitWidth = Math.max(1, masterTimeline.clientWidth);
-    pixelsPerSecond = Number.isFinite(savedZoom) && savedZoom > 0
-      ? savedZoom
-      : (duration > 0 ? fitWidth / duration : 10);
+    pixelsPerSecond = duration > 0 ? Math.max(1, masterTimeline.clientWidth) / duration : 10;
 
     zoomValue.textContent = pixelsPerSecond.toFixed(1) + " px/s";
     if (zoomValueTop) zoomValueTop.textContent = zoomValue.textContent;
@@ -23234,6 +23254,7 @@ await reportProjectLoadTrace("PROJECT UI STATE", {
     await reportProjectLoadTrace("PROJECT ACTIVE", { command: "set active Project", function: "setProjectActive", parameters: { active_id: data.id || id, name: data.name || id }, result: "done" });
 
     await reportProjectLoadTrace("COMMAND", { command: "finish Project loader", function: "finishProjectLoader", parameters: {}, result: "calling" });
+    await fitEntireProjectTimeline();
     await finishProjectLoader();
     await reportProjectLoadTrace("LOAD FUNCTION SUCCESS", { command: "LOAD Project complete", function: "loadProjectById", parameters: { id, ui_mode_after_load: uiMode }, result: "success" });
 
@@ -25246,8 +25267,8 @@ document.addEventListener("click", event => {
       };
 
       studio.style.display = "block";
-      pixelsPerSecond = duration > 0
-        ? Math.max(1, masterTimeline.clientWidth) / duration : 10;
+      await fitEntireProjectTimeline();
+      // pixelsPerSecond is set by fitEntireProjectTimeline above.
       zoomValue.textContent = pixelsPerSecond.toFixed(1) + " px/s";
       if (zoomValueTop) zoomValueTop.textContent = zoomValue.textContent;
       sharedScrollInner.style.width = getTimelineWidth() + "px";
@@ -25447,8 +25468,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("7.2.3 | Fix сдвижки трека");
-console.log("[SERVICE CONSOLE] 7.2.3 | Fix сдвижки трека ");
+console.log("7.2.3 | Track Tone");
+console.log("[SERVICE CONSOLE] 7.2.3 | Track Tone");
 </script>
 
 <div class="row" id="build-down">
