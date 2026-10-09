@@ -1,5 +1,5 @@
 # ========================================
-#  ToneCheck | 7.2.0 
+#  ServerCheckLirycsRemove | 7.3.0 
 # ========================================
 
 # ========================================
@@ -25,7 +25,7 @@ from flask import (
     send_file
 )
 from werkzeug.utils import secure_filename
-import language_tool_python
+
 
 
 # ========================================
@@ -107,7 +107,7 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "7.0.2", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "7.3.0", "trace_id": trace_id})
 
 
 # ========================================
@@ -1385,111 +1385,6 @@ def export_audio():
 # LYRICS AUTOFIX
 # ========================================
 
-_language_tool = None
-_language_tool_lock = threading.RLock()
-
-# Локальная серверная операция этого блока.
-def normalize_language(language):
-    value = str(language or "ru-RU").lower()
-    if value.startswith("en"):
-        return "en-US"
-    return "ru-RU"
-
-
-
-# Локальная серверная операция этого блока.
-def check_language_tool(text, language="ru-RU"):
-    global _language_tool
-    # Initialization, language selection and check must be one critical section.
-    with _language_tool_lock:
-        if _language_tool is None:
-            _language_tool = language_tool_python.LanguageTool(normalize_language(language))
-        else:
-            _language_tool.language = normalize_language(language)
-        return _language_tool.check(text)
-
-
-def close_language_tool():
-    global _language_tool
-    with _language_tool_lock:
-        if _language_tool is not None:
-            _language_tool.close()
-            _language_tool = None
-
-
-
-
-@app.route(
-    "/spellcheck",
-    methods=["POST"]
-)
-# Локальная серверная операция этого блока.
-def spellcheck():
-
-    data = request.get_json(
-        silent=True
-    ) or {}
-
-    text = str(
-        data.get(
-            "text",
-            ""
-        )
-    )
-
-    try:
-
-        language = normalize_language(
-            data.get(
-                "language",
-                "ru-RU"
-            )
-        )
-
-        matches = check_language_tool(text, language)
-
-        result = []
-
-        for match in matches:
-
-            replacements = [
-                str(value)
-                for value in (
-                    match.replacements
-                    or []
-                )[:8]
-            ]
-
-            result.append({
-                "offset":
-                    int(match.offset),
-                "length":
-                    int(match.error_length),
-                "message":
-                    str(match.message),
-                "replacements":
-                    replacements
-            })
-
-        return jsonify({
-            "language": language,
-            "matches": result
-        })
-
-    except Exception as error:
-
-        print(error)
-
-        return jsonify({
-            "error": str(error)
-        }), 500
-
-
-
-# ========================================
-# LYRICS LANGUAGE + RU TRANSCRIPTION
-# ========================================
-
 SUPPORTED_LYRICS_LANGUAGES = {"ru","en","es","it","fr","uk"}
 
 # Локальная серверная операция этого блока.
@@ -2095,7 +1990,11 @@ def save_project():
         if not track_files.get("original"):
             raise ValueError("Original track not received")
 
-        project_json["version"] = "7.0.2"
+        project_json["version"] = re.search(
+            r"ToneCheck\s*\|\s*([\d.]+)",
+            open(__file__, encoding="utf-8").read(256)
+        ).group(1)
+
         project_json["id"] = project_id
         project_json["name"] = project_name
         project_json["tracks"] = track_files
@@ -2859,11 +2758,18 @@ def source_separation(db, uid):
     # Не назначаем произвольную сепарацию, если связь неизвестна.
     return next(iter(found)) if len(found) == 1 else None
 
+
 # ===== КОНЕЦ ВСТАВКИ =====
 
 
 
-# ToneCheck | 7.2.0  .
+
+
+
+
+
+
+# ToneCheck | 7.3.0  .
 @app.before_request
 def reject_legacy_project_storage():
     path = request.path
@@ -2871,12 +2777,12 @@ def reject_legacy_project_storage():
         path == "/saved-projects" or path.startswith("/saved-projects/") or
         path.startswith("/opened-projects/") or path.startswith("/playlist/") or
         path == "/lyrics/save-current"):
-        return jsonify(error="Project save/load is local in MyNus 7.2.0"), 410
+        return jsonify(error="Project save/load is local in MyNus 7.3.0"), 410
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("ToneCheck | 7.2.0  ")
-    print(r"ToneCheck | 7.2.0 ")
+    print("ServerCheckLirycsRemove | 7.3.0  ")
+    print(r"ServerCheckLirycsRemove | 7.3.0 ")
     print("=" * 72 + "\n")
 
     try:
@@ -2893,7 +2799,4 @@ if __name__ == "__main__":
         print(f"SERVER ERROR: {error}", file=sys.stderr)
         raise
     finally:
-        try:
-            close_language_tool()
-        finally:
-            print_restart_command()
+        print_restart_command()
