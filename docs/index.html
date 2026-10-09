@@ -1,4 +1,4 @@
-<!--MyNus 7.2.3 | Track Tone -->
+<!--MyNus 7.2.3 | Fix сдвижки трека -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -3365,13 +3365,15 @@ position: relative;
 /* Keep translated audio content inside its viewport; external labels are siblings. */
 .track .timeline-scroll {
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
+  /* Preserve the complete 2px Trim marker at either edge. */
+  clip-path: inset(-3px -3px -3px -3px);
 }
 .master-timeline {
   min-width: 0;
   overflow: visible;
   /* Clip sideways while preserving trim/fade controls above and below the ruler. */
-  clip-path: inset(-40px -3px -40px -3px);
+  clip-path: inset(-40px -12px -40px -12px);
 }
 .shared-scroll { min-width: 0; }</style>
 
@@ -25445,8 +25447,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("7.2.3 | Track Tone");
-console.log("[SERVICE CONSOLE] 7.2.3 | Track Tone");
+console.log("7.2.3 | Fix сдвижки трека");
+console.log("[SERVICE CONSOLE] 7.2.3 | Fix сдвижки трека ");
 </script>
 
 <div class="row" id="build-down">
