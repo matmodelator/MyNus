@@ -1,4 +1,4 @@
-<!--MyNus 7.2.3 | Track Tone -->
+<!--MyNus 7.2.3 | Fix сдвижки и масштаба -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -20650,6 +20650,17 @@ function getSharedScrollLeft() {
 
 // Локальная функциональная операция этого блока.
 function applySharedScroll() {
+  // Edge allowances are only safe when the whole track fits the viewport.
+  document.querySelectorAll('.timeline-scroll').forEach(viewport => {
+    const enlarged = getTimelineWidth() > viewport.clientWidth + 1;
+    viewport.style.clipPath = enlarged
+      ? 'inset(-3px 0px -3px 0px)'
+      : 'inset(-3px -3px -3px -3px)';
+  });
+  const enlargedRuler = getTimelineWidth() > masterTimeline.clientWidth + 1;
+  masterTimeline.style.clipPath = enlargedRuler
+    ? 'inset(-40px 0px -40px 0px)'
+    : 'inset(-40px -12px -40px -12px)';
 
   const left =
     getSharedScrollLeft();
@@ -25456,8 +25467,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("7.2.3 | Track Tone");
-console.log("[SERVICE CONSOLE] 7.2.3 | Track Tone");
+console.log("7.2.3 | Fix сдвижки и масштаба");
+console.log("[SERVICE CONSOLE] 7.2.3 | Fix сдвижки и масштаба");
 </script>
 
 <div class="row" id="build-down">
