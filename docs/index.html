@@ -8446,6 +8446,25 @@ function ensureProjectTrimTrackOverlays() {
   });
 }
 
+function positionTimelineLabel(label, time, text, enabled = true) {
+  if (!label) return;
+  const x = Number(time) * pixelsPerSecond - getSharedScrollLeft();
+  const visible = enabled && Number.isFinite(x) && x >= -0.5 && x <= masterTimeline.clientWidth + 0.5;
+  label.style.display = visible ? 'block' : 'none';
+  if (text != null) label.textContent = text;
+  if (!visible) return;
+  const row = masterTimeline.parentElement.getBoundingClientRect();
+  const viewport = masterTimeline.getBoundingClientRect();
+  label.style.left = (viewport.left + masterTimeline.clientLeft - row.left + x) + 'px';
+}
+function refreshSelectionTimelineLabels() {
+  const enabled = hasSelection();
+  positionTimelineLabel(selectionInTime, fragmentStart, formatTrimTime(fragmentStart), enabled);
+  positionTimelineLabel(selectionInName, fragmentStart, 'IN', enabled);
+  positionTimelineLabel(selectionOutTime, fragmentEnd, formatTrimTime(fragmentEnd), enabled);
+  positionTimelineLabel(selectionOutName, fragmentEnd, 'OUT', enabled);
+}
+
 function updateProjectTrimDisplay() {
   const width = getTimelineWidth();
   const start = getProjectTrimStart();
@@ -8469,17 +8488,10 @@ function updateProjectTrimDisplay() {
     if (node) node.style.left = endX + "px";
 });
 
-  const rowRect = masterTimeline.parentElement.getBoundingClientRect();
-
   const placeOutsideLabelAtHandle = (label, handle, text) => {
     if (!label || !handle) return;
-    const handleRect = handle.getBoundingClientRect();
-    label.style.left = (
-      handleRect.left
-      + handleRect.width / 2
-      - rowRect.left
-    ) + "px";
-    label.textContent = text;
+    const time = Number.parseFloat(handle.style.left) / pixelsPerSecond;
+    positionTimelineLabel(label, time, text);
   };
 
   placeOutsideLabelAtHandle(
@@ -14535,32 +14547,7 @@ function updateSelectionDisplay() {
   selectionRange.style.left = startX + "px";
   selectionRange.style.width = Math.max(1, endX - startX) + "px";
 
-  // IN / OUT time labels live outside masterTimeline so overflow:hidden cannot clip them.
-  const rowRect = masterTimeline.parentElement.getBoundingClientRect();
-  const timelineRect = masterTimeline.getBoundingClientRect();
-  const timelineOffsetX = timelineRect.left - rowRect.left;
-
-  if (selectionInTime) {
-    selectionInTime.textContent = formatTrimTime(fragmentStart);
-    selectionInTime.style.display = "block";
-    selectionInTime.style.left = (timelineOffsetX + startX) + "px";
-  }
-
-  if (selectionOutTime) {
-    selectionOutTime.textContent = formatTrimTime(fragmentEnd);
-    selectionOutTime.style.display = "block";
-    selectionOutTime.style.left = (timelineOffsetX + endX) + "px";
-  }
-
-  if (selectionInName) {
-    selectionInName.style.display = "block";
-    selectionInName.style.left = (timelineOffsetX + startX) + "px";
-  }
-
-  if (selectionOutName) {
-    selectionOutName.style.display = "block";
-    selectionOutName.style.left = (timelineOffsetX + endX) + "px";
-  }
+  refreshSelectionTimelineLabels();
 
   selectionInfo.textContent =
     "Selection: "
@@ -20689,6 +20676,7 @@ function applySharedScroll() {
     + "px)";
 
   updateProjectTrimDisplay();
+  refreshSelectionTimelineLabels();
 }
 
 sharedScroll.addEventListener(
