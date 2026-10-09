@@ -1,5 +1,5 @@
 # ========================================
-#  ChangeAcc@Pay | 7.1.0 
+#  ToneCheck | 7.2.0 
 # ========================================
 
 # ========================================
@@ -691,6 +691,65 @@ def detect_lyrics(vocal_path, lyrics_language="auto"):
         "words": words
     }
 
+
+# ========================================
+# TONIC DETECTION
+# ========================================
+
+def detect_tonic(audio_path):
+    import librosa
+    import numpy as np
+
+    notes = [
+        "C", "C#", "D", "D#", "E", "F",
+        "F#", "G", "G#", "A", "A#", "B"
+    ]
+
+    major_profile = np.array([
+        6.35, 2.23, 3.48, 2.33, 4.38, 4.09,
+        2.52, 5.19, 2.39, 3.66, 2.29, 2.88
+    ])
+
+    minor_profile = np.array([
+        6.33, 2.68, 3.52, 5.38, 2.60, 3.53,
+        2.54, 4.75, 3.98, 2.69, 3.34, 3.17
+    ])
+
+    y, sr = librosa.load(
+        audio_path,
+        sr=11025,
+        mono=True
+    )
+
+    harmonic = librosa.effects.harmonic(y)
+
+    chroma = librosa.feature.chroma_stft(
+        y=harmonic,
+        sr=sr
+    )
+
+    chroma_mean = np.mean(chroma, axis=1)
+
+    best_score = float("-inf")
+    best_tonic = None
+
+    for tonic in range(12):
+        for profile in (major_profile, minor_profile):
+
+            rotated = np.roll(profile, tonic)
+
+            score = np.corrcoef(
+                chroma_mean,
+                rotated
+            )[0, 1]
+
+            if np.isfinite(score) and score > best_score:
+                best_score = score
+                best_tonic = tonic
+
+    return notes[best_tonic] if best_tonic is not None else None
+
+
 # ========================================
 # DEMUCS PROCESS
 # ========================================
@@ -827,9 +886,25 @@ def run_demucs(job_id, input_path, job_result_dir, lyrics_language="auto"):
 
         vocal_path = os.path.join(job_result_dir, "vocals.mp3")
         vocal_start, vocal_end = detect_vocal_range(vocal_path, job_id)
+
+        _check_job_cancelled(job_id)
+
+        try:
+            tonic = detect_tonic(input_path)
+            print(f"[TONIC] {tonic}", flush=True)
+        except Exception as exc:
+            tonic = None
+            print(f"[TONIC] Detection failed: {exc}", flush=True)
+
+
         lyrics = _run_whisperx(job_id, vocal_path, lyrics_language)
         result = {stem: f"/results/{job_id}/{stem}.mp3" for stem in stems}
-        result.update(vocal_start=vocal_start, vocal_end=vocal_end, lyrics=lyrics)
+        result.update(
+            vocal_start=vocal_start,
+            vocal_end=vocal_end,
+            lyrics=lyrics,
+            tonic=tonic
+        )
     except SeparationAborted:
         pass
     except Exception as exc:
@@ -2784,18 +2859,11 @@ def source_separation(db, uid):
     # Не назначаем произвольную сепарацию, если связь неизвестна.
     return next(iter(found)) if len(found) == 1 else None
 
-
 # ===== КОНЕЦ ВСТАВКИ =====
 
 
 
-
-
-
-
-
-
-# ChangeAcc@Pay | 7.1.0 .
+# ToneCheck | 7.2.0  .
 @app.before_request
 def reject_legacy_project_storage():
     path = request.path
@@ -2803,12 +2871,12 @@ def reject_legacy_project_storage():
         path == "/saved-projects" or path.startswith("/saved-projects/") or
         path.startswith("/opened-projects/") or path.startswith("/playlist/") or
         path == "/lyrics/save-current"):
-        return jsonify(error="Project save/load is local in MyNus 7.0.2"), 410
+        return jsonify(error="Project save/load is local in MyNus 7.2.0"), 410
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("ChangeAcc@Pay | 7.1.0  ")
-    print(r"ChangeAcc@Pay | 7.1.0 ")
+    print("ToneCheck | 7.2.0  ")
+    print(r"ToneCheck | 7.2.0 ")
     print("=" * 72 + "\n")
 
     try:
