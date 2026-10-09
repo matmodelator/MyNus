@@ -1,4 +1,4 @@
-<!--MyNus 7.1.5 | FIX IN OUT markers -->
+<!--MyNus 7.2.0 | Fullscreen Tone -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 7.1.5</title>
+  <title>MyNus 7.2.0</title>
 
 
  <style>
@@ -5056,9 +5056,9 @@ position: relative;
       </div>
 
       <div id="lyricsFullScreenPitchMenu" class="lyrics-fullscreen-popup" hidden>
-        <div class="lyrics-fullscreen-popup-head"><div class="lyrics-fullscreen-popup-title">Tone</div><button type="button" class="lyrics-fullscreen-popup-close" data-close-fullscreen-menu="pitch" aria-label="Close">×</button></div>
+        <div class="lyrics-fullscreen-popup-head"><div class="lyrics-fullscreen-popup-title" style="flex:1;display:flex;justify-content:space-between;align-items:center">Tone <span id="lyricsFullScreenTonicValue" style="color:#eee;text-transform:none">—</span></div><button type="button" class="lyrics-fullscreen-popup-close" data-close-fullscreen-menu="pitch" aria-label="Close">×</button></div>
         <button type="button" data-fullscreen-pitch="up">higher <span class="popup-state">+</span></button>
-        <button type="button" data-fullscreen-pitch="reset">back to source <span id="lyricsFullScreenPitchValue" class="popup-state">0</span></button>
+        <button type="button" data-fullscreen-pitch="reset"><span id="lyricsFullScreenSourceLabel">Source (—)</span> <span id="lyricsFullScreenPitchValue" class="popup-state">0</span></button>
         <button type="button" data-fullscreen-pitch="down">lower <span class="popup-state">−</span></button>
       </div>
       <div id="lyricsFullScreenTracksMenu" class="lyrics-fullscreen-popup" hidden>
@@ -7041,6 +7041,8 @@ async function startSeparation(restoreRequest = null) {
         }
       );
 
+
+      restoreSourceTonic(data.tonic);
 
       vocalStartTimeRaw =
         Number.isFinite(
@@ -15375,6 +15377,27 @@ function updateLyricsFullScreenView(currentTime) {
 
 
 let lyricsFullScreenPitchSemitones = 0;
+let currentSourceTonic = null;
+const lyricsFullScreenTonicValue = document.getElementById("lyricsFullScreenTonicValue");
+const lyricsFullScreenSourceLabel = document.getElementById("lyricsFullScreenSourceLabel");
+const mynusToneNotes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+function normalizeSourceTonic(value) {
+  const note = String(value || "").trim().replace(/♯/g, "#").replace(/♭/g, "b");
+  const aliases = {Db:"C#", Eb:"D#", Gb:"F#", Ab:"G#", Bb:"A#", Cb:"B", Fb:"E", "E#":"F", "B#":"C"};
+  const normalized = aliases[note] || note;
+  return mynusToneNotes.includes(normalized) ? normalized : null;
+}
+function updateLyricsFullScreenToneLabels() {
+  const sourceIndex = mynusToneNotes.indexOf(currentSourceTonic);
+  const shifted = sourceIndex < 0 ? "—" : mynusToneNotes[((sourceIndex + lyricsFullScreenPitchSemitones) % 12 + 12) % 12];
+  if (lyricsFullScreenTonicValue) lyricsFullScreenTonicValue.textContent = shifted;
+  if (lyricsFullScreenSourceLabel) lyricsFullScreenSourceLabel.textContent = "Source (" + (currentSourceTonic || "—") + ")";
+  if (lyricsFullScreenPitchValue) lyricsFullScreenPitchValue.textContent = (lyricsFullScreenPitchSemitones > 0 ? "+" : "") + lyricsFullScreenPitchSemitones;
+}
+function restoreSourceTonic(value) {
+  currentSourceTonic = normalizeSourceTonic(value);
+  updateLyricsFullScreenToneLabels();
+}
 const lyricsFullScreenPitchMenu = document.getElementById("lyricsFullScreenPitchMenu");
 const lyricsFullScreenTracksMenu = document.getElementById("lyricsFullScreenTracksMenu");
 const lyricsFullScreenPitchValue = document.getElementById("lyricsFullScreenPitchValue");
@@ -15504,10 +15527,7 @@ function applyLyricsFullScreenPitch() {
       audio.playbackRate = rate;
     } catch (_) {}
   });
-  if (lyricsFullScreenPitchValue) {
-    const value = lyricsFullScreenPitchSemitones;
-    lyricsFullScreenPitchValue.textContent = (value > 0 ? "+" : "") + value;
-  }
+  updateLyricsFullScreenToneLabels();
 }
 
 // Работа со Structure в Lyrics Editor.
@@ -15685,6 +15705,7 @@ lyricsFullScreenTracksMenu?.addEventListener("click", event => {
 lyricsFullScreenView?.addEventListener("click", event => {
   if (!isKaraokeUiMode()) return;
   if (event.target.closest("button, input, .lyrics-fullscreen-popup, .lyrics-fullscreen-keys-menu")) return;
+  updateLyricsFullScreenToneLabels();
   placeLyricsFullScreenMenu(lyricsFullScreenPitchMenu, event.clientX, event.clientY);
 });
 
@@ -21419,7 +21440,8 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.0.2",
+    version: "7.2.0",
+    tonic: currentSourceTonic,
     // Сохраняем исходное имя аудиофайла отдельно от имени технической дорожки Original.
     source_audio_name: currentSourceAudioName || currentOriginalFile?.name || null,
     sequencer: {
@@ -22313,7 +22335,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.0.2";
+const MYNUS_CLIENT_VERSION = "7.2.0";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -22438,6 +22460,9 @@ function clearProjectState() {
   currentOriginalFile = null;
   currentOriginalTrackFile = null;
   currentSourceAudioName = null;
+  restoreSourceTonic(null);
+  lyricsFullScreenPitchSemitones = 0;
+  applyLyricsFullScreenPitch();
   try { originalAudio.pause(); } catch (_) {}
   originalAudio.removeAttribute("src");
   originalAudio.load();
@@ -22635,6 +22660,7 @@ progressPercent.textContent = "100%";
     // uiMode намеренно НЕ меняется при LOAD.
     await reportProjectLoadTrace("CLEAR PROJECT STATE START", { command: "clear previous working material", function: "clearProjectState", parameters: { preserve_playlist: true, ui_mode_before: uiMode }, result: "calling" });
     clearProjectState();
+    restoreSourceTonic(project.tonic);
     await reportProjectLoadTrace("CLEAR PROJECT STATE DONE", { command: "clear previous working material", function: "clearProjectState", parameters: { preserve_playlist: true }, result: "done" });
 
     await advanceProjectLoad(1);
@@ -24374,6 +24400,7 @@ document.addEventListener("click", event => {
         project_id: activeProjectId || null,
         exported_at: new Date().toISOString(),
         source_audio_name: state.source_audio_name,
+        tonic: state.tonic,
         vocal_start: state.vocal_start,
         vocal_end: state.vocal_end,
         master: {
@@ -24395,7 +24422,7 @@ document.addEventListener("click", event => {
         original_backup: project.original,
         format:"MyNus Karaoke",format_version:3,
         project:{name:project.name,project_id:project.project_id,exported_at:project.exported_at,
-          source_audio_name:project.source_audio_name,vocal_start:project.vocal_start,vocal_end:project.vocal_end},
+          source_audio_name:project.source_audio_name,tonic:project.tonic,vocal_start:project.vocal_start,vocal_end:project.vocal_end},
         lyrics:{language:lyrics.language,text:lyrics.text,lines:lyrics.lines},
         structure:lyrics.structure,sequencer:state.sequencer,
         master:{file:masterPath,mime_type:master.type}
@@ -24820,6 +24847,7 @@ document.addEventListener("click", event => {
         projectTrimEnd = Math.min(duration, Number(projectTrimEnd));
       }
 
+      restoreSourceTonic(loaded.project.tonic);
       vocalStartTimeRaw = Number.isFinite(loaded.project.vocal_start)
         ? loaded.project.vocal_start : null;
       vocalEndTimeRaw = Number.isFinite(loaded.project.vocal_end)
@@ -25045,8 +25073,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("7.1.5 | FIX IN OUT markers");
-console.log("[SERVICE CONSOLE] 7.1.5 | FIX IN OUT markers");
+console.log("7.2.0 | Fullscreen Tone");
+console.log("[SERVICE CONSOLE] 7.2.0 | Fullscreen Tone");
 </script>
 
 <div class="row" id="build-down">
