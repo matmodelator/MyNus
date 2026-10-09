@@ -3363,10 +3363,15 @@ position: relative;
 
 
 /* Keep translated audio content inside its viewport; external labels are siblings. */
-.track .timeline-scroll,
-.master-timeline {
+.track .timeline-scroll {
   min-width: 0;
   overflow: hidden;
+}
+.master-timeline {
+  min-width: 0;
+  overflow: visible;
+  /* Clip sideways while preserving trim/fade controls above and below the ruler. */
+  clip-path: inset(-40px -3px -40px -3px);
 }
 .shared-scroll { min-width: 0; }</style>
 
@@ -20679,45 +20684,8 @@ function applySharedScroll() {
     + (-left)
     + "px)";
 
-const width = getTimelineWidth();
-const startX = Math.max(
-    0,
-    Math.min(width, getProjectTrimStart() * pixelsPerSecond)
-);
-const endX = Math.max(
-    0,
-    Math.min(width, getProjectTrimEnd() * pixelsPerSecond)
-);
-
-const rowRect =
-    masterTimeline.parentElement.getBoundingClientRect();
-
-if (projectTrimStartTime && projectTrimStartHandle) {
-    const handleRect =
-        projectTrimStartHandle.getBoundingClientRect();
-
-    projectTrimStartTime.style.left =
-        (
-            handleRect.left
-            + handleRect.width / 2
-            - rowRect.left
-        ) + "px";
+  updateProjectTrimDisplay();
 }
-
-if (projectTrimEndTime && projectTrimEndHandle) {
-    const handleRect =
-        projectTrimEndHandle.getBoundingClientRect();
-
-    projectTrimEndTime.style.left =
-        (
-            handleRect.left
-            + handleRect.width / 2
-            - rowRect.left
-        ) + "px";
-}
-
-}
-
 
 sharedScroll.addEventListener(
   "scroll",
