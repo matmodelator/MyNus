@@ -1,4 +1,4 @@
-<!--MyNus 7.2.2 | Track Tone -->
+<!--MyNus 7.2.3 | Track Tone -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 7.2.2</title>
+  <title>MyNus 7.2.3</title>
 
 
  <style>
@@ -3362,7 +3362,13 @@ position: relative;
 
 
 
-</style>
+/* Keep translated audio content inside its viewport; external labels are siblings. */
+.track .timeline-scroll,
+.master-timeline {
+  min-width: 0;
+  overflow: hidden;
+}
+.shared-scroll { min-width: 0; }</style>
 
 <!-- Embedded rubberband-web 0.2.1 / Rubber Band, GPL-2.0-or-later. Source: https://github.com/delude88/rubberband-web
                     GNU GENERAL PUBLIC LICENSE
@@ -20612,55 +20618,22 @@ function keepTracksSynchronized() {
 
 // Обновление позиции курсора и указателей воспроизведения.
 function followPlayhead() {
-
-  const x =
-    getCurrentTime()
-    * pixelsPerSecond; // пикселей в секунду
-
-
-  const left =
-    getSharedScrollLeft();
-
-
-  const right =
-    left
-    +
-    sharedScroll.clientWidth;
-
-
-  const margin =
-    100;
-
-
-  if (
-    x >
-    right - margin
-  ) {
-
-    syncScrollTo(
-      x
-      - sharedScroll.clientWidth
-      + margin
-    );
-
+  const viewport = sharedScroll.clientWidth;
+  if (viewport <= 0) return;
+  const maxScroll = Math.max(0, sharedScroll.scrollWidth - viewport);
+  const songWidth = Math.max(0, duration * pixelsPerSecond);
+  const maxFollow = Math.min(maxScroll, Math.max(0, songWidth - viewport));
+  if (songWidth <= viewport + 1) return;
+  const left = getSharedScrollLeft();
+  const x = Math.max(0, Math.min(songWidth, getCurrentTime() * pixelsPerSecond));
+  const margin = Math.min(100, viewport / 4);
+  // Once the song end is in view, keep the view fixed as playback finishes.
+  if (x > left + viewport - margin && left < maxFollow - 0.5) {
+    syncScrollTo(Math.min(maxFollow, x - viewport + margin));
+  } else if (x < left + margin) {
+    syncScrollTo(Math.max(0, x - margin));
   }
-
-  else if (
-    x <
-    left + margin
-  ) {
-
-    syncScrollTo(
-      Math.max(
-        0,
-        x - margin
-      )
-    );
-
-  }
-
 }
-
 
 // ========================================
 // ОБЩАЯ ГОРИЗОНТАЛЬНАЯ ПРОКРУТКА
@@ -20757,21 +20730,11 @@ sharedScroll.addEventListener(
 
 
 // Локальная функциональная операция этого блока.
-function syncScrollTo(
-  left
-) {
-
-  sharedScroll.scrollLeft =
-    Math.max(
-      0,
-      left
-    );
-
-
+function syncScrollTo(left) {
+  // Let the scrollbar enforce its actual DOM range after zoom changes.
+  sharedScroll.scrollLeft = Math.max(0, Number(left) || 0);
   applySharedScroll();
-
 }
-
 
 // ========================================
 // МАСШТАБ
@@ -21874,7 +21837,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.2.2",
+    version: "7.2.3",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22772,7 +22735,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.2.2";
+const MYNUS_CLIENT_VERSION = "7.2.3";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -25514,8 +25477,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("7.2.2 | Track Tone");
-console.log("[SERVICE CONSOLE] 7.2.2 | Track Tone");
+console.log("7.2.3 | Track Tone");
+console.log("[SERVICE CONSOLE] 7.2.3 | Track Tone");
 </script>
 
 <div class="row" id="build-down">
