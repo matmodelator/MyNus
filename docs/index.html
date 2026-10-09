@@ -1,4 +1,4 @@
-<!--MyNus 7.1.4 | FIX fade -->
+<!--MyNus 7.1.5 | FIX IN OUT markers -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 7.1.4</title>
+  <title>MyNus 7.1.5</title>
 
 
  <style>
@@ -14206,14 +14206,12 @@ function updateSelectionDisplay() {
 
 // Полный сброс используется там, где приложение действительно снимает весь Selection.
 function clearSelection() {
+
   fragmentStart = null;
   fragmentEnd = null;
 
-  selectionRange.style.display = "none";
-  selectionInfo.textContent = "";
+  updateSelectionDisplay();
 
-  updateSelectionButtons();
-  updateTrackSelectionOverlays();
 }
 
 // Selection существует только при корректной паре IN < OUT.
@@ -25047,8 +25045,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("MyNus 7.1.4 | FIX fade");
-console.log("[SERVICE CONSOLE] MyNus 7.1.4 | FIX fade");
+console.log("7.1.5 | FIX IN OUT markers");
+console.log("[SERVICE CONSOLE] 7.1.5 | FIX IN OUT markers");
 </script>
 
 <div class="row" id="build-down">
