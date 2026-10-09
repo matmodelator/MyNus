@@ -1,4 +1,4 @@
-<!--MyNus 7.2.3 | Fix сдвижки и масштаба -->
+<!--MyNus 7.3.0 | ServerCheckLirycsRemove -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 7.2.3</title>
+  <title>MyNus 7.3.0</title>
 
 
  <style>
@@ -1907,8 +1907,7 @@ position: relative;
     .lyrics-editor-card.karaoke-fullscreen-mode > .lyrics-editor-header,
     .lyrics-editor-card.karaoke-fullscreen-mode > .lyrics-editor-toolbar,
     .lyrics-editor-card.karaoke-fullscreen-mode > .lyrics-editor-rows,
-    .lyrics-editor-card.karaoke-fullscreen-mode > .lyrics-editor-footer,
-    .lyrics-editor-card.karaoke-fullscreen-mode > #lyricsSpellPopup {
+    .lyrics-editor-card.karaoke-fullscreen-mode > .lyrics-editor-footer {
       display: none !important;
     }
 
@@ -3201,41 +3200,6 @@ position: relative;
       padding: 3px 7px;
       font-size: 10px;
       line-height: 1.2;
-    }
-
-    .lyrics-editor-karaoke-word.spell-error {
-      text-decoration-line: underline;
-      text-decoration-style: wavy;
-      text-decoration-color: #c00;
-      text-decoration-thickness: 1px;
-      text-underline-offset: 3px;
-      cursor: pointer;
-    }
-
-    .lyrics-spell-popup {
-      position: absolute;
-      z-index: 5000;
-      display: none;
-      min-width: 150px;
-      max-width: 280px;
-      padding: 6px;
-      background: #fff;
-      border: 1px solid #bbb;
-      border-radius: 7px;
-      box-shadow: 0 8px 24px rgba(0,0,0,.18);
-    }
-
-    .lyrics-spell-popup.open { display: block; }
-
-    .lyrics-spell-popup button {
-      display: block;
-      width: 100%;
-      margin: 0 0 4px;
-      padding: 5px 7px;
-      text-align: left;
-      background: #f3f3f3;
-      color: #222;
-      font-size: 11px;
     }
 
 
@@ -5470,8 +5434,6 @@ Public License instead of this License.
       </div>
     </div>
 
-    <div id="lyricsSpellPopup" class="lyrics-spell-popup"></div>
-
     <div id="lyricsEditorRows" class="lyrics-editor-rows"></div>
 
     <div class="lyrics-editor-footer">
@@ -5937,7 +5899,7 @@ const saveLyricsEditBtn = document.getElementById("saveLyricsEditBtn");
 const lyricsSaveNotice = document.getElementById("lyricsSaveNotice");
 let lyricsSaveNoticeTimer = null;
 const lyricsEditorRows = document.getElementById("lyricsEditorRows");
-const lyricsSpellPopup = document.getElementById("lyricsSpellPopup");
+
 const lyricsEditorStatus = document.getElementById("lyricsEditorStatus");
 const lyricsEditorStats = document.getElementById("lyricsEditorStats");
 const lyricsEditorErrorConsole = document.getElementById("lyricsEditorErrorConsole");
@@ -16517,161 +16479,6 @@ function languageLabel(language) {
 }
 
 // Работа со Structure в Lyrics Editor.
-async function requestLyricsSpellcheck(text) {
-  const language = detectLyricsLanguage(text);
-
-  const response = await fetch("/spellcheck", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, language })
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.error || "Spellcheck failed");
-  }
-
-  if (lyricsLanguageInfo) {
-    lyricsLanguageInfo.textContent =
-      "Language: " + languageLabel(data.language || language);
-  }
-
-  return Array.isArray(data.matches) ? data.matches : [];
-}
-
-
-// Работа со Structure в Lyrics Editor.
-function closeLyricsSpellPopup() {
-  if (!lyricsSpellPopup) return;
-  lyricsSpellPopup.classList.remove("open");
-  lyricsSpellPopup.innerHTML = "";
-}
-
-
-// Работа со Structure в Lyrics Editor.
-function replaceLyricsWordFromSuggestion(lineIndex, wordIndex, replacement) {
-  const line = lyricsEditorDraft[lineIndex];
-  if (!line || !line.words || !line.words[wordIndex]) return;
-
-  pushLyricsHistory();
-
-  line.words[wordIndex].word = String(replacement);
-  delete line._editedText;
-
-  closeLyricsSpellPopup();
-  renderLyricsEditor();
-}
-
-
-// Работа со Structure в Lyrics Editor.
-function showLyricsSpellPopup(span, lineIndex, wordIndex, replacements) {
-  closeLyricsSpellPopup();
-
-  const list = Array.isArray(replacements) ? replacements.slice(0, 8) : [];
-  if (!list.length) return;
-
-  list.forEach(replacement => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = replacement;
-
-    button.addEventListener("click", event => {
-      event.stopPropagation();
-      replaceLyricsWordFromSuggestion(
-        lineIndex,
-        wordIndex,
-        replacement
-      );
-    });
-
-    lyricsSpellPopup.appendChild(button);
-  });
-
-  const spanRect = span.getBoundingClientRect();
-  const editorRect = lyricsEditorDialog.getBoundingClientRect();
-
-  lyricsSpellPopup.style.left =
-    Math.max(8, spanRect.left - editorRect.left) + "px";
-
-  lyricsSpellPopup.style.top =
-    Math.max(8, spanRect.bottom - editorRect.top + 4) + "px";
-
-  lyricsSpellPopup.classList.add("open");
-}
-
-
-// Работа со Structure в Lyrics Editor.
-async function updateLyricsLineSpellcheck(line, lineIndex, karaokeBox) {
-  if (!line || !karaokeBox) return;
-  if (lyricsTranscriptionMode) return;
-
-  const text = line._editedText ?? lineText(line);
-
-  let matches;
-
-  try {
-    matches = await requestLyricsSpellcheck(text);
-  }
-  catch (error) {
-    return;
-  }
-
-  const spans = Array.from(
-    karaokeBox.querySelectorAll(".lyrics-editor-karaoke-word")
-  );
-
-  spans.forEach(span => {
-    span.classList.remove("spell-error");
-    span.removeAttribute("title");
-    span.oncontextmenu = null;
-  });
-
-  let cursor = 0;
-
-  const wordRanges = line.words.map((word, wordIndex) => {
-    const wordText = String(word.word ?? "");
-    const found = text.indexOf(wordText, cursor);
-    const start = found >= 0 ? found : cursor;
-    const end = start + wordText.length;
-    cursor = end;
-
-    return { wordIndex, start, end };
-  });
-
-  matches.forEach(match => {
-    const errorStart = Number(match.offset);
-    const errorEnd = errorStart + Number(match.length);
-    const replacements = Array.isArray(match.replacements)
-      ? match.replacements
-      : [];
-
-    wordRanges.forEach(range => {
-      if (range.end > errorStart && range.start < errorEnd) {
-        const span = spans[range.wordIndex];
-        if (!span) return;
-
-        span.classList.add("spell-error");
-        span.title = replacements.length
-          ? replacements.join(" / ")
-          : String(match.message || "LanguageTool");
-
-        span.oncontextmenu = event => {
-          event.preventDefault();
-          showLyricsSpellPopup(
-            span,
-            lineIndex,
-            range.wordIndex,
-            replacements
-          );
-        };
-      }
-    });
-  });
-}
-
-
-
 let lyricsTranscriptionMode = false;
 let lyricsOriginalDraftForTranscription = null;
 
@@ -18141,12 +17948,6 @@ function renderLyricsEditor() {
         textArea.value
       );
 
-    updateLyricsLineSpellcheck(
-      line,
-      index,
-      karaokeBox
-    );
-
     const bindLyricsTimeEditor = (input, key) => {
       let startState = null;
       let startValue = Number(line[key]);
@@ -18739,15 +18540,7 @@ openLyricsFullScreenBtn?.addEventListener("click", () => {
 closeLyricsEditorBtn.addEventListener("click", closeLyricsEditor);
 cancelLyricsEditBtn.addEventListener("click", closeLyricsEditor);
 
-document.addEventListener("click", event => {
-  if (
-    lyricsSpellPopup
-    &&
-    !lyricsSpellPopup.contains(event.target)
-  ) {
-    closeLyricsSpellPopup();
-  }
-});
+
 
 
 lyricsEditorDialog.addEventListener("click", event => {
@@ -20654,12 +20447,12 @@ function applySharedScroll() {
   document.querySelectorAll('.timeline-scroll').forEach(viewport => {
     const enlarged = getTimelineWidth() > viewport.clientWidth + 1;
     viewport.style.clipPath = enlarged
-      ? 'inset(-3px 0px -3px 0px)'
+      ? 'inset(-3px -1px -3px 0px)'
       : 'inset(-3px -3px -3px -3px)';
   });
   const enlargedRuler = getTimelineWidth() > masterTimeline.clientWidth + 1;
   masterTimeline.style.clipPath = enlargedRuler
-    ? 'inset(-40px 0px -40px 0px)'
+    ? 'inset(-40px -1px -40px 0px)'
     : 'inset(-40px -12px -40px -12px)';
 
   const left =
@@ -21830,7 +21623,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.2.3",
+    version: "7.3.0",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22728,7 +22521,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.2.3";
+const MYNUS_CLIENT_VERSION = "7.3.0";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -25467,8 +25260,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("7.2.3 | Fix сдвижки и масштаба");
-console.log("[SERVICE CONSOLE] 7.2.3 | Fix сдвижки и масштаба");
+console.log("7.3.0 | ServerCheckLirycsRemove");
+console.log("[SERVICE CONSOLE] 7.3.0 | ServerCheckLirycsRemove");
 </script>
 
 <div class="row" id="build-down">
