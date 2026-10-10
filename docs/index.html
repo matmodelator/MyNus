@@ -1,4 +1,4 @@
-<!--MyNus 7.3.2 | LocalAudioSave -->
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 7.3.2 | LocalAudioSave</title>
+  <title>MyNus 7.3.3 | Transcription</title>
 
 
  <style>
@@ -16612,7 +16612,7 @@ function updateLyricsTranscriptionButton() {
   lyricsTranscriptionBtn.disabled =
     !lyricsTranscriptionMode
     &&
-    !transcribable;
+    (!transcribable || !lyricsEditorDraft.some(line => (line.words || []).some(word => typeof word.ru_word === 'string')));
 
   lyricsTranscriptionBtn.textContent =
     lyricsTranscriptionMode
@@ -16621,73 +16621,32 @@ function updateLyricsTranscriptionButton() {
 }
 
 // Работа со Structure в Lyrics Editor.
-async function requestLyricsTranscription(lines) {
-  const language =
-    detectLyricsLanguage(
-      lines.join("\n")
-    );
-
-  const response = await fetch("/transcribe-to-ru", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      lines,
-      language
-    })
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.error || "Transcription failed");
+function rememberTranscriptionEdits(lines, isRu) {
+  for (const line of lines || []) {
+    applyEditedTextToLine(line);
+    for (const word of line.words || []) {
+      word[isRu ? 'ru_word' : 'source_word'] = word.word;
+    }
   }
-
-  return Array.isArray(data.lines) ? data.lines : [];
 }
-
-lyricsTranscriptionBtn.addEventListener("click", async () => {
-  if (lyricsTranscriptionMode) {
-    lyricsEditorDraft =
-      JSON.parse(JSON.stringify(lyricsOriginalDraftForTranscription || []));
-
-    lyricsTranscriptionMode = false;
-    renderLyricsEditor();
-    setLyricsEditorMessage("Original");
-    return;
+function transcriptionView(lines, isRu) {
+  const copy = JSON.parse(JSON.stringify(lines || []));
+  for (const line of copy) {
+    delete line._editedText;
+    for (const word of line.words || []) {
+      word.word = String(word[isRu ? 'ru_word' : 'source_word'] ?? word.word);
+    }
   }
-
-  const originalDraft = cloneLyricsEditorDraft();
-  const originalLines =
-    originalDraft.map(line => line._editedText ?? lineText(line));
-
-  try {
-    lyricsTranscriptionBtn.disabled = true;
-
-    const transcribedLines =
-      await requestLyricsTranscription(originalLines);
-
-    lyricsOriginalDraftForTranscription = originalDraft;
-
-    lyricsEditorDraft =
-      originalDraft.map((line, index) => {
-        const clone = JSON.parse(JSON.stringify(line));
-        setLineText(clone, String(transcribedLines[index] ?? lineText(line)));
-        delete clone._editedText;
-        return clone;
-      });
-
-    lyricsTranscriptionMode = true;
-    renderLyricsEditor();
-    setLyricsEditorMessage("RU Transcription");
-  }
-  catch (error) {
-    setLyricsEditorError(error, "Transcription error: ");
-  }
-  finally {
-    updateLyricsTranscriptionButton();
-  }
+  return copy;
+}
+lyricsTranscriptionBtn.addEventListener('click', () => {
+  rememberTranscriptionEdits(lyricsEditorDraft, lyricsTranscriptionMode);
+  lyricsTranscriptionMode = !lyricsTranscriptionMode;
+  lyricsEditorDraft = transcriptionView(lyricsEditorDraft, lyricsTranscriptionMode);
+  lyricsOriginalDraftForTranscription = transcriptionView(lyricsEditorDraft, false);
+  renderLyricsEditor();
+  setLyricsEditorMessage(lyricsTranscriptionMode ? 'RU Transcription' : 'Original');
 });
-
 
 const MIN_AUTO_STRUCTURE_BLOCK_DURATION = 10;
 
@@ -21696,6 +21655,8 @@ function cloneSerializable(value, fallback) {
 // Для Project SAVE делаем снимок ТЕКУЩЕГО состояния Lyrics.
 // Сначала фиксируем несохранённый текст, введённый сейчас в Lyrics Editor.
 function projectLyricsJson() {
+  rememberTranscriptionEdits(lyricsEditorDraft, lyricsTranscriptionMode);
+  lyricsData.transcription_mode = lyricsTranscriptionMode;
   if (Array.isArray(lyricsEditorDraft) && lyricsEditorDraft.length) {
     lyricsEditorDraft.forEach(line => applyEditedTextToLine(line));
   }
@@ -21716,6 +21677,9 @@ function projectLyricsJson() {
   lyricsData.text = lyricsData.words.map(word => word.word).join(" ").trim();
 
   return {
+    transcription_mode: lyricsTranscriptionMode,
+    source_text: lines.flatMap(line => line.words).map(word => word.source_word ?? word.word).join(' '),
+    ru_text: lines.flatMap(line => line.words).map(word => word.ru_word ?? word.word).join(' '),
     language: lyricsData?.language || null,
     text: lines.map(line => line.words.map(word => word.word).join(" ")).join(" ").trim(),
     lines,
@@ -21731,7 +21695,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.3.2",
+    version: "7.3.3",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22605,6 +22569,8 @@ projectFadeStart =
 // Сохранение текущего Project и связанных данных.
 function restoreProjectLyricsJson(lyrics) {
   const savedLines = Array.isArray(lyrics?.lines) ? cloneSerializable(lyrics.lines, []) : [];
+  lyricsTranscriptionMode = !!lyrics?.transcription_mode;
+  lyricsOriginalDraftForTranscription = transcriptionView(savedLines, false);
   lyricsEditorDraft = savedLines;
   karaokeLines = cloneSerializable(savedLines, []);
   
@@ -22614,6 +22580,7 @@ function restoreProjectLyricsJson(lyrics) {
     : [];
     
   lyricsData = {
+    transcription_mode: !!lyrics?.transcription_mode,
     language: lyrics?.language || null,
     text: String(lyrics?.text || ""),
     words: savedLines.flatMap(line => Array.isArray(line.words) ? line.words : [])
@@ -22629,7 +22596,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.3.2";
+const MYNUS_CLIENT_VERSION = "7.3.3";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
