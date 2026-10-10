@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 7.3.6 | Logs </title>
+  <title>MyNus 7.3.7 | Out of Server </title>
 
 
  <style>
@@ -5532,7 +5532,7 @@ Public License instead of this License.
  function text(value){if(value instanceof Error)return value.stack||value.message;if(typeof value==='string')return value;try{return JSON.stringify(value)??String(value);}catch(_){return String(value);}}
  function refresh(){const area=document.getElementById('mnConsoleText');if(!area||!dirty||document.getElementById('mnConsolePanel')?.hidden)return;const follow=area.scrollHeight-area.scrollTop-area.clientHeight<35;const start=area.selectionStart,end=area.selectionEnd;area.value=entries.join('\n');area.setSelectionRange(Math.min(start,area.value.length),Math.min(end,area.value.length));if(follow)area.scrollTop=area.scrollHeight;dirty=false;}
  for(const level of ['log','info','warn','error','debug']){const native=console[level].bind(console);console[level]=(...args)=>{native(...args);entries.push('['+new Date().toISOString()+'] '+level.toUpperCase()+': '+args.map(text).join(' ').slice(0,16000));if(entries.length>limit)entries.splice(0,entries.length-limit);dirty=true;refresh();};}
- window.mynusLocalConsole={refresh(){dirty=true;refresh();},text:()=>entries.join('\n'),clear(){entries.length=0;dirty=true;refresh();}};
+ window.mynusLocalConsole={appendServer(record){entries.push('['+record.time+'] SERVER '+record.level+': '+record.message);if(entries.length>limit)entries.splice(0,entries.length-limit);dirty=true;refresh();},refresh(){dirty=true;refresh();},text:()=>entries.join('\n'),clear(){entries.length=0;dirty=true;refresh();}};
  window.addEventListener('error',event=>console.error('UNCAUGHT ERROR:',event.message,event.filename+':'+event.lineno+':'+event.colno,event.error||''));
  window.addEventListener('unhandledrejection',event=>console.error('UNHANDLED PROMISE REJECTION:',event.reason));
 })();
@@ -21820,7 +21820,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.3.6",
+    version: "7.3.7",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22722,7 +22722,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.3.6";
+const MYNUS_CLIENT_VERSION = "7.3.7";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -24410,7 +24410,12 @@ document.addEventListener("click", event => {
     dialog.classList.add('mnAccountDropdown');
     if (!dialog.open) dialog.show();
   }
-  open.addEventListener('click', () => {
+  open.addEventListener('click', async () => {
+    if (location.protocol === 'file:') {
+      if (dialog.open) {dialog.close();return;}
+      showLocalAccountNotice();openAuthDialog();return;
+    }
+    if (!accountChecked) await checkAccountOnDemand();
     if (authenticated) {
       if (dialog.open) { dialog.close(); return; }
       showAccountMenu();
@@ -24454,15 +24459,21 @@ document.addEventListener("click", event => {
     try {await api('/api/auth/logout', {}); window.location.reload();}
     catch (error) {message.textContent = error.message; setBusy(false);}
   };
-  if (location.protocol === 'file:') {
-    message.textContent = 'For REG/LOG, open MyNus at http://127.0.2.1:5000 after starting the server. Opening the HTML file directly does not connect to the server.';
-    if (!dialog.open) openAuthDialog();
-    setBusy(true);
-    return;
+  function showLocalAccountNotice() {
+    message.textContent = 'Local mode. Account sign-in is available when MyNus is opened through the server. Projects work without signing in.';
+    form.querySelectorAll('input').forEach(input => input.readOnly = true);
+    form.querySelectorAll('button').forEach(button => button.disabled = button.id !== 'mnAuthClose');
+    busy = false;
   }
-  fetch('/api/current-user', {credentials:'same-origin', cache:'no-store'})
+  let accountChecked = false;
+  let accountCheckPromise = null;
+  function checkAccountOnDemand() {
+    if (accountCheckPromise) return accountCheckPromise;
+    accountChecked = true;
+    accountCheckPromise = fetch('/api/current-user', {credentials:'same-origin', cache:'no-store', signal:AbortSignal.timeout(5000)})
+
     .then(async response => {
-      if (response.status === 401) {openAuthDialog(); email.focus(); return;}
+      if (response.status === 401) return;
       if (!response.ok) throw new Error('Unable to verify login');
       if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('Open MyNus at http://127.0.2.1:5000 and check the server version.');
       const user = await response.json(); authenticated = true; accountUser = user;
@@ -24502,9 +24513,11 @@ document.addEventListener("click", event => {
         sessionStorage.removeItem('mnAccountSuccess');
         showProfile();
         accountStatus('mnProfileStatus', savedSuccess, 'success');
-        if (!dialog.open) openAccountDropdown();
       }
-    }).catch(error => {message.textContent = error.message; if (!dialog.open) openAuthDialog();});
+    }).catch(error => {message.textContent = 'Account server unavailable. Local project functions remain available.'; accountChecked = false;})
+      .finally(() => {accountCheckPromise = null;});
+    return accountCheckPromise;
+  }
 })();
 </script>
 
@@ -25440,7 +25453,7 @@ async function restoreMynusSnapshot(saved) {
 <button id="mnConsoleButton" type="button" aria-controls="mnConsolePanel" aria-expanded="true">Console</button>
 <aside id="mnConsolePanel" aria-label="Local console">
 <header><strong>Console</strong><button id="mnConsoleClose" type="button" aria-label="Hide console">×</button></header>
-<div class="mnConsoleActions"><button id="mnConsoleCopy" type="button">Copy</button><button id="mnConsoleSave" type="button">Save .log</button><button id="mnConsoleClear" type="button">Clear</button></div>
+<div class="mnConsoleActions"><button id="mnConsoleCopy" type="button">Copy</button><button id="mnConsoleSave" type="button">Save .log</button><button id="mnConsoleServer" type="button">Server logs</button><button id="mnConsoleClear" type="button">Clear</button></div>
 <textarea id="mnConsoleText" readonly spellcheck="false" aria-label="Local log"></textarea>
 <div id="mnConsoleNotice" role="status">Local logs</div>
 </aside>
@@ -25459,7 +25472,23 @@ async function restoreMynusSnapshot(saved) {
   const url=URL.createObjectURL(new Blob([window.mynusLocalConsole.text()],{type:'text/plain;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download='MyNus-'+new Date().toISOString().replace(/[:.]/g,'-')+'.log';document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);notice.textContent='Log saved';
  });
  document.getElementById('mnConsoleClear').addEventListener('click',()=>{window.mynusLocalConsole.clear();notice.textContent='Cleared';});
- window.mynusLocalConsole.refresh();console.info('[LOCAL CONSOLE] '+document.title);
+
+ let serverStream=null,lastServerLogId=0;
+ const serverButton=document.getElementById('mnConsoleServer');
+ function connectServerLogs(){
+  if(serverStream){serverStream.close();serverStream=null;serverButton.textContent='Server logs';notice.textContent='Server logs disconnected';return;}
+  const base=location.protocol==='file:'?'http://127.0.0.1:5000':location.origin;
+  const stream=new EventSource(base+'/debug/server-logs?after='+lastServerLogId);serverStream=stream;
+  serverButton.textContent='Disconnect server';notice.textContent='Connecting to server…';
+  stream.onopen=()=>{notice.textContent='Local + server logs';};
+  stream.onmessage=event=>{try{const record=JSON.parse(event.data);if(record.id<=lastServerLogId)return;lastServerLogId=record.id;window.mynusLocalConsole.appendServer(record);}catch(_) {}};
+  stream.onerror=()=>{stream.close();if(serverStream===stream)serverStream=null;serverButton.textContent='Server logs';notice.textContent='Server unavailable. Local logs remain active.';};
+ }
+ serverButton.addEventListener('click',connectServerLogs);
+ window.addEventListener('pagehide',()=>serverStream?.close());
+ if(location.protocol==='http:'||location.protocol==='https:')connectServerLogs();
+ window.mynusLocalConsole.refresh();
+console.info(document.title + ' — интерфейс запущен.');
 })();
 </script>
 
