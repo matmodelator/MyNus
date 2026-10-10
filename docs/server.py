@@ -1,5 +1,5 @@
 # ========================================
-#  Transcription | 7.3.3 
+#  Transcription Fix | 7.3.4 
 # ========================================
 
 # ========================================
@@ -107,7 +107,7 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "7.3.3", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "7.3.4", "trace_id": trace_id})
 
 
 # ========================================
@@ -1561,17 +1561,20 @@ def transcribe_line_to_ru(text,language):
     return pattern.sub(lambda m:_latin_word(m.group(0),language),value)
 
 def prepare_initial_transcription(lyrics):
-    """One transcription pass per separation; preserve word timing and spelling results."""
+    """Create an independent RU text once, after recognition and spelling check."""
     if "initial_transcription" in lyrics:
         return
+    import copy
     try:
-        for word in lyrics.get("words", []):
+        ru_words = copy.deepcopy(lyrics.get("words", []))
+        for word in ru_words:
             source = str(word.get("word", ""))
             language = lyrics.get("language") or detect_lyrics_line_language(source)
-            word["source_word"] = source
-            word["ru_word"] = transcribe_line_to_ru(source, language)
-        lyrics["source_text"] = " ".join(w["source_word"] for w in lyrics.get("words", []))
-        lyrics["ru_text"] = " ".join(w["ru_word"] for w in lyrics.get("words", []))
+            word["word"] = transcribe_line_to_ru(source, language)
+            for key in ("spell_issues", "source_word", "ru_word"):
+                word.pop(key, None)
+        lyrics["ru_transcription"] = {"language": "ru", "words": ru_words,
+            "text": " ".join(w["word"] for w in ru_words)}
         lyrics["initial_transcription"] = {"status": "done"}
     except Exception as exc:
         lyrics["initial_transcription"] = {"status": "failed", "error": str(exc)}
@@ -2826,7 +2829,7 @@ def reject_legacy_project_storage():
         path == "/saved-projects" or path.startswith("/saved-projects/") or
         path.startswith("/opened-projects/") or path.startswith("/playlist/") or
         path == "/lyrics/save-current"):
-        return jsonify(error="Project save/load is local in MyNus 7.3.3"), 410
+        return jsonify(error="Project save/load is local in MyNus 7.3.4"), 410
 
 if __name__ == "__main__":
     with open(__file__, "r", encoding="utf-8-sig") as f:
