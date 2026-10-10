@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 7.3.3 | Transcription</title>
+  <title>MyNus 7.3.4 | Transcription Fix</title>
 
 
  <style>
@@ -7460,6 +7460,7 @@ async function startSeparation(restoreRequest = null) {
 
 
       buildKaraokeLines();
+      initializeIndependentLyrics();
 
       
 
@@ -16612,7 +16613,7 @@ function updateLyricsTranscriptionButton() {
   lyricsTranscriptionBtn.disabled =
     !lyricsTranscriptionMode
     &&
-    (!transcribable || !lyricsEditorDraft.some(line => (line.words || []).some(word => typeof word.ru_word === 'string')));
+    !independentLyrics.ru;
 
   lyricsTranscriptionBtn.textContent =
     lyricsTranscriptionMode
@@ -16621,30 +16622,61 @@ function updateLyricsTranscriptionButton() {
 }
 
 // Работа со Structure в Lyrics Editor.
-function rememberTranscriptionEdits(lines, isRu) {
-  for (const line of lines || []) {
-    applyEditedTextToLine(line);
-    for (const word of line.words || []) {
-      word[isRu ? 'ru_word' : 'source_word'] = word.word;
-    }
-  }
-}
-function transcriptionView(lines, isRu) {
-  const copy = JSON.parse(JSON.stringify(lines || []));
-  for (const line of copy) {
-    delete line._editedText;
-    for (const word of line.words || []) {
-      word.word = String(word[isRu ? 'ru_word' : 'source_word'] ?? word.word);
-    }
+let independentLyrics = { original: null, ru: null };
+function lyricsCopy(value) { return JSON.parse(JSON.stringify(value)); }
+function cleanIndependentLines(lines) {
+  const copy = lyricsCopy(lines || []);
+  for (const line of copy) for (const word of line.words || []) {
+    delete word.source_word; delete word.ru_word;
   }
   return copy;
 }
+function captureActiveLyrics() {
+  lyricsEditorDraft.forEach(line => applyEditedTextToLine(line));
+  const lines = lyricsEditorDraft.length ? lyricsEditorDraft : karaokeLines;
+  independentLyrics[lyricsTranscriptionMode ? 'ru' : 'original'] = {
+    language: lyricsTranscriptionMode ? 'ru' : (independentLyrics.original?.language || lyricsData.language),
+    lines: cleanIndependentLines(lines), structure: lyricsCopy(lyricsStructureDraft),
+    undo: lyricsCopy(lyricsUndoStack), redo: lyricsCopy(lyricsRedoStack)
+  };
+}
+function activateIndependentLyrics(isRu) {
+  const state = independentLyrics[isRu ? 'ru' : 'original'];
+  if (!state) return;
+  lyricsTranscriptionMode = isRu;
+  lyricsEditorDraft = lyricsCopy(state.lines);
+  karaokeLines = lyricsCopy(state.lines);
+  lyricsStructureDraft = lyricsCopy(state.structure || []);
+  lyricsUndoStack = lyricsCopy(state.undo || []);
+  lyricsRedoStack = lyricsCopy(state.redo || []);
+  lyricsOriginalDraftForTranscription = lyricsCopy(independentLyrics.original?.lines || []);
+  lyricsData = { language: state.language, text: state.lines.map(line => lineText(line)).join(' '),
+    words: karaokeLines.flatMap(line => line.words || []) };
+  lyricsEditorSelectedLine = lyricsEditorDraft.length ? 0 : -1;
+  lyricsEditorEditLineIndex = -1;
+  lyricsStructureSelectedIndex = -1;
+  lyricsStructureSelectedIndices = new Set();
+  activeKaraokeLine = -1;
+}
+function initializeIndependentLyrics() {
+  const source = lyricsData;
+  const originalLines = cleanIndependentLines(karaokeLines);
+  independentLyrics = { original: {language: source.language, lines: originalLines, structure: [], undo: [], redo: []}, ru: null };
+  if (Array.isArray(source.ru_transcription?.words)) {
+    lyricsData = lyricsCopy(source.ru_transcription);
+    buildKaraokeLines();
+    independentLyrics.ru = {language: 'ru', lines: cleanIndependentLines(karaokeLines), structure: [], undo: [], redo: []};
+    lyricsData = source; karaokeLines = lyricsCopy(originalLines);
+  }
+  lyricsTranscriptionMode = false;
+  lyricsEditorDraft = lyricsCopy(originalLines);
+}
 lyricsTranscriptionBtn.addEventListener('click', () => {
-  rememberTranscriptionEdits(lyricsEditorDraft, lyricsTranscriptionMode);
-  lyricsTranscriptionMode = !lyricsTranscriptionMode;
-  lyricsEditorDraft = transcriptionView(lyricsEditorDraft, lyricsTranscriptionMode);
-  lyricsOriginalDraftForTranscription = transcriptionView(lyricsEditorDraft, false);
-  renderLyricsEditor();
+  if (!lyricsTranscriptionMode && !independentLyrics.ru) return;
+  captureActiveLyrics();
+  activateIndependentLyrics(!lyricsTranscriptionMode);
+  updateLyricsUndoRedoButtons();
+  renderLyricsEditor(); renderLyrics();
   setLyricsEditorMessage(lyricsTranscriptionMode ? 'RU Transcription' : 'Original');
 });
 
@@ -18474,14 +18506,13 @@ function updateLyricsUndoRedoButtons() {
 // Работа со Structure в Lyrics Editor.
 function openLyricsEditor() {
   lyricsStructureSelectedIndex = -1;
-  lyricsTranscriptionMode = false;
-  lyricsOriginalDraftForTranscription = null;
+  lyricsOriginalDraftForTranscription = lyricsCopy(independentLyrics.original?.lines || []);
   lyricsEditorDraft = cloneKaraokeLines();
   lyricsEditorSelectedLine =
     lyricsEditorDraft.length ? 0 : -1;
 
-  lyricsUndoStack = [];
-  lyricsRedoStack = [];
+  lyricsUndoStack = lyricsCopy(independentLyrics[lyricsTranscriptionMode ? 'ru' : 'original']?.undo || []);
+  lyricsRedoStack = lyricsCopy(independentLyrics[lyricsTranscriptionMode ? 'ru' : 'original']?.redo || []);
 
   updateLyricsUndoRedoButtons();
   renderLyricsEditor();
@@ -21655,8 +21686,7 @@ function cloneSerializable(value, fallback) {
 // Для Project SAVE делаем снимок ТЕКУЩЕГО состояния Lyrics.
 // Сначала фиксируем несохранённый текст, введённый сейчас в Lyrics Editor.
 function projectLyricsJson() {
-  rememberTranscriptionEdits(lyricsEditorDraft, lyricsTranscriptionMode);
-  lyricsData.transcription_mode = lyricsTranscriptionMode;
+  captureActiveLyrics();
   if (Array.isArray(lyricsEditorDraft) && lyricsEditorDraft.length) {
     lyricsEditorDraft.forEach(line => applyEditedTextToLine(line));
   }
@@ -21678,8 +21708,7 @@ function projectLyricsJson() {
 
   return {
     transcription_mode: lyricsTranscriptionMode,
-    source_text: lines.flatMap(line => line.words).map(word => word.source_word ?? word.word).join(' '),
-    ru_text: lines.flatMap(line => line.words).map(word => word.ru_word ?? word.word).join(' '),
+    variants: lyricsCopy(independentLyrics),
     language: lyricsData?.language || null,
     text: lines.map(line => line.words.map(word => word.word).join(" ")).join(" ").trim(),
     lines,
@@ -21695,7 +21724,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.3.3",
+    version: "7.3.4",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22568,23 +22597,24 @@ projectFadeStart =
 
 // Сохранение текущего Project и связанных данных.
 function restoreProjectLyricsJson(lyrics) {
-  const savedLines = Array.isArray(lyrics?.lines) ? cloneSerializable(lyrics.lines, []) : [];
-  lyricsTranscriptionMode = !!lyrics?.transcription_mode;
-  lyricsOriginalDraftForTranscription = transcriptionView(savedLines, false);
-  lyricsEditorDraft = savedLines;
-  karaokeLines = cloneSerializable(savedLines, []);
-  
-  lyricsStructureDraft =
-  Array.isArray(lyrics?.structure)
-    ? cloneSerializable(lyrics.structure, [])
-    : [];
-    
-  lyricsData = {
-    transcription_mode: !!lyrics?.transcription_mode,
-    language: lyrics?.language || null,
-    text: String(lyrics?.text || ""),
-    words: savedLines.flatMap(line => Array.isArray(line.words) ? line.words : [])
-  };
+  if (lyrics?.variants?.original) {
+    independentLyrics = lyricsCopy(lyrics.variants);
+  } else {
+    // Migrate the previous word-pair format once; further editing is independent.
+    const lines = lyricsCopy(lyrics?.lines || []);
+    const hasRu = lines.some(line => (line.words || []).some(word => typeof word.ru_word === 'string'));
+    function legacyLines(isRu) {
+      const copy = lyricsCopy(lines);
+      for (const line of copy) for (const word of line.words || [])
+        word.word = word[isRu ? 'ru_word' : 'source_word'] ?? word.word;
+      return cleanIndependentLines(copy);
+    }
+    independentLyrics = {
+      original: {language: lyrics?.language || null, lines: legacyLines(false), structure: lyricsCopy(lyrics?.structure || []), undo: [], redo: []},
+      ru: hasRu ? {language: 'ru', lines: legacyLines(true), structure: lyricsCopy(lyrics?.structure || []), undo: [], redo: []} : null
+    };
+  }
+  activateIndependentLyrics(!!lyrics?.transcription_mode && !!independentLyrics.ru);
 }
 
 const projectLoader = document.getElementById("projectLoader");
@@ -22596,7 +22626,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.3.3";
+const MYNUS_CLIENT_VERSION = "7.3.4";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -22757,6 +22787,7 @@ function clearProjectState() {
   singerSegments = [];
   renderSingerSegments();
 
+  independentLyrics = {original: null, ru: null};
   lyricsData = { language: null, text: "", words: [] };
   karaokeLines = [];
   activeKaraokeLine = -1;
