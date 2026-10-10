@@ -1,5 +1,5 @@
 # ========================================
-#  LocalAudioSave | 7.3.2 
+#  Transcription | 7.3.3 
 # ========================================
 
 # ========================================
@@ -107,7 +107,7 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "7.3.2", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "7.3.3", "trace_id": trace_id})
 
 
 # ========================================
@@ -946,6 +946,7 @@ def run_demucs(job_id, input_path, job_result_dir, lyrics_language="auto"):
 
         lyrics = _run_whisperx(job_id, vocal_path, lyrics_language)
         check_initial_lyrics_spelling(lyrics)
+        prepare_initial_transcription(lyrics)
         result = {stem: f"/results/{job_id}/{stem}.mp3" for stem in stems}
         result.update(
             vocal_start=vocal_start,
@@ -1559,22 +1560,22 @@ def transcribe_line_to_ru(text,language):
     pattern=re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ]+(?:['’][A-Za-zÀ-ÖØ-öø-ÿ]+)?")
     return pattern.sub(lambda m:_latin_word(m.group(0),language),value)
 
-@app.route("/transcribe-to-ru", methods=["POST"])
-# Локальная серверная операция этого блока.
-def transcribe_to_ru():
-    data=request.get_json(silent=True) or {}
-    lines=data.get("lines",[])
-    languages=data.get("languages",[])
-    if not isinstance(lines,list):
-        return jsonify({"error":"Invalid lyrics lines"}),400
-    result=[]
-    for i,line in enumerate(lines):
-        language=(languages[i] if isinstance(languages,list) and i<len(languages)
-                  else detect_lyrics_line_language(line))
-        if language not in SUPPORTED_LYRICS_LANGUAGES:
-            language=detect_lyrics_line_language(line)
-        result.append(transcribe_line_to_ru(line,language))
-    return jsonify({"lines":result})
+def prepare_initial_transcription(lyrics):
+    """One transcription pass per separation; preserve word timing and spelling results."""
+    if "initial_transcription" in lyrics:
+        return
+    try:
+        for word in lyrics.get("words", []):
+            source = str(word.get("word", ""))
+            language = lyrics.get("language") or detect_lyrics_line_language(source)
+            word["source_word"] = source
+            word["ru_word"] = transcribe_line_to_ru(source, language)
+        lyrics["source_text"] = " ".join(w["source_word"] for w in lyrics.get("words", []))
+        lyrics["ru_text"] = " ".join(w["ru_word"] for w in lyrics.get("words", []))
+        lyrics["initial_transcription"] = {"status": "done"}
+    except Exception as exc:
+        lyrics["initial_transcription"] = {"status": "failed", "error": str(exc)}
+        print(f"[TRANSCRIPTION] {exc}", flush=True)
 
 
 # ========================================
@@ -2817,7 +2818,7 @@ def source_separation(db, uid):
 
 
 
-# LocalAudioSave | 7.3.2  .
+
 @app.before_request
 def reject_legacy_project_storage():
     path = request.path
@@ -2825,19 +2826,17 @@ def reject_legacy_project_storage():
         path == "/saved-projects" or path.startswith("/saved-projects/") or
         path.startswith("/opened-projects/") or path.startswith("/playlist/") or
         path == "/lyrics/save-current"):
-        return jsonify(error="Project save/load is local in MyNus 7.3.2"), 410
+        return jsonify(error="Project save/load is local in MyNus 7.3.3"), 410
 
 if __name__ == "__main__":
     with open(__file__, "r", encoding="utf-8-sig") as f:
-        header = next(
-            line.strip().removeprefix("#").strip()
-            for line in f
-            if line.lstrip().startswith("#  LocalAudioSave |")
-        )
+        next(f)
+        header = next(f).strip().removeprefix("#").strip()
 
     print("\n" + "=" * 72)
     print(header)
     print("=" * 72 + "\n")
+   
 
     try:
         app.run(
