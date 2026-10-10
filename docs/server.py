@@ -1,5 +1,5 @@
 # ========================================
-#  ServerCheckLirycsRemove | 7.3.0 
+#  OneTimeServerCheck | 7.3.1 
 # ========================================
 
 # ========================================
@@ -107,7 +107,7 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "7.3.0", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "7.3.1", "trace_id": trace_id})
 
 
 # ========================================
@@ -855,6 +855,53 @@ def _run_whisperx(job_id, vocal_path, lyrics_language):
     return result
 
 
+
+def check_initial_lyrics_spelling(lyrics):
+    # One whole-text check per separation, never on project load or editor render.
+    import language_tool_python
+    words = lyrics.get("words") or []
+    text = " ".join(str(word.get("word") or "") for word in words)
+    language = str(lyrics.get("language") or "ru").split("-")[0]
+    if not text.strip():
+        return
+    supported = {"ru": "ru-RU", "en": "en-US", "fr": "fr", "de": "de-DE", "es": "es", "it": "it", "uk": "uk"}
+    if language not in supported:
+        lyrics["initial_spellcheck"] = {"status": "unsupported", "language": language}
+        return
+    tool = None
+    try:
+        tool = language_tool_python.LanguageTool(supported[language])
+        matches = tool.check(text)
+        # LanguageTool positions use UTF-16 code units, like JavaScript strings.
+        ranges = []
+        position = 0
+        for word in words:
+            value = str(word.get("word") or "")
+            length = len(value.encode("utf-16-le")) // 2
+            ranges.append((position, position + length, word))
+            position += length + 1
+        for match_index, match in enumerate(matches):
+            offset = int(match.offset)
+            limit = offset + int(match.error_length)
+            # Only word spelling issues can be safely replaced without changing phrasing.
+            if str(getattr(match, "rule_issue_type", "")) != "misspelling":
+                continue
+            for start, end, word in ranges:
+                if offset < end and limit > start:
+                    word.setdefault("spell_issues", []).append({
+                        "id": str(match_index), "checked_word": word.get("word", ""),
+                        "message": str(match.message), "replacements": list(match.replacements or [])[:8],
+                        "status": "pending"
+                    })
+        lyrics["initial_spellcheck"] = {"status": "done", "language": language}
+        print("[SPELLCHECK] One initial check completed", flush=True)
+    except Exception as exc:
+        lyrics["initial_spellcheck"] = {"status": "failed", "message": str(exc)}
+        print("[SPELLCHECK] Initial check failed: " + str(exc), flush=True)
+    finally:
+        if tool is not None:
+            tool.close()
+
 def run_demucs(job_id, input_path, job_result_dir, lyrics_language="auto"):
     control = job_controls[job_id]
     result = None
@@ -898,6 +945,7 @@ def run_demucs(job_id, input_path, job_result_dir, lyrics_language="auto"):
 
 
         lyrics = _run_whisperx(job_id, vocal_path, lyrics_language)
+        check_initial_lyrics_spelling(lyrics)
         result = {stem: f"/results/{job_id}/{stem}.mp3" for stem in stems}
         result.update(
             vocal_start=vocal_start,
@@ -2769,7 +2817,7 @@ def source_separation(db, uid):
 
 
 
-# ToneCheck | 7.3.0  .
+# OneTimeServerCheck | 7.3.1  .
 @app.before_request
 def reject_legacy_project_storage():
     path = request.path
@@ -2777,12 +2825,12 @@ def reject_legacy_project_storage():
         path == "/saved-projects" or path.startswith("/saved-projects/") or
         path.startswith("/opened-projects/") or path.startswith("/playlist/") or
         path == "/lyrics/save-current"):
-        return jsonify(error="Project save/load is local in MyNus 7.3.0"), 410
+        return jsonify(error="Project save/load is local in MyNus 7.3.1"), 410
 
 if __name__ == "__main__":
     print("\n" + "=" * 72)
-    print("ServerCheckLirycsRemove | 7.3.0  ")
-    print(r"ServerCheckLirycsRemove | 7.3.0 ")
+    print("OneTimeServerCheck | 7.3.1  ")
+    print(r"OneTimeServerCheck | 7.3.1 ")
     print("=" * 72 + "\n")
 
     try:
