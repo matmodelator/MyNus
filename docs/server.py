@@ -1,5 +1,5 @@
 # ========================================
-#  OneTimeServerCheck | 7.3.1 
+#  LocalAudioSave | 7.3.2 
 # ========================================
 
 # ========================================
@@ -107,7 +107,7 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "7.3.1", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "7.3.2", "trace_id": trace_id})
 
 
 # ========================================
@@ -2817,7 +2817,7 @@ def source_separation(db, uid):
 
 
 
-# OneTimeServerCheck | 7.3.1  .
+# LocalAudioSave | 7.3.2  .
 @app.before_request
 def reject_legacy_project_storage():
     path = request.path
@@ -2825,12 +2825,18 @@ def reject_legacy_project_storage():
         path == "/saved-projects" or path.startswith("/saved-projects/") or
         path.startswith("/opened-projects/") or path.startswith("/playlist/") or
         path == "/lyrics/save-current"):
-        return jsonify(error="Project save/load is local in MyNus 7.3.1"), 410
+        return jsonify(error="Project save/load is local in MyNus 7.3.2"), 410
 
 if __name__ == "__main__":
+    with open(__file__, "r", encoding="utf-8-sig") as f:
+        header = next(
+            line.strip().removeprefix("#").strip()
+            for line in f
+            if line.lstrip().startswith("#  LocalAudioSave |")
+        )
+
     print("\n" + "=" * 72)
-    print("OneTimeServerCheck | 7.3.1  ")
-    print(r"OneTimeServerCheck | 7.3.1 ")
+    print(header)
     print("=" * 72 + "\n")
 
     try:
