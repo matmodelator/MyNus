@@ -1,5 +1,5 @@
 # ========================================
-#  Transcription Fix | 7.3.4 
+#  LocalExport | 7.3.5 
 # ========================================
 
 # ========================================
@@ -107,7 +107,7 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "7.3.4", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "7.3.5", "trace_id": trace_id})
 
 
 # ========================================
@@ -2829,7 +2829,7 @@ def reject_legacy_project_storage():
         path == "/saved-projects" or path.startswith("/saved-projects/") or
         path.startswith("/opened-projects/") or path.startswith("/playlist/") or
         path == "/lyrics/save-current"):
-        return jsonify(error="Project save/load is local in MyNus 7.3.4"), 410
+        return jsonify(error="Project save/load is local in MyNus 7.3.5"), 410
 
 if __name__ == "__main__":
     with open(__file__, "r", encoding="utf-8-sig") as f:
