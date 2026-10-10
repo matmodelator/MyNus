@@ -1,5 +1,5 @@
 # ========================================
-#  LocalExport | 7.3.5 
+#  Logs | 7.3.6 
 # ========================================
 
 # ========================================
@@ -107,41 +107,12 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "7.3.5", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "7.3.6", "trace_id": trace_id})
 
 
 # ========================================
 # CLIENT CONSOLE -> SERVER CMD
 # ========================================
-
-@app.route("/debug/client-console", methods=["POST"])
-def debug_client_console():
-    data = request.get_json(silent=True) or {}
-
-    level = str(data.get("level") or "log").upper()
-    message = str(data.get("message") or "")
-    client_time = str(data.get("client_time") or "")
-    page = str(data.get("page") or "")
-    user_agent = str(data.get("user_agent") or "")
-    remote_ip = request.remote_addr or ""
-
-    print(
-        f"[CLIENT {level}]"
-        f" [{remote_ip}]"
-        f" {message}",
-        flush=True
-    )
-
-    if client_time:
-        print(f"  time       = {client_time}", flush=True)
-
-    if page:
-        print(f"  page       = {page}", flush=True)
-
-    if user_agent:
-        print(f"  user_agent = {user_agent}", flush=True)
-
-    return jsonify({"ok": True})
 
 # ========================================
 # INDEX
@@ -176,166 +147,6 @@ def index():
         encoding="utf-8"
     ) as index_file:
         index_html = index_file.read()
-
-    client_console_bridge = r'''
-<script>
-(function installClientConsoleBridge() {
-  if (window.__MYNUS_CLIENT_CONSOLE_BRIDGE__) return;
-
-  window.__MYNUS_CLIENT_CONSOLE_BRIDGE__ = true;
-
-  const originalConsole = {};
-  const levels = [
-    "log",
-    "info",
-    "warn",
-    "error",
-    "debug"
-  ];
-
-  function serializeConsoleValue(value) {
-    if (value instanceof Error) {
-      return value.stack || (
-        value.name
-        + ": "
-        + value.message
-      );
-    }
-
-    if (typeof value === "string") {
-      return value;
-    }
-
-    if (typeof value === "undefined") {
-      return "undefined";
-    }
-
-    if (typeof value === "function") {
-      return value.toString();
-    }
-
-    if (value instanceof Element) {
-      return value.outerHTML;
-    }
-
-    try {
-      const seen = new WeakSet();
-
-      return JSON.stringify(
-        value,
-        (key, item) => {
-          if (typeof item === "bigint") {
-            return String(item) + "n";
-          }
-
-          if (
-            typeof item === "object"
-            && item !== null
-          ) {
-            if (seen.has(item)) {
-              return "[Circular]";
-            }
-
-            seen.add(item);
-          }
-
-          return item;
-        }
-      );
-    } catch (_) {
-      return String(value);
-    }
-  }
-
-  function sendClientConsole(level, args) {
-    const payload = {
-      level,
-
-      message: args
-        .map(serializeConsoleValue)
-        .join(" "),
-
-      client_time: new Date().toISOString(),
-      page: location.href,
-      user_agent: navigator.userAgent
-    };
-
-    fetch(
-      "/debug/client-console",
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json"
-        },
-
-        body: JSON.stringify(payload),
-        keepalive: true
-      }
-    ).catch(() => {});
-  }
-
-  levels.forEach(level => {
-    originalConsole[level] =
-      console[level].bind(console);
-
-    console[level] = (...args) => {
-      originalConsole[level](...args);
-
-      sendClientConsole(
-        level,
-        args
-      );
-    };
-  });
-
-  window.addEventListener(
-    "error",
-    event => {
-      sendClientConsole(
-        "error",
-        [
-          "UNCAUGHT ERROR",
-          event.message,
-          event.filename
-            + ":"
-            + event.lineno
-            + ":"
-            + event.colno,
-          event.error || ""
-        ]
-      );
-    }
-  );
-
-  window.addEventListener(
-    "unhandledrejection",
-    event => {
-      sendClientConsole(
-        "error",
-        [
-          "UNHANDLED PROMISE REJECTION",
-          event.reason
-        ]
-      );
-    }
-  );
-
-  console.info(
-    "Client console bridge installed"
-  );
-})();
-</script>
-'''
-
-    if "</head>" in index_html:
-        index_html = index_html.replace(
-            "</head>",
-            client_console_bridge + "\n</head>",
-            1
-        )
-    else:
-        index_html = client_console_bridge + "\n" + index_html
 
     # Передаём фактические источники дорожек при сохранении проекта.
     source_script = r'''<script>
@@ -2829,7 +2640,7 @@ def reject_legacy_project_storage():
         path == "/saved-projects" or path.startswith("/saved-projects/") or
         path.startswith("/opened-projects/") or path.startswith("/playlist/") or
         path == "/lyrics/save-current"):
-        return jsonify(error="Project save/load is local in MyNus 7.3.5"), 410
+        return jsonify(error="Project save/load is local in MyNus 7.3.6"), 410
 
 if __name__ == "__main__":
     with open(__file__, "r", encoding="utf-8-sig") as f:
