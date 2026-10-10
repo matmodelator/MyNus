@@ -1,4 +1,4 @@
-<!--MyNus 7.3.0 | ServerCheckLirycsRemove -->
+<!--MyNus 7.3.1 | OneTimeServerCheck -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 7.3.0</title>
+  <title>MyNus 7.3.1</title>
 
 
  <style>
@@ -3339,7 +3339,10 @@ position: relative;
   /* Clip sideways while preserving trim/fade controls above and below the ruler. */
   clip-path: inset(-40px -12px -40px -12px);
 }
-.shared-scroll { min-width: 0; }</style>
+.shared-scroll { min-width: 0; }.initial-spell-error {text-decoration:underline wavy #c00;text-underline-offset:3px;}
+.initial-spell-review {display:none;font-size:11px;}
+.lyrics-edit-active .initial-spell-review {display:block;}
+</style>
 
 <!-- Embedded rubberband-web 0.2.1 / Rubber Band, GPL-2.0-or-later. Source: https://github.com/delude88/rubberband-web
                     GNU GENERAL PUBLIC LICENSE
@@ -15325,13 +15328,60 @@ function lineText(line) {
 }
 
 // Локальная функциональная операция этого блока.
+function pendingWordIssues(word) {
+  return (word.spell_issues || []).filter(issue => issue.status === 'pending' && issue.checked_word === word.word);
+}
+function resolveWordIssue(line, word, issue, replacement) {
+  if (!pendingWordIssues(word).includes(issue)) return;
+  pushLyricsHistory();
+  if (replacement != null) {
+    word.word = replacement;
+    (word.spell_issues || []).forEach(item => { if (item.status === 'pending') item.status = 'replaced'; });
+  } else issue.status = 'ignored';
+  delete line._editedText;
+  document.getElementById('initialSpellMenu')?.remove();
+  renderLyricsEditor();
+}
+function showInitialWordSpellMenu(event, line, word) {
+  const issues = pendingWordIssues(word);
+  if (!issues.length) return;
+  event.preventDefault(); event.stopPropagation();
+  document.getElementById('initialSpellMenu')?.remove();
+  const menu = document.createElement('div');
+  menu.id = 'initialSpellMenu';
+  menu.style.cssText = 'position:fixed;z-index:100000;background:white;color:#222;border:1px solid #888;padding:8px;max-width:280px;box-shadow:0 4px 16px #0005';
+  menu.style.left = Math.max(0,Math.min(event.clientX,window.innerWidth-290))+'px';
+  menu.style.top = Math.max(0,Math.min(event.clientY,window.innerHeight-250))+'px';
+  const issue = issues[0];
+  const title = document.createElement('div');title.textContent = issue.message;menu.appendChild(title);
+  for(const replacement of issue.replacements || []) {
+    const button=document.createElement('button');button.textContent=replacement;button.style.display='block';
+    button.onclick=()=>resolveWordIssue(line,word,issue,replacement);menu.appendChild(button);
+  }
+  const ignore=document.createElement('button');ignore.textContent='Игнорировать';ignore.onclick=()=>resolveWordIssue(line,word,issue,null);menu.appendChild(ignore);
+  const close=document.createElement('button');close.textContent='Закрыть';close.onclick=()=>menu.remove();menu.appendChild(close);
+  document.body.appendChild(menu);
+}
+function preserveUnchangedWordIssues(previous, current) {
+  // Sequence alignment preserves annotations when words are inserted or removed.
+  const table=Array.from({length:previous.length+1},()=>new Uint16Array(current.length+1));
+  for(let i=previous.length-1;i>=0;i--)for(let j=current.length-1;j>=0;j--)table[i][j]=previous[i].word===current[j].word?1+table[i+1][j+1]:Math.max(table[i+1][j],table[i][j+1]);
+  current.forEach(word=>delete word.spell_issues);
+  let i=0,j=0;while(i<previous.length&&j<current.length){
+    if(previous[i].word===current[j].word){if(previous[i].spell_issues)current[j].spell_issues=previous[i].spell_issues;i++;j++;}
+    else if(table[i+1][j]>=table[i][j+1])i++;else j++;
+  }
+}
+
 function setLineText(line, text) {
+  const previousSpellWords = (line.words || []).map(word => ({...word}));
   const parts = String(text).trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return;
 
   if (line.words.length === parts.length) {
     line.words.forEach((word, index) => {
       word.word = parts[index];
+      if (word.spell_issues) word.spell_issues = word.spell_issues.filter(issue => issue.checked_word === word.word);
     });
     return;
   }
@@ -15345,6 +15395,7 @@ function setLineText(line, text) {
     start: start + duration * index / parts.length,
     end: start + duration * (index + 1) / parts.length
   }));
+  preserveUnchangedWordIssues(previousSpellWords, line.words);
 }
 
 
@@ -17933,6 +17984,11 @@ function renderLyricsEditor() {
       span.className = "lyrics-editor-karaoke-word";
       span.dataset.wordIndex = String(wordIndex);
       span.textContent = word.word;
+      if (pendingWordIssues(word).length) {
+        span.classList.add('initial-spell-error');
+        span.title = pendingWordIssues(word).map(issue=>issue.message).join('\n');
+        span.addEventListener('contextmenu',event=>showInitialWordSpellMenu(event,line,word));
+      }
       karaokeBox.appendChild(span);
       if (wordIndex < line.words.length - 1) karaokeBox.appendChild(document.createTextNode(" "));
     });
@@ -18005,6 +18061,9 @@ function renderLyricsEditor() {
       updateLyricsEditorStats();
     });
 
+    const spellReview = document.createElement('div');spellReview.className='initial-spell-review';
+    line.words.forEach(word=>{if(pendingWordIssues(word).length){const item=document.createElement('button');item.className='initial-spell-error';item.textContent=word.word;item.onclick=event=>showInitialWordSpellMenu(event,line,word);spellReview.appendChild(item);}});
+    textWrap.appendChild(spellReview);
     const rememberLyricsCaret = () => {
       if (lyricsEditorEditLineIndex !== index) return;
       lyricsEditorCaretOffset = Number(textArea.selectionStart) || 0;
@@ -21623,7 +21682,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.3.0",
+    version: "7.3.1",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22521,7 +22580,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.3.0";
+const MYNUS_CLIENT_VERSION = "7.3.1";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -25260,8 +25319,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("7.3.0 | ServerCheckLirycsRemove");
-console.log("[SERVICE CONSOLE] 7.3.0 | ServerCheckLirycsRemove");
+console.log("7.3.1 | OneTimeServerCheck");
+console.log("[SERVICE CONSOLE] 7.3.1 | OneTimeServerCheck");
 </script>
 
 <div class="row" id="build-down">
