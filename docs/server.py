@@ -1,5 +1,5 @@
 # ========================================
-#  Logs | 7.3.6 
+#  Out of Server | 7.3.7 
 # ========================================
 
 # ========================================
@@ -33,6 +33,82 @@ from werkzeug.utils import secure_filename
 # ========================================
 
 app = Flask(__name__)
+
+# Server stdout/stderr remain visible in the terminal and are mirrored to SSE.
+import collections
+import time
+from flask import Response, stream_with_context
+_server_log_condition = threading.Condition()
+_server_log_records = collections.deque(maxlen=3000)
+_server_log_sequence = 0
+
+def _publish_server_line(message, level):
+    global _server_log_sequence
+    with _server_log_condition:
+        _server_log_sequence += 1
+        _server_log_records.append({"id": _server_log_sequence, "time": time.strftime("%Y-%m-%d %H:%M:%S"), "level": level, "message": message[:16000]})
+        _server_log_condition.notify_all()
+
+class _MirroredServerStream:
+    def __init__(self, original, level):
+        self.original, self.level = original, level
+        self.pending = {}
+        self.lock = threading.RLock()
+    def write(self, value):
+        result = self.original.write(value)
+        with self.lock:
+            key = threading.get_ident()
+            text = self.pending.get(key, "") + str(value)
+            lines = text.replace("\r", "\n").split("\n")
+            self.pending[key] = lines.pop()[-16000:]
+            for line in lines:
+                if line.strip() and "/debug/server-logs" not in line:
+                    _publish_server_line(line, self.level)
+        return result
+    def flush(self):
+        self.original.flush()
+    def __getattr__(self, name):
+        return getattr(self.original, name)
+
+sys.stdout = _MirroredServerStream(sys.stdout, "INFO")
+sys.stderr = _MirroredServerStream(sys.stderr, "STDERR")
+# Werkzeug may have created its logging handler before stderr was wrapped.
+import logging
+for _handler in logging.getLogger("werkzeug").handlers:
+    if isinstance(_handler, logging.StreamHandler):
+        _handler.setStream(sys.stderr)
+
+@app.route("/debug/server-logs")
+def server_log_stream():
+    if request.remote_addr not in ("127.0.0.1", "::1") and not current_user_id():
+        return jsonify(error="Sign in to view server logs"), 401
+    try:
+        cursor = max(0, int(request.headers.get("Last-Event-ID") or request.args.get("after") or 0))
+    except ValueError:
+        cursor = 0
+    @stream_with_context
+    def events():
+        nonlocal cursor
+        yield ": connected\n\n"
+        while True:
+            with _server_log_condition:
+                batch = [record for record in _server_log_records if record["id"] > cursor]
+                if not batch:
+                    _server_log_condition.wait(timeout=15)
+                    batch = [record for record in _server_log_records if record["id"] > cursor]
+            if not batch:
+                yield ": keepalive\n\n"
+            for record in batch:
+                cursor = record["id"]
+                yield "id: " + str(cursor) + "\ndata: " + json.dumps(record, ensure_ascii=True) + "\n\n"
+    response = Response(events(), mimetype="text/event-stream")
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Accel-Buffering"] = "no"
+    if request.headers.get("Origin") == "null" and request.remote_addr in ("127.0.0.1", "::1"):
+        response.headers["Access-Control-Allow-Origin"] = "null"
+    return response
+
+
 
 
 
@@ -107,7 +183,7 @@ def debug_load_trace():
         print(f"  details         = {details}", flush=True)
     print("-" * 72, flush=True)
 
-    return jsonify({"ok": True, "version": "7.3.6", "trace_id": trace_id})
+    return jsonify({"ok": True, "version": "7.3.7", "trace_id": trace_id})
 
 
 # ========================================
@@ -117,6 +193,16 @@ def debug_load_trace():
 # ========================================
 # INDEX
 # ========================================
+
+@app.route("/rubberband.js", methods=["GET"])
+def local_rubberband_library():
+    return send_from_directory(
+        BASE_DIR,
+        "rubberband.js",
+        mimetype="application/javascript",
+        max_age=0
+    )
+
 
 @app.route("/")
 def index():
@@ -2640,7 +2726,7 @@ def reject_legacy_project_storage():
         path == "/saved-projects" or path.startswith("/saved-projects/") or
         path.startswith("/opened-projects/") or path.startswith("/playlist/") or
         path == "/lyrics/save-current"):
-        return jsonify(error="Project save/load is local in MyNus 7.3.6"), 410
+        return jsonify(error="Project save/load is local in MyNus 7.3.7"), 410
 
 if __name__ == "__main__":
     with open(__file__, "r", encoding="utf-8-sig") as f:
