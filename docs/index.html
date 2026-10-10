@@ -1,4 +1,4 @@
-<!--MyNus 7.3.1 | OneTimeServerCheck -->
+<!--MyNus 7.3.2 | LocalAudioSave -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 7.3.1</title>
+  <title>MyNus 7.3.2 | LocalAudioSave</title>
 
 
  <style>
@@ -6625,6 +6625,44 @@ let currentOriginalTrackFile = null;
 // Исходное имя аудиофайла для Lyrics Save As; сохраняется в Project.json и восстанавливается при Project LOAD.
 let currentSourceAudioName = null;
 let currentStemURLs = {};
+const localSeparatedTracks = new Map();
+function releaseLocalSeparatedTracks() {
+  for (const track of localSeparatedTracks.values()) URL.revokeObjectURL(track.url);
+  localSeparatedTracks.clear();
+}
+async function retainSeparatedTracksLocally(data, run) {
+  const required = ['vocals','drums','bass','guitar','piano','other'];
+  const downloads = await Promise.allSettled(required.map(async id => {
+    if (!data[id]) throw new Error('Separation result missing track: '+id);
+    const response = await fetch(data[id]);
+    if (!response.ok) throw new Error('Track download failed: '+id+' (HTTP '+response.status+')');
+    const blob = await response.blob();
+    if (!blob.size) throw new Error('Empty track: '+id);
+    return {id,blob};
+  }));
+  const failed = downloads.find(result=>result.status==='rejected');
+  if (failed) throw failed.reason;
+  if (run?.aborted || run?.abortRequested) throw separationAbortedError();
+  // Publish only when the complete set is available. Until then, no media element
+  // is pointed at a server result URL and no partial project is marked Ready.
+  const staged = new Map();
+  try {
+    for(const result of downloads) {
+      const {id,blob} = result.value;
+      staged.set(id,{blob,url:URL.createObjectURL(blob)});
+    }
+  } catch(error) {
+    for(const track of staged.values()) URL.revokeObjectURL(track.url);
+    throw error;
+  }
+  releaseLocalSeparatedTracks();
+  for(const [id,track] of staged) {
+    localSeparatedTracks.set(id,track);
+    data[id]=track.url;
+  }
+}
+
+
 
 
 let fxTarget =
@@ -7296,6 +7334,8 @@ async function startSeparation(restoreRequest = null) {
         await waitForSeparation(
           jobId, run
         );
+      status.textContent = "Downloading tracks for local project...";
+      await retainSeparatedTracksLocally(data, run);
 
 
       singerSegments =
@@ -7814,10 +7854,15 @@ async function loadWaveforms(originalFile, data) {
     for (const stemId of stemIds) {
       next[stemId] = null;
       if (!data[stemId]) continue;
-      const response = await fetch(data[stemId]);
-      if (!response.ok) throw new Error("Cannot load track: " + stemId);
-      next[stemId] = await audioContext.decodeAudioData(
-        (await response.arrayBuffer()).slice(0));
+      const retained = localSeparatedTracks.get(stemId);
+      let bytes;
+      if (retained && retained.url === data[stemId]) bytes = await retained.blob.arrayBuffer();
+      else {
+        const response = await fetch(data[stemId]);
+        if (!response.ok) throw new Error("Cannot load track: " + stemId);
+        bytes = await response.arrayBuffer();
+      }
+      next[stemId] = await audioContext.decodeAudioData(bytes.slice(0));
     }
     Object.assign(waveformData, next);
   } finally {
@@ -13425,6 +13470,10 @@ async function getTrackBlob(track) {
   }
 
   if (stemIds.includes(track)) {
+    const localTrack = localSeparatedTracks.get(track);
+    if (localTrack && currentStemURLs[track] === localTrack.url && !generatedTrackURLs?.[track]) {
+      return {blob:localTrack.blob,filename:track+'.mp3'};
+    }
     // Сгенерированные дорожки эффектов хранятся в generatedTrackURLs. Используем их явно.
     const url = generatedTrackURLs?.[track] || currentStemURLs?.[track] || stemAudio?.[track]?.src || null;
     if (!url) return { blob: null, filename: track + ".bin" };
@@ -21682,7 +21731,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.3.1",
+    version: "7.3.2",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -22580,7 +22629,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.3.1";
+const MYNUS_CLIENT_VERSION = "7.3.2";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -22688,6 +22737,7 @@ async function failProjectLoader(error) {
 
 // Сохранение текущего Project и связанных данных.
 function clearProjectState() {
+  releaseLocalSeparatedTracks();
   // Очищаем ВСЁ текущее рабочее состояние Project/файла.
   // PlayList намеренно исключён: playlist.json/current/queue/history
   // и снимок PlayList в памяти принадлежат только логике PlayList.
@@ -25319,8 +25369,8 @@ async function restoreMynusSnapshot(saved) {
     appendServiceConsole("ERROR", args);
   };
 })();
-console.log("7.3.1 | OneTimeServerCheck");
-console.log("[SERVICE CONSOLE] 7.3.1 | OneTimeServerCheck");
+
+console.log("[SERVICE CONSOLE] " + document.title);
 </script>
 
 <div class="row" id="build-down">
