@@ -15,7 +15,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>RecCalibrate&Repeat Fix| 7.9.9 </title>
+  <title>стабильная версия с фиком всех багов главной страницы | 7.9.10 </title>
 
 
  <style>
@@ -5614,7 +5614,7 @@ async function mynusFetch(input,options={}){
    while(area.firstElementChild&&Number(area.firstElementChild.dataset.id)<first)area.firstElementChild.remove();
    let last=Number(area.lastElementChild?.dataset.id||0);
    for(const entry of entries)if(entry.id>last){
-     const row=document.createElement('div');row.dataset.id=String(entry.id);row.className='mnLogEntry'+(entry.event?' event-'+entry.event:'');row.textContent=entry.text;if(entry.color)row.style.color=entry.color;area.appendChild(row);last=entry.id;
+     const row=document.createElement('div');row.dataset.id=String(entry.id);row.className='mnLogEntry'+(entry.event?' event-'+entry.event:'');row.textContent=entry.text;if(entry.color)row.style.color=typeof readableLogColor7910==='function'?readableLogColor7910(entry.color):entry.color;area.appendChild(row);last=entry.id;
    }
    if(follow)area.scrollTop=area.scrollHeight;dirty=false;
  }
@@ -8551,11 +8551,11 @@ function positionTimelineLabel(label, time, text, enabled = true) {
   label.style.left = (viewport.left + masterTimeline.clientLeft - row.left + x) + 'px';
 }
 function refreshSelectionTimelineLabels() {
-  const enabled = hasSelection();
-  positionTimelineLabel(selectionInTime, fragmentStart, formatTrimTime(fragmentStart), enabled);
-  positionTimelineLabel(selectionInName, fragmentStart, 'IN', enabled);
-  positionTimelineLabel(selectionOutTime, fragmentEnd, formatTrimTime(fragmentEnd), enabled);
-  positionTimelineLabel(selectionOutName, fragmentEnd, 'OUT', enabled);
+ const haveIn=fragmentStart!==null&&Number.isFinite(fragmentStart),haveOut=fragmentEnd!==null&&Number.isFinite(fragmentEnd);
+ positionTimelineLabel(selectionInTime,fragmentStart,haveIn?formatTrimTime(fragmentStart):'',haveIn);
+ positionTimelineLabel(selectionInName,fragmentStart,'IN',haveIn);
+ positionTimelineLabel(selectionOutTime,fragmentEnd,haveOut?formatTrimTime(fragmentEnd):'',haveOut);
+ positionTimelineLabel(selectionOutName,fragmentEnd,'OUT',haveOut);
 }
 
 function updateProjectTrimDisplay() {
@@ -11872,6 +11872,11 @@ async function startMasterRecordingLegacy780() {
   ensureMixAudioGraph();
   if (mixAudioContext.state === "suspended") await mixAudioContext.resume();
 
+  if(window.recordFromCursor7910){
+    const time=getCurrentTime();masterRecordSelectionMode=hasSelection()&&time<fragmentEnd;
+    if(masterRecordSelectionMode&&time<fragmentStart){masterRecordArmed=true;microphoneAudio.muted=false;setRecordingState780('Rec armed — pre-roll');if(!isPlaying)await playCurrentMode();return;}
+    beginMasterCaptureAt(time);if(!isPlaying)await playCurrentMode();return;
+  }
   masterRecordSelectionMode = hasSelection();
 
   if (masterRecordSelectionMode) {
@@ -11929,7 +11934,7 @@ let micCapture780=null,micCaptureInput780=null,micSilent780=null;
 function setRecState781(track,text){
  const state=document.getElementById('masterState');if(!state)return;
  state.textContent=track+' — '+text;
- const colours={'No Records':'#2196F3','Rec armed — pre-roll':'#FFD600','Recording...':'#800020','Recording error':'#FF0000','Master recording error':'#FF0000','Recorded — not saved':'#FFD600','Saved successfully':'#00C853','Recover by History':'#00C853'};
+ const colours={'No Records':'#2196F3','Rec armed — pre-roll':'#886000','Recording...':'#800020','Recording error':'#FF0000','Master recording error':'#FF0000','Recorded — not saved':'#886000','Saved successfully':'#216e39','Recover by History':'#216e39'};
  state.style.color=colours[text]||'#666';
 }
 
@@ -13182,10 +13187,7 @@ document
             button.dataset
               .masterFormat;
 
-          masterExportDialog
-            .classList.remove(
-              "open"
-            );
+          masterExportDialog.classList.add("open");
 
           await exportTrack(
             exportTargetTrack,
@@ -13555,12 +13557,12 @@ async function shiftExportAudio(buffer,semitones,context){
 let localWavExportBusy=false;
 async function exportTrack(track,scope,format='wav'){
  if(localWavExportBusy)return;
- localWavExportBusy=true;status.textContent='Exporting WAV…';status.className='progress-status process';
+ localWavExportBusy=true;beginExport7910();
  let decoder;
  try{
   const source=await getTrackBlob(track);if(!source.blob)throw Error('Track is not available');
   decoder=new AudioContext();
-  const buffer=await decoder.decodeAudioData(await source.blob.arrayBuffer());
+  const buffer=await decoder.decodeAudioData(await source.blob.arrayBuffer());exportPhase7910(.15,'Preparing audio…');
   const bounds=exportAudioBounds(track,scope,buffer.duration);
   // Render from the beginning to preserve reverb, delay and compressor state at selection start.
   const frameEnd=Math.min(buffer.length,Math.ceil(bounds.end*buffer.sampleRate));
@@ -13580,7 +13582,8 @@ async function exportTrack(track,scope,format='wav'){
    applyExportFxSettings(lyricsCopy(fxSettings[track]),chain);chain.output.connect(offline.destination);
   }else level.connect(offline.destination);
   node.start();
-  let rendered=await offline.startRendering();
+  exportPhase7910(.2,'Rendering WAV…');const renderTimer7910=setInterval(()=>exportPhase7910(.2+.45*Math.min(1,offline.currentTime/(frameEnd/buffer.sampleRate)),'Rendering WAV…'),100);
+  let rendered;try{rendered=await offline.startRendering();}finally{clearInterval(renderTimer7910);}exportPhase7910(.7,'Applying tone…');
   rendered=await shiftExportAudio(rendered,track==='original'?0:lyricsFullScreenPitchSemitones,decoder);
   const first=Math.round(bounds.start*rendered.sampleRate),last=Math.min(rendered.length,Math.round(bounds.end*rendered.sampleRate));
   if(last<=first)throw Error('Export range is empty');
@@ -13589,12 +13592,13 @@ async function exportTrack(track,scope,format='wav'){
    const input=rendered.getChannelData(ch),dest=output.getChannelData(ch);
    for(let i=0;i<dest.length;i++)dest[i]=input[first+i]*getMasterFadeGainAtTime((first+i)/rendered.sampleRate);
   }
+  exportPhase7910(.9,'Preparing WAV file…');await exportYield7910();
   const url=URL.createObjectURL(audioBufferToWavBlob(output));
   const link=document.createElement('a');link.href=url;link.download=track+(scope==='selection'?'-selection':'')+'.wav';
   document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
-  status.textContent='WAV export complete';status.className='progress-status success';
- }catch(error){console.error(error);status.textContent='Export error: '+error.message;status.className='progress-status error';}
- finally{if(decoder)await decoder.close();localWavExportBusy=false;}
+  finishExport7910('WAV export handed to file saving: '+link.download,false);
+ }catch(error){finishExport7910('Export error: '+error.message,true);}
+ finally{if(decoder)await decoder.close().catch(()=>{});localWavExportBusy=false;exportButtons7910(false);}
 }
 
 // ========================================
@@ -14458,6 +14462,7 @@ function updateSelectionDisplay() {
   if (selectionInName) selectionInName.style.display = "none";
   if (selectionOutName) selectionOutName.style.display = "none";
   selectionInfo.textContent = "";
+  refreshSelectionTimelineLabels();
   updateSelectionButtons();
   updateTrackSelectionOverlays();
   return;
@@ -21623,7 +21628,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "7.9.9",
+    version: "7.9.10",
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
     current_tonic: currentTrackTonic(),
@@ -21954,7 +21959,7 @@ async function saveCurrentProject(projectName, savePath, conflictAction = "", op
   const project=projectStateJson(), lyrics=projectLyricsJson();project.tracks={};
   status.textContent="Preparing local project…";
   for(const track of projectTrackIds.slice(0,24)) {
-    const source=await getTrackBlob(track);if(!source?.blob)continue;
+    const source=await getProjectTrackBlob7910(track);if(!source?.blob)continue;
     const filename=projectTrackFilename(track,source);
     media[track]=source.blob;specs[track]={file:filename,mime:source.blob.type};project.tracks[track]=filename;
     entries.push([filename,source.blob]);
@@ -22529,7 +22534,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "7.9.9";
+const MYNUS_CLIENT_VERSION = "7.9.10";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -26333,7 +26338,7 @@ async function loadExternalKaraoke792(r){
 </script>
 
 <script>
-// MyNus 7.9.9: non-destructive Silence, compact track heads and level controls.
+// MyNus 7.9.10: non-destructive Silence, compact track heads and level controls.
 const outputLevels793={L:1,R:1};let outputBus793=null;
 function outputDestination793(){
  if(outputBus793?.context===mixAudioContext)return outputBus793.input;
@@ -26408,7 +26413,7 @@ function silenceBuffer793(buffer,track,context){const ranges=silenceRanges793(tr
 
 </script>
 <script>
-// MyNus 7.9.9: consistent track state, mono input pan and timeline interactions.
+// MyNus 7.9.10: consistent track state, mono input pan and timeline interactions.
 var microphoneChannelCache795;
 function microphoneChannel795(){microphoneChannelCache795??=new WeakMap();const b=waveformData.microphone;if(!b||b.numberOfChannels<2)return 0;if(microphoneChannelCache795.has(b))return microphoneChannelCache795.get(b);const energy=[0,0];for(let ch=0;ch<2;ch++){const data=b.getChannelData(ch);for(let i=0;i<data.length;i+=32)energy[ch]+=data[i]*data[i];}const channel=energy[1]>energy[0]?1:0;microphoneChannelCache795.set(b,channel);return channel;}
 function createMicrophonePan795(context){
@@ -26528,7 +26533,7 @@ function navigationUi796(key){
  else if(key==='Tab')setUiMode(isKaraokeUiMode()?UI_MODE.LYRICS:(isLyricsUiOpen()?UI_MODE.KARAOKE:UI_MODE.LYRICS));
 }
 window.addEventListener('keydown',e=>{
- if(document.querySelector('.calibration-overlay799'))return;const k=e.key,code=e.code;if(e.metaKey)return;
+ if(typeof localWavExportBusy!=='undefined'&&localWavExportBusy){e.preventDefault();e.stopImmediatePropagation();return;}if(document.querySelector('.calibration-overlay799'))return;const k=e.key,code=e.code;if(e.metaKey)return;
  // Escape/Tab navigation also works after editing a lyric text field.
  if((k==='Escape'||k==='Tab')&&!e.ctrlKey&&!e.altKey){e.preventDefault();e.stopImmediatePropagation();if(!e.repeat)navigationUi796(k);return;}
  if(isTypingTarget(e.target))return;
@@ -26581,7 +26586,7 @@ alignFullScreenMeters780=function(){
 
 </script>
 <script>
-// 7.9.9: pending Input edit is isolated from confirmed media used by Save/Export.
+// 7.9.10: pending Input edit is isolated from confirmed media used by Save/Export.
 const edits797=new Map(),editButtons797=new Map(),creationBusy797=new Set(),editedTracks797=new Set();
 const buffers797=new Map(),bufferIds797=new WeakMap();let nextBuffer797=1,editInstall797=false,restoreEpoch797=0;
 for(const id of Object.keys(fxSettings))fxSettings[id].bypass=!!fxSettings[id].bypass;
@@ -26673,7 +26678,7 @@ function renderEditRegions797(){
   const edit=edits797.get(id);button.textContent=edit?'Move':'Edit';button.title=edit?'Drag the yellow region or its edges; double-click to confirm':'Edit the selected audio';button.disabled=typeof editBlock799==='function'?!!editBlock799(id):(masterRecording||masterRecordArmed||rec780.busy||!waveformData[id]);button.title=(typeof editBlock799==='function'?editBlock799(id):'')||(edit?'Move audio; click Move to cancel, double-click region to confirm':'Edit the selected audio');
   timeline.querySelectorAll('.edit-region797').forEach(n=>n.remove());if(!edit)continue;
   const mask=document.createElement('div');mask.className='edit-region797';mask.style.left=edit.destStart*pixelsPerSecond+'px';mask.style.width=(editEnd797(edit)-edit.destStart)*pixelsPerSecond+'px';mask.title='Double-click to confirm Edit';
-  for(const side of ['left','right']){const edge=document.createElement('span');edge.className='edit-edge797 '+side;edge.dataset.editEdge797=side;mask.append(edge);}rangeBadges797(mask,edit.destStart,editEnd797(edit));bindEdit797(mask,id);timeline.append(mask);
+  for(const side of ['left','right']){const edge=document.createElement('span');edge.className='edit-edge797 '+side;edge.dataset.editEdge797=side;mask.append(edge);}mask.dataset.editTrack7910=id;rangeBadges797(mask,edit.destStart,editEnd797(edit));bindEdit797(mask,id);timeline.append(mask);
  }
 }
 function refreshRanges797(){
@@ -26798,7 +26803,7 @@ function compensateMic798(buffer,start,milliseconds){
 
 #lyricsFullScreenKeysMenu{width:500px;max-width:calc(100vw - 32px);box-sizing:border-box;max-height:70vh;overflow:auto}#lyricsFullScreenKeysMenu>div:not(.keys-heading799){display:grid;grid-template-columns:110px minmax(0,1fr);gap:18px}#lyricsFullScreenKeysMenu>.keys-heading799{display:block}
 </style>
-<script>/* 7.9.9 — transport, editing, recording history and calibration. */
+<script>/* 7.9.10 — transport, editing, recording history and calibration. */
 function report799(message,error=false,rec=false){
  const label=rec?document.getElementById('masterState'):status;
  if(label)label.textContent=message;
@@ -26970,6 +26975,7 @@ async function restartRepeat799(record){
 async function armRepeatRecording799(target){
  activateMixMode();ensureMixAudioGraph();if(mixAudioContext.state==='suspended')await mixAudioContext.resume();
  repeat799.intent=target;const cycle=nextRepeatCycle799();rec780.punch799={a:cycle.a,b:cycle.b};
+ if(window.recordFromCursor7910&&getCurrentTime()<cycle.b){const time=getCurrentTime();if(time>=cycle.a){rec780.punch799.a=time;beginMasterCaptureAt(time);}else{masterRecordArmed=true;masterRecordSelectionMode=true;microphoneAudio.muted=false;setRecordingState780('Rec armed — pre-roll');}updateRecControls780();if(!isPlaying)await playCurrentMode();return;}
  pauseInternal799();syncAllTo(Math.max(0,cycle.pre));masterRecordArmed=true;masterRecordSelectionMode=true;microphoneAudio.muted=false;
  setRecordingState780('Rec armed — pre-roll');updateRecControls780();await playCurrentMode();
 }
@@ -27098,6 +27104,146 @@ document.getElementById('lyricsFullScreenRecBtn')?.addEventListener('click',e=>{
  if(!repeat799.enabled||(!masterRecording&&!masterRecordArmed&&!repeat799.intent))return;
  e.preventDefault();e.stopImmediatePropagation();repeat799.intent=null;finalizeTake799().then(()=>restartRepeat799(false)).catch(error=>report799(error.message,true));
 },true);
+</script>
+<style>.input-actions7910{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px!important;width:100%;box-sizing:border-box}.input-actions7910>button{min-width:0!important;width:100%;padding-left:2px!important;padding-right:2px!important;font-size:10px;box-sizing:border-box}
+.track-selection-overlay .range-badge797{display:none!important}.edit-region797 .range-badge797.start,.edit-region797 .range-badge797.end{display:none!important}
+#exportProgress7910{margin-top:14px;overflow-wrap:anywhere;font-size:12px}#exportProgress7910[hidden]{display:none!important}#exportProgress7910 progress{display:block;width:100%;height:14px;margin-top:10px}#exportProgress7910 .success{color:#216e39}#exportProgress7910 .error{color:#a51d32}
+#mnConsoleText .event-account-in,#mnConsoleText .event-account-out{color:#216e39;font-weight:bold}
+#progressWrap:has(.progress-status.success),#progressWrap:has(.progress-status.info){background:#f3f7f2}#progressWrap:has(.progress-status.success) #progressBar,#progressWrap:has(.progress-status.info) #progressBar{background:#e0e9df}
+#progressWrap .progress-status.success{color:#216e39}#progressWrap .progress-status.info{color:#886000}
+.selection-single7910{position:absolute;top:22px;height:42px;width:2px;background:#00a844;z-index:8;pointer-events:none}
+</style>
+<script>/* 7.9.10 — eight scoped changes, no automatic workspace focus. */
+async function getProjectTrackBlob7910(track){
+ if(track==='microphone'&&waveformData.microphone)return {blob:audioBufferToWavBlob(waveformData.microphone),filename:'microphone.wav'};
+ if(track==='master'&&masterBlob)return {blob:masterBlob,filename:'master.wav'};
+ return getTrackBlob(track);
+}
+function transportSnapshot7910(id){
+ const audio=stemAudio[id];return {time:getCurrentTime(),at:performance.now(),playing:isPlaying,clock:mode==='mix'&&mixClock782()===audio};
+}
+async function resumeTrack7910(id,state){
+ const audio=stemAudio[id];if(!audio)return;
+ let time=state.clock?state.time+(state.playing&&isPlaying?(performance.now()-state.at)/1000:0):getCurrentTime();
+ time=Math.max(0,Math.min(getProjectPlaybackEnd(),time));
+ if(state.clock)syncAllTo(time);
+ audio.currentTime=Math.min(time,Number.isFinite(audio.duration)?audio.duration:time);
+ applyMix();applyFxSettings(id);
+ if(isPlaying&&mode==='mix'&&audio.currentTime<(audio.duration||Infinity))await audio.play();else audio.pause();
+ updatePlayheads();updateMasterCursor();
+}
+const confirmEdit7910=confirmEdit797;
+confirmEdit797=async function(id){
+ const before=waveformData[id],state=transportSnapshot7910(id);
+ await confirmEdit7910(id);
+ if(waveformData[id]!==before)await resumeTrack7910(id,state);
+};
+// Selection annotations are timeline-only. Edit displays signed displacement, not its length.
+const badges7910=rangeBadges797;
+rangeBadges797=function(host,start,end,edges=true){
+ if(host.classList.contains('track-selection-overlay')){host.querySelectorAll('.range-badge797').forEach(n=>n.remove());return;}
+ if(host.classList.contains('edit-region797')){
+  host.querySelectorAll('.range-badge797.start,.range-badge797.end').forEach(n=>n.remove());
+  const id=host.dataset.editTrack7910,edit=edits797.get(id);if(!edit)return;
+  let badge=host.querySelector('.range-badge797.length');if(!badge){badge=document.createElement('span');badge.className='range-badge797 length';host.append(badge);}
+  const ticks=Math.round((edit.destStart-edit.sourceStart)*10),seconds=Math.abs(ticks)/10;
+  badge.textContent=(ticks<0?'−':'+')+seconds.toFixed(1)+' s';return;
+ }
+ return badges7910(host,start,end,edges);
+};
+// Initial and subsequent redraws both use the new annotation rules.
+renderEditRegions797();refreshRanges797();refreshSelectionTimelineLabels();
+function readableLogColor7910(value){
+ const colour=String(value).toLowerCase().replace(/\s/g,'');
+ if(['#7cfc00','#00c853','#00ff00','#0f0','lime','green','rgb(124,252,0)','rgb(0,200,83)','rgb(0,255,0)'].includes(colour))return '#216e39';
+ if(['#ffd600','#ffd700','#ffff00','#ff0','yellow','gold','rgb(255,214,0)','rgb(255,215,0)','rgb(255,255,0)'].includes(colour))return '#886000';
+ return value;
+}
+const logArea7910=document.getElementById('mnConsoleText');
+function refreshLogColours7910(){if(!logArea7910)return;for(const row of logArea7910.children){const before=row.style.color,next=readableLogColor7910(before);if(next!==before)row.style.color=next;}}
+if(logArea7910){new MutationObserver(refreshLogColours7910).observe(logArea7910,{childList:true,subtree:true});refreshLogColours7910();}
+// Export progress is local to its dialog; global status/console receive one final result.
+const exportProgressBox7910=document.createElement('div');exportProgressBox7910.id='exportProgress7910';exportProgressBox7910.hidden=true;
+const exportProgressText7910=document.createElement('div');exportProgressText7910.setAttribute('role','status');
+const exportProgressBar7910=document.createElement('progress');exportProgressBar7910.max=1;exportProgressBar7910.value=0;
+exportProgressBox7910.append(exportProgressText7910,exportProgressBar7910);
+masterExportDialog.querySelector('.export-dialog-card').append(exportProgressBox7910);
+function exportButtons7910(busy){masterExportDialog.querySelectorAll('[data-master-format],#cancelMasterExportBtn').forEach(button=>button.disabled=busy);}
+function beginExport7910(){masterExportDialog.classList.add('open');exportProgressBox7910.hidden=false;exportButtons7910(true);exportPhase7910(0,'Preparing WAV…');}
+function exportPhase7910(value,message){exportProgressBar7910.value=Math.max(0,Math.min(1,Number(value)||0));exportProgressText7910.textContent=message;exportProgressText7910.className='';}
+function exportYield7910(){return new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));}
+function finishExport7910(message,error){
+ exportProgressText7910.textContent=message;exportProgressText7910.className=error?'error':'success';
+ if(!error)exportProgressBar7910.value=1;
+ document.getElementById('cancelMasterExportBtn').textContent='Close';
+ report799(message,error);
+}
+masterExportDialog.addEventListener('click',e=>{if(localWavExportBusy&&(e.target===masterExportDialog||e.target.id==='cancelMasterExportBtn')){e.preventDefault();e.stopImmediatePropagation();}},true);
+new MutationObserver(()=>{if(masterExportDialog.classList.contains('open')&&!localWavExportBusy){exportProgressBox7910.hidden=true;document.getElementById('cancelMasterExportBtn').textContent='Cancel';}}).observe(masterExportDialog,{attributes:true,attributeFilter:['class']});
+// Load replaces the chosen Input track, with a REC History entry for restoration.
+const loadingInputs7910=new Set();
+async function loadInputTrack7910(id,file){
+ if(!file||loadingInputs7910.has(id))return;
+ if(masterRecording||masterRecordArmed||rec780.busy||window.editCommitting797||window.historyRestore797||calibration799.busy){report799('Stop recording or wait for the current audio operation before Load.',true);return;}
+ const state=transportSnapshot7910(id);let decoder;
+ loadingInputs7910.add(id);rec780.busy=true;updateRecControls780();refreshLoad7910();
+ try{
+  decoder=new AudioContext();const buffer=await decoder.decodeAudioData(await file.arrayBuffer());
+  if(!(buffer.length>0)||!(buffer.duration>0))throw new Error('The audio file is empty');
+  pushRec780(id);excludedGroupEdits799.add(id);discardEdit797(id,false);
+  await installGeneratedTrack(id,buffer);stemCrop[id].silences=[];stemCrop[id].in=0;stemCrop[id].out=null;
+  if(id==='microphone'){rec780.micSegments=[{start:0,buffer}];rec780.micSaved=buffer;micState780('Audio loaded');}
+  await resumeTrack7910(id,state);setFxTarget(id);drawAllWaveforms();report799('Loaded '+file.name+' into '+(trackMapUi796.find(t=>t.id===id)?.label||id));
+ }catch(error){report799('Load error: '+error.message,true);}
+ finally{if(decoder)await decoder.close().catch(()=>{});loadingInputs7910.delete(id);rec780.busy=false;updateRecControls780();refreshLoad7910();}
+}
+const loadButtons7910=new Map();
+function refreshLoad7910(){for(const [id,button]of loadButtons7910){button.disabled=masterRecording||masterRecordArmed||rec780.busy||window.editCommitting797||window.historyRestore797||calibration799.busy;button.textContent=loadingInputs7910.has(id)?'…':'Load';}}
+for(const id of inputIds797()){
+ const row=trackRowUi796(id),actions=row?.querySelector('.actions793');if(!actions)continue;
+ actions.classList.add('input-actions7910');
+ const input=document.createElement('input');input.type='file';input.accept='audio/*,.wav,.mp3,.flac,.ogg,.m4a,.aac,.wma';input.hidden=true;
+ const button=document.createElement('button');button.type='button';button.textContent='Load';button.title='Load audio into this track';
+ button.onclick=()=>{input.value='';input.click();};input.onchange=()=>loadInputTrack7910(id,input.files?.[0]);
+ actions.append(button);document.body.append(input);loadButtons7910.set(id,button);
+}
+const recControls7910=updateRecControls780;updateRecControls780=function(...args){const result=recControls7910(...args);refreshLoad7910();return result;};refreshLoad7910();
+async function recordCurrent7910(target){
+ if(masterRecording||masterRecordArmed||rec780.busy||window.editCommitting797||window.historyRestore797||calibration799.busy)return;
+ if(!(duration>0)){report799('Open a track or project before recording.',true);return;}
+ if(target==='microphone'){await createTrackUi796('microphone');const mic=window.mynusMicrophone770;if(!mic.enabled())await mic.enable();if(!mic.enabled())return;}
+ ensureMixAudioGraph();if(mixAudioContext.state==='suspended')await mixAudioContext.resume();activateMixMode();
+ const time=getCurrentTime();window.recordFromCursor7910=true;
+ try{
+  // The normal controller creates the capture nodes. Only its first punch position changes.
+  const result=await startMasterRecording(target);
+  if(!repeat799.enabled)rec780.punch799=hasSelection()&&time<fragmentEnd?{a:Math.max(time,fragmentStart),b:fragmentEnd}:null;
+  return result;
+ }finally{window.recordFromCursor7910=false;}
+}
+window.addEventListener('keydown',e=>{
+ if(e.code!=='Space'||e.metaKey||e.ctrlKey===e.altKey)return;
+ if(typing799(e.target)||modalOpen799()||calibration799.busy||localWavExportBusy||isLyricsUiOpen()&&!isKaraokeUiMode())return;
+ e.preventDefault();e.stopImmediatePropagation();if(e.repeat)return;
+ recordCurrent7910(e.ctrlKey?'microphone':'master').catch(error=>report799('Recording error: '+error.message,true));
+},true);
+for(const popup of document.querySelectorAll('.shortcut-popup')){
+ for(const [key,action]of [['Ctrl + Space','Record Microphone from current position'],['Alt + Space','Mix Master from current position']]){
+  const line=document.createElement('div');line.className='shortcut-line';const k=document.createElement('span'),v=document.createElement('span');k.className='shortcut-key';k.textContent=key;v.textContent=action;line.append(k,v);popup.append(line);
+ }
+}
+const fullKeys7910=document.getElementById('lyricsFullScreenKeysMenu');if(fullKeys7910)for(const [key,text]of [['Ctrl + Space','Record Microphone from current position'],['Alt + Space','Mix Master from current position']]){const row=document.createElement('div'),k=document.createElement('span'),v=document.createElement('span');k.textContent=key;v.textContent=text;row.append(k,v);fullKeys7910.append(row);}
+// IN and OUT each have their own visible marker before a complete Selection exists.
+const independentMarkers7910={};
+const labels7910=refreshSelectionTimelineLabels;
+refreshSelectionTimelineLabels=function(...args){
+ const result=labels7910(...args);
+ for(const [key,time]of [['in',fragmentStart],['out',fragmentEnd]]){
+  let marker=independentMarkers7910[key];if(!marker){marker=document.createElement('div');marker.className='selection-single7910 '+key;marker.setAttribute('aria-label',key.toUpperCase());masterTimelineInner.append(marker);independentMarkers7910[key]=marker;}
+  marker.style.display=time!==null&&Number.isFinite(time)&&!hasSelection()?'block':'none';if(time!==null)marker.style.left=time*pixelsPerSecond+'px';
+ }
+ return result;
+};refreshSelectionTimelineLabels();
 </script>
 </body>
 </html>
