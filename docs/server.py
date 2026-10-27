@@ -1,5 +1,5 @@
 # ========================================
-#  Server Process Monitoring| 8.0.0 
+#  Server Time Monitoring| 8.1.0 
 # ========================================
 
 # ========================================
@@ -7,6 +7,7 @@
 # ========================================
 
 import sys
+from datetime import datetime, timezone
 import os
 import json
 import re
@@ -86,9 +87,10 @@ _server_log_sequence = 0
 
 def _publish_server_line(message, level):
     global _server_log_sequence
+    if "/api/admin/monitor" in message and re.search(r'HTTP/[^\"]*\"\s+(?:2\d\d|304)\b', message): return
     with _server_log_condition:
         _server_log_sequence += 1
-        _server_log_records.append({"id": _server_log_sequence, "time": time.strftime("%Y-%m-%d %H:%M:%S"), "level": level, "message": re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", message)[:16000]})
+        _server_log_records.append({"id": _server_log_sequence, "time": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00","Z"), "level": level, "message": re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", message)[:16000]})
         _server_log_condition.notify_all()
 
 class _MirroredServerStream:
@@ -2780,7 +2782,7 @@ def migrate(db):
             db.execute('ALTER TABLE separations ADD COLUMN files_deleted_at TEXT')
         db.execute('CREATE INDEX IF NOT EXISTS separations_cleanup ON separations(files_deleted_at,delete_after)')
         db.execute('''UPDATE separations
-            SET delete_after=strftime('%Y-%m-%dT%H:%M:%fZ',finished_at,'+24 hours')
+            SET delete_after=strftime('%Y-%m-%dT%H:%M:%fZ',finished_at,'+100 hours')
             WHERE delete_after IS NULL AND finished_at IS NOT NULL
               AND status IN ('completed','failed','cancelled')''')
         # New completion timestamps written by the existing server get a deadline.
@@ -2789,14 +2791,14 @@ def migrate(db):
             WHEN NEW.status IN ('completed','failed','cancelled')
               AND NEW.finished_at IS NOT NULL AND NEW.delete_after IS NULL
             BEGIN UPDATE separations
-                SET delete_after=strftime('%Y-%m-%dT%H:%M:%fZ',NEW.finished_at,'+24 hours')
+                SET delete_after=strftime('%Y-%m-%dT%H:%M:%fZ',NEW.finished_at,'+100 hours')
                 WHERE separation_id=NEW.separation_id; END''')
         db.execute('''CREATE TRIGGER IF NOT EXISTS separations_cleanup_deadline_insert
             AFTER INSERT ON separations
             WHEN NEW.status IN ('completed','failed','cancelled')
               AND NEW.finished_at IS NOT NULL AND NEW.delete_after IS NULL
             BEGIN UPDATE separations
-                SET delete_after=strftime('%Y-%m-%dT%H:%M:%fZ',NEW.finished_at,'+24 hours')
+                SET delete_after=strftime('%Y-%m-%dT%H:%M:%fZ',NEW.finished_at,'+100 hours')
                 WHERE separation_id=NEW.separation_id; END''')
         if db.execute('PRAGMA foreign_key_check').fetchall():
             raise RuntimeError('Foreign key validation failed')
@@ -3653,7 +3655,7 @@ def admin_console790():
     response.headers['Cache-Control']='no-store';return response
 
 
-# MyNus 8.0.0: one CPU job, persistent timing/resource history, retry and app licence.
+# MyNus 8.1.0: one CPU job, persistent timing/resource history, retry and app licence.
 import contextlib
 import math
 import psutil
@@ -3670,7 +3672,7 @@ _system800 = {}
 with db_connection() as db:
     db.execute('''CREATE TABLE IF NOT EXISTS tasks800(job_id TEXT PRIMARY KEY,user_id INTEGER NOT NULL,input_path TEXT NOT NULL,result_dir TEXT NOT NULL,language TEXT NOT NULL,phase TEXT NOT NULL,metrics_json TEXT NOT NULL)''')
     db.execute("CREATE TABLE IF NOT EXISTS licences800(user_id INTEGER PRIMARY KEY,level TEXT NOT NULL CHECK(level IN ('Basic','Advanced','Pro')))")
-    # Preserve retry information for unfinished tasks created before 8.0.0 too.
+    # Preserve retry information for unfinished tasks created before 8.1.0 too.
     for row in db.execute("SELECT * FROM separations WHERE status IN ('running','queued','pending')").fetchall():
         job_id=row['client_request_id'].removeprefix('job:')
         if not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',job_id):continue
@@ -3879,7 +3881,7 @@ def admin_monitor800():
     for item in stored:
         if item['job_id'] in live:item.update(live[item['job_id']])
         item['source_name']=names.get(item['job_id'],item['job_id'])
-    return jsonify(server_version='8.0.0',system=dict(_system800),cpu_percent=_system800.get('cpu_percent',0),ram_total_mb=round(memory.total/1048576),ram_available_mb=round(memory.available/1048576),tasks=stored,licences=users)
+    return jsonify(server_version='8.1.0',system=dict(_system800),cpu_percent=_system800.get('cpu_percent',0),ram_total_mb=round(memory.total/1048576),ram_available_mb=round(memory.available/1048576),tasks=stored,licences=users)
 
 
 @app.route('/api/admin/licence',methods=['POST'])
@@ -3897,7 +3899,7 @@ def admin_licence800():
 def licence800():
     uid=current_user_id()
     with db_connection() as db:row=db.execute('SELECT level FROM licences800 WHERE user_id=?',(uid,)).fetchone()
-    return jsonify(level=row['level'] if row else 'Basic',server_version='8.0.0')
+    return jsonify(level=row['level'] if row else 'Basic',server_version='8.1.0')
 
 threading.Thread(target=_monitor800,daemon=True).start()
 
@@ -3914,6 +3916,111 @@ def list_separations760():
     return jsonify(payload)
 
 app.view_functions['list_separations760']=list_separations760
+
+
+# MyNus 8.1.0 — retention, queue estimate, latest completed result and chart history.
+from statistics import median
+from zoneinfo import ZoneInfo
+_israel801=ZoneInfo('Asia/Jerusalem')
+_history801=deque(maxlen=900)
+
+with db_connection() as db:
+    # Replace only the retention triggers containing the old +24 hours policy.
+    for row in db.execute("SELECT name,sql FROM sqlite_master WHERE type='trigger'").fetchall():
+        if row['sql'] and '+24 hours' in row['sql']:
+            db.execute('DROP TRIGGER "'+row['name'].replace('"','""')+'"')
+            db.execute(row['sql'].replace('+24 hours','+100 hours'))
+    db.execute("UPDATE separations SET delete_after=strftime('%Y-%m-%dT%H:%M:%fZ',finished_at,'+100 hours') WHERE finished_at IS NOT NULL AND files_deleted_at IS NULL")
+
+# Silence successful monitor polling at the logging source; retain HTTP errors.
+class MonitorFilter801(logging.Filter):
+    def filter(self,record):
+        message=record.getMessage()
+        return not ('/api/admin/monitor' in message and re.search(r'HTTP/[^\"]*\"\s+(?:2\d\d|304)\b',message))
+logging.getLogger('werkzeug').addFilter(MonitorFilter801())
+
+
+def _sample_history801():
+    while not _monitor_stop800.wait(1):
+        with _queue_condition800:
+            sample=dict(_system800)
+            if sample:
+                sample['time']=_utc760();_history801.append(sample)
+threading.Thread(target=_sample_history801,daemon=True).start()
+
+
+def _queue_info801():
+    with _queue_condition800:
+        active=_active800;queued=list(_queue800);live={key:_public800(key) for key in ([active] if active else [])+queued}
+    with db_connection() as db:
+        rows=db.execute("SELECT metrics_json FROM tasks800 WHERE phase='Completed' ORDER BY rowid DESC LIMIT 100").fetchall()
+        users={r['user_id']:(r['name'] or r['email'] or '#'+str(r['user_id'])) for r in db.execute('SELECT user_id,name,email FROM users')}
+    totals=[];ratios=[]
+    for row in rows:
+        data=json.loads(row['metrics_json']);seconds=data.get('processing_seconds')
+        if seconds and seconds>0:
+            totals.append(seconds)
+            if data.get('audio_seconds',0)>0:ratios.append(seconds/data['audio_seconds'])
+    average=median(totals) if totals else 300
+    def expected(key):
+        data=live.get(key) or {};audio=data.get('audio_seconds')
+        return median(ratios)*audio if audio and ratios else average
+    remaining=0
+    if active:
+        data=live.get(active) or {};elapsed=max(0,data.get('elapsed_seconds',0)-data.get('queue_seconds',0));remaining=max(0,expected(active)-elapsed)
+    wait=remaining+sum(expected(key) for key in queued[:-1]) if queued else 0
+    uid=jobs.get(active,{}).get('user_id') if active else None
+    return {'active_job':active,'active_username':users.get(uid,'#'+str(uid)) if active else None,'queued':len(queued),'max_wait_seconds':round(wait),'estimate_based_on':len(totals)}
+
+
+_monitor_before801=admin_monitor800
+
+def admin_monitor801():
+    response=_monitor_before801();data=response.get_json();data['server_version']='8.1.0';data.pop('licences',None)
+    data['queue']=_queue_info801()
+    with _queue_condition800:data['history']=list(_history801)
+    return jsonify(data)
+app.view_functions['admin_monitor800']=admin_monitor801
+
+
+_account_before801=admin_account
+
+def admin_account801(uid):
+    response=_account_before801(uid);data=response.get_json()
+    with db_connection() as db:row=db.execute('SELECT level FROM licences800 WHERE user_id=?',(uid,)).fetchone()
+    data['user']['app_level']=row['level'] if row else 'Basic'
+    return jsonify(data)
+app.view_functions['admin_account']=admin_account801
+
+
+@app.route('/api/separations/latest')
+def latest_result801():
+    uid=current_user_id()
+    with db_connection() as db:
+        rows=db.execute("SELECT * FROM separations WHERE user_id=? AND status='completed' AND files_deleted_at IS NULL AND (delete_after IS NULL OR delete_after>?) ORDER BY finished_at DESC,separation_id DESC",(uid,_utc760())).fetchall()
+    for row in rows:
+        job_id=row['client_request_id'].removeprefix('job:')
+        try:folder=_safe_media_folder760(RESULT_DIR,job_id)
+        except ValueError:continue
+        if all((folder/name).is_file() for name in RESULT_FILES780):
+            return jsonify(job_id=job_id,source=row['source_name'],separation_id=row['separation_id'],finished_at=row['finished_at'],delete_after=row['delete_after'])
+    return jsonify(error='No completed separation result is available.'),404
+
+# Enforce expiry promptly, rather than waiting for the next midnight.
+def cleanup_worker760():
+    while True:
+        cleanup_media760()
+        time.sleep(60)
+
+# Console request timestamps follow Israel regardless of Windows timezone.
+from werkzeug.serving import WSGIRequestHandler
+WSGIRequestHandler.log_date_time_string=lambda self:datetime.now(_israel801).strftime('%d.%m.%Y %H:%M:%S')
+
+for _logger801 in (app.logger,logging.getLogger('werkzeug'),logging.getLogger()):
+    for _handler801 in _logger801.handlers:
+        if _handler801.formatter:
+            _handler801.formatter.datefmt='%d.%m.%Y %H:%M:%S'
+            _handler801.formatter.converter=lambda timestamp:datetime.fromtimestamp(timestamp,_israel801).timetuple()
 
 
 if __name__ == "__main__":
