@@ -1,5 +1,5 @@
 # ========================================
-#  AdminTool | 7.9.0 
+#  Server Process Monitoring| 8.0.0 
 # ========================================
 
 # ========================================
@@ -3291,7 +3291,7 @@ def _deadline790():
     return (datetime.now(timezone.utc)+timedelta(seconds=SESSION_IDLE790)).isoformat(timespec='milliseconds').replace('+00:00','Z')
 
 def _running790(db,sid):
-    for row in db.execute("SELECT client_request_id FROM separations WHERE session_id=? AND status IN ('running','queued')",(sid,)):
+    for row in db.execute("SELECT client_request_id FROM separations WHERE session_id=? AND status IN ('running','queued','pending')",(sid,)):
         job=jobs.get((row[0] or '').removeprefix('job:'))
         if job and job.get('status') not in ('done','error','aborted'):return True
     return False
@@ -3651,6 +3651,269 @@ def admin_console790():
     for record in records:record['color']=colors.get(record['user_id'],record['color'])
     response=jsonify(devices=records,server=server,device_cursor=cursor,server_cursor=server_cursor)
     response.headers['Cache-Control']='no-store';return response
+
+
+# MyNus 8.0.0: one CPU job, persistent timing/resource history, retry and app licence.
+import contextlib
+import math
+import psutil
+from collections import deque
+
+_queue800 = deque()
+_queue_condition800 = threading.Condition(threading.RLock())
+_active800 = None
+_metrics800 = {}
+_local800 = threading.local()
+_monitor_stop800 = threading.Event()
+_system800 = {}
+
+with db_connection() as db:
+    db.execute('''CREATE TABLE IF NOT EXISTS tasks800(job_id TEXT PRIMARY KEY,user_id INTEGER NOT NULL,input_path TEXT NOT NULL,result_dir TEXT NOT NULL,language TEXT NOT NULL,phase TEXT NOT NULL,metrics_json TEXT NOT NULL)''')
+    db.execute("CREATE TABLE IF NOT EXISTS licences800(user_id INTEGER PRIMARY KEY,level TEXT NOT NULL CHECK(level IN ('Basic','Advanced','Pro')))")
+    # Preserve retry information for unfinished tasks created before 8.0.0 too.
+    for row in db.execute("SELECT * FROM separations WHERE status IN ('running','queued','pending')").fetchall():
+        job_id=row['client_request_id'].removeprefix('job:')
+        if not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',job_id):continue
+        folder=_safe_media_folder760(UPLOAD_DIR,job_id)
+        files=[p for p in folder.iterdir() if p.is_file()] if folder.is_dir() else []
+        path=next((p for p in files if p.name==secure_filename(row['source_name'] or '')),files[0] if files else folder/'missing-source')
+        data={'phase':'Interrupted','stage':'Interrupted','retry_available':True,'stages':{},'resources':{}}
+        db.execute('INSERT OR IGNORE INTO tasks800 VALUES(?,?,?,?,?,?,?)',(job_id,row['user_id'],str(path),str(_safe_media_folder760(RESULT_DIR,job_id)),'auto','Interrupted',json.dumps(data)))
+    # Only unfinished work becomes Interrupted. Completed results and tokens are untouched.
+    for row in db.execute("SELECT job_id,metrics_json FROM tasks800 WHERE phase IN ('Queued','Running')").fetchall():
+        data=json.loads(row['metrics_json']);data.update(phase='Interrupted',stage='Interrupted',retry_available=True)
+        db.execute("UPDATE tasks800 SET phase='Interrupted',metrics_json=? WHERE job_id=?",(json.dumps(data),row['job_id']))
+    db.execute("UPDATE separations SET status='failed',finished_at=?,error_message='Interrupted: server restarted' WHERE status IN ('running','queued','pending')",(_utc760(),))
+
+
+def _persist800(job_id):
+    with _queue_condition800:
+        m=dict(_metrics800[job_id]);spec=m.pop('_spec');m.pop('_started',None)
+        m['stages']=dict(m.get('stages',{}));m['resources']=dict(m.get('resources',{}))
+    with db_connection() as db:
+        db.execute('INSERT OR REPLACE INTO tasks800 VALUES(?,?,?,?,?,?,?)',(job_id,spec['uid'],spec['input'],spec['output'],spec['language'],m['phase'],json.dumps(m)))
+
+
+def _public800(job_id):
+    with _queue_condition800:
+        m=dict(_metrics800.get(job_id,{}))
+        if not m:return None
+        m.pop('_spec',None);started=m.pop('_started',None)
+        m['stages']=dict(m.get('stages',{}));m['resources']=dict(m.get('resources',{}))
+        if started is not None:m['elapsed_seconds']=round(time.perf_counter()-started,3)
+        m['queue_position']=list(_queue800).index(job_id)+1 if job_id in _queue800 else 0
+        return m
+
+
+@contextlib.contextmanager
+def _stage800(job_id,name):
+    started=time.perf_counter()
+    with _queue_condition800:_metrics800[job_id]['stage']=name
+    try:yield
+    finally:
+        seconds=time.perf_counter()-started
+        with _queue_condition800:
+            stages=_metrics800[job_id]['stages'];stages[name]=round(stages.get(name,0)+seconds,3)
+        print('[TIMING] '+job_id+' | '+name+' | '+str(round(seconds,3))+' s',flush=True)
+
+
+_command_before800=_run_job_command
+
+def _run_job_command(job_id,command,*args,**kwargs):
+    # Called in the task thread; preview includes ffmpeg and is timed by its outer stage.
+    if not getattr(_local800,'job',None):return _command_before800(job_id,command,*args,**kwargs)
+    label='Separation' if 'demucs' in command else None
+    if label:
+        with _stage800(job_id,label):return _command_before800(job_id,command,*args,**kwargs)
+    return _command_before800(job_id,command,*args,**kwargs)
+
+
+def _timed800(fn,label):
+    def call(*args,**kwargs):
+        job_id=getattr(_local800,'job',None)
+        if not job_id:return fn(*args,**kwargs)
+        with _stage800(job_id,label):return fn(*args,**kwargs)
+    return call
+
+_run_whisperx=_timed800(_run_whisperx,'Lyrics and timings')
+check_initial_lyrics_spelling=_timed800(check_initial_lyrics_spelling,'Spelling')
+prepare_initial_transcription=_timed800(prepare_initial_transcription,'Transcription')
+detect_tonic=_timed800(detect_tonic,'Tonic')
+detect_vocal_range=_timed800(detect_vocal_range,'Vocal range')
+create_preview780=_timed800(create_preview780,'Preview')
+
+
+def _duration800(path):
+    probe=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','default=noprint_wrappers=1:nokey=1',path],capture_output=True,text=True,timeout=30,**({'creationflags':subprocess.CREATE_NO_WINDOW} if os.name=='nt' else {}))
+    try:value=float(probe.stdout.strip())
+    except (ValueError,TypeError):raise ValueError('Cannot read audio duration.')
+    if probe.returncode or not math.isfinite(value) or value<=0:raise ValueError('Invalid audio.')
+    if value>600:raise ValueError('Audio exceeds the 10 minute limit.')
+    return value
+
+
+_run_before800=run_demucs
+
+def run_demucs(job_id,input_path,job_result_dir,lyrics_language='auto'):
+    global _active800
+    control=job_controls[job_id];started=time.perf_counter();acquired=False
+    with _queue_condition800:
+        _metrics800[job_id]={'phase':'Queued','stage':'Queued','submitted_at':_utc760(),'stages':{},'resources':{},'retry_available':False,'_started':started,'_spec':{'uid':jobs[job_id]['user_id'],'input':input_path,'output':job_result_dir,'language':lyrics_language}}
+        jobs[job_id]['status']='queued';_queue800.append(job_id)
+    try:
+        _persist800(job_id)
+        with db_connection() as db:db.execute("UPDATE separations SET status='pending' WHERE client_request_id=?",('job:'+job_id,))
+        with _queue_condition800:
+            while _active800 is not None or _queue800[0]!=job_id:
+                _check_job_cancelled(job_id);_queue_condition800.wait(.25)
+            _check_job_cancelled(job_id);_queue800.popleft();_active800=job_id;acquired=True
+            _metrics800[job_id].update(phase='Running',stage='Validation',started_at=_utc760(),queue_seconds=round(time.perf_counter()-started,3))
+            jobs[job_id]['status']='processing'
+        _persist800(job_id)
+        with db_connection() as db:db.execute("UPDATE separations SET status='running' WHERE client_request_id=?",('job:'+job_id,))
+        _local800.job=job_id
+        with _stage800(job_id,'Validation'):_metrics800[job_id]['audio_seconds']=_duration800(input_path)
+        _run_before800(job_id,input_path,job_result_dir,lyrics_language)
+    except SeparationAborted:
+        jobs[job_id].update(status='aborted',error=None)
+    except Exception as exc:
+        jobs[job_id].update(status='error',error=str(exc));app.logger.exception('Task failed: %s',job_id)
+    finally:
+        _local800.job=None
+        state=jobs[job_id].get('status');phase={'done':'Completed','aborted':'Interrupted','error':'Error'}.get(state,'Error')
+        with _queue_condition800:
+            m=_metrics800[job_id];m.update(phase=phase,stage=phase,finished_at=_utc760(),elapsed_seconds=round(time.perf_counter()-started,3),retry_available=phase in ('Interrupted','Error'))
+            m['processing_seconds']=round(m['elapsed_seconds']-m.get('queue_seconds',m['elapsed_seconds']),3);m.pop('_started',None)
+            if job_id in _queue800:_queue800.remove(job_id)
+            if acquired:_active800=None
+            _queue_condition800.notify_all()
+        _persist800(job_id)
+        final=_public800(job_id);jobs[job_id]['measurements']=final
+        if phase=='Completed':
+            path=Path(job_result_dir)/'result.json'
+            try:
+                result=json.loads(path.read_text(encoding='utf-8'));result['measurements']=final;path.write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8')
+            except Exception:app.logger.exception('Cannot persist measurements for %s',job_id)
+        print('[TIMING] '+job_id+' | '+phase+' | total '+str(final['elapsed_seconds'])+' s',flush=True)
+        control['finished'].set()
+
+
+_progress_before800=progress_payload760
+
+def progress_payload760(job_id,uid):
+    row=separation_row760(job_id,uid)
+    m=_public800(job_id)
+    if m is None:
+        with db_connection() as db:stored=db.execute('SELECT metrics_json FROM tasks800 WHERE job_id=? AND user_id=?',(job_id,uid)).fetchone()
+        m=json.loads(stored['metrics_json']) if stored else None
+    if m and m['phase'] in ('Interrupted','Error'):
+        return dict(job_id=job_id,status='error' if m['phase']=='Error' else 'interrupted',error=row.get('error_message') or m['phase'],measurements=m,retry_available=True,download_allowed=False)
+    payload=_progress_before800(job_id,uid)
+    if m:payload['measurements']=m;payload['queue_position']=m.get('queue_position',0)
+    return payload
+
+
+@app.route('/api/separations/<job_id>/retry',methods=['POST'])
+def retry800(job_id):
+    uid=current_user_id();auth_request_data();row=separation_row760(job_id,uid)
+    with _queue_condition800:
+        live=_metrics800.get(job_id)
+        if live and live['phase'] in ('Queued','Running'):abort(409,description='Task is already active.')
+        with db_connection() as db:stored=db.execute('SELECT * FROM tasks800 WHERE job_id=? AND user_id=?',(job_id,uid)).fetchone()
+        if not stored or stored['phase'] not in ('Interrupted','Error'):abort(409,description='Only Interrupted and Error tasks can be retried.')
+        if not Path(stored['input_path']).is_file():abort(410,description='Source audio has expired. Upload it again; no token was consumed.')
+        # Preserve job ownership and token; no access token is created or consumed here.
+        with db_connection() as db:
+            db.execute("UPDATE tasks800 SET phase='Queued' WHERE job_id=?",(job_id,))
+            db.execute("UPDATE separations SET status='running',finished_at=NULL,error_message=NULL,delete_after=NULL WHERE separation_id=?",(row['separation_id'],))
+        job_controls[job_id]={'lock':threading.RLock(),'stop_lock':threading.Lock(),'cancel':threading.Event(),'finished':threading.Event(),'process':None}
+        jobs[job_id]={'user_id':uid,'status':'queued','progress':0,'error':None}
+        (Path(stored['result_dir'])/'result.json').unlink(missing_ok=True)
+        threading.Thread(target=run_demucs,args=(job_id,stored['input_path'],stored['result_dir'],stored['language']),daemon=True).start()
+        threading.Thread(target=watch_separation,args=(job_id,uid,row['separation_id']),daemon=True).start()
+    return jsonify(job_id=job_id,status='queued')
+
+
+def _monitor800():
+    root=psutil.Process();previous={};last=time.perf_counter();disk=psutil.disk_io_counters();psutil.cpu_percent(None)
+    while not _monitor_stop800.wait(1):
+        now=time.perf_counter();dt=max(.001,now-last);last=now
+        current_disk=psutil.disk_io_counters();memory=psutil.virtual_memory()
+        _system800.update(cpu_percent=psutil.cpu_percent(None),ram_total_mb=round(memory.total/1048576),ram_available_mb=round(memory.available/1048576),disk_read_mb_s=round(max(0,current_disk.read_bytes-disk.read_bytes)/dt/1048576,3) if current_disk and disk else None,disk_write_mb_s=round(max(0,current_disk.write_bytes-disk.write_bytes)/dt/1048576,3) if current_disk and disk else None)
+        disk=current_disk
+        with _queue_condition800:job_id=_active800
+        if not job_id:previous={};continue
+        try:
+            control=job_controls.get(job_id,{});process=control.get('process');procs=[root]
+            if process:
+                try:
+                    child=psutil.Process(process.pid);procs += [child]+child.children(recursive=True)
+                except psutil.Error:pass
+            rss=cpu=read=write=0;current={}
+            for proc in procs:
+                try:
+                    key=(proc.pid,proc.create_time());t=proc.cpu_times();total=t.user+t.system;io=proc.io_counters();current[key]=(total,io.read_bytes,io.write_bytes)
+                    old=previous.get(key)
+                    if old:cpu+=max(0,total-old[0]);read+=max(0,io.read_bytes-old[1]);write+=max(0,io.write_bytes-old[2])
+                    rss+=proc.memory_info().rss
+                except (psutil.Error,OSError):pass
+            previous=current;memory=psutil.virtual_memory();sample={'cpu_percent':round(100*cpu/dt/(psutil.cpu_count() or 1),1),'ram_mb':round(rss/1048576,1),'read_mb_s':round(read/dt/1048576,3),'write_mb_s':round(write/dt/1048576,3)}
+            with _queue_condition800:
+                resources=_metrics800[job_id]['resources'];resources.update(sample);resources['samples']=resources.get('samples',0)+1
+                for key in ('cpu_percent','ram_mb','read_mb_s','write_mb_s'):resources['peak_'+key]=max(resources.get('peak_'+key,0),sample[key])
+                resources['cpu_sum']=resources.get('cpu_sum',0)+sample['cpu_percent'];resources['average_cpu_percent']=round(resources['cpu_sum']/resources['samples'],1)
+        except Exception:app.logger.exception('Resource monitor sample failed')
+
+
+@app.route('/api/admin/monitor')
+@admin_required
+def admin_monitor800():
+    memory=psutil.virtual_memory()
+    with _queue_condition800:ids=list(_metrics800)
+    with db_connection() as db:
+        stored=[json.loads(r['metrics_json'])|{'job_id':r['job_id'],'user_id':r['user_id']} for r in db.execute('SELECT * FROM tasks800 ORDER BY rowid DESC LIMIT 100')]
+        users=[dict(r) for r in db.execute("SELECT u.user_id,u.email,COALESCE(l.level,'Basic') AS level FROM users u LEFT JOIN licences800 l ON l.user_id=u.user_id")]
+    live={id:_public800(id) for id in ids}
+    with db_connection() as db:
+        names={r['client_request_id'].removeprefix('job:'):r['source_name'] for r in db.execute('SELECT client_request_id,source_name FROM separations')}
+    for item in stored:
+        if item['job_id'] in live:item.update(live[item['job_id']])
+        item['source_name']=names.get(item['job_id'],item['job_id'])
+    return jsonify(server_version='8.0.0',system=dict(_system800),cpu_percent=_system800.get('cpu_percent',0),ram_total_mb=round(memory.total/1048576),ram_available_mb=round(memory.available/1048576),tasks=stored,licences=users)
+
+
+@app.route('/api/admin/licence',methods=['POST'])
+@admin_required
+def admin_licence800():
+    data=auth_request_data();level=data.get('level');uid=data.get('user_id')
+    if level not in ('Basic','Advanced','Pro') or type(uid) is not int:abort(400)
+    with db_connection() as db:
+        if not db.execute('SELECT 1 FROM users WHERE user_id=?',(uid,)).fetchone():abort(404)
+        db.execute('INSERT OR REPLACE INTO licences800 VALUES(?,?)',(uid,level));_admin_audit(db,'licence.change',uid,{'level':level})
+    return jsonify(ok=True,level=level)
+
+
+@app.route('/api/licence')
+def licence800():
+    uid=current_user_id()
+    with db_connection() as db:row=db.execute('SELECT level FROM licences800 WHERE user_id=?',(uid,)).fetchone()
+    return jsonify(level=row['level'] if row else 'Basic',server_version='8.0.0')
+
+threading.Thread(target=_monitor800,daemon=True).start()
+
+# Add persistent phase information to the existing user's separation list.
+_list_before800=list_separations760
+
+def list_separations760():
+    uid=current_user_id();response=_list_before800();payload=response.get_json()
+    with db_connection() as db:
+        states={r['job_id']:(r['phase'],json.loads(r['metrics_json'])) for r in db.execute('SELECT job_id,phase,metrics_json FROM tasks800 WHERE user_id=?',(uid,))}
+    for item in payload.get('separations',[]):
+        job_id=item['client_request_id'].removeprefix('job:');state=states.get(job_id)
+        if state:item.update(phase=state[0],retry_available=state[0] in ('Interrupted','Error'),measurements=_public800(job_id) or state[1])
+    return jsonify(payload)
+
+app.view_functions['list_separations760']=list_separations760
 
 
 if __name__ == "__main__":
