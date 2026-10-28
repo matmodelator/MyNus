@@ -21,7 +21,7 @@ window.mynusLogTime801=function(text){return String(text).replace(/\b\d{4}-\d{2}
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>Server Push Token / MyNus 8.2.0</title>
+  <title>Fix Recent&Retreive&Console / MyNus 8.2.1</title>
 
 
  <style>
@@ -5582,8 +5582,8 @@ async function mynusFetch(input,options={}){
  const controller=new AbortController();
  if(!logout)mynusRequests760.add(controller);
  const signal=options.signal?AbortSignal.any([options.signal,controller.signal]):controller.signal;
- const reportFailure=path!=='/api/current-user'&&!path.startsWith('/debug/');
- if(!logout)window.dispatchEvent(new CustomEvent('mynus-server-request',{detail:{path}}));
+ const reportFailure=path!=='/api/current-user'&&!path.startsWith('/debug/')&&headers.get('X-MyNus-Background')!=='1';
+ if(!logout&&headers.get('X-MyNus-Background')!=='1')window.dispatchEvent(new CustomEvent('mynus-server-request',{detail:{path}}));
  let response;
  try{
    response=await mynusNativeFetch(mynusServerBase+path,{...options,headers,signal,credentials:mynusServerBase===location.origin?'same-origin':'omit'});
@@ -7001,10 +7001,15 @@ function closeRecentAudioMenu() {
 async function selectRecentAudioEntry(entry) {
   if (!entry || !entry.handle) return;
   try {
-    let permission = await entry.handle.queryPermission({ mode: "read" });
-    if (permission !== "granted") permission = await entry.handle.requestPermission({ mode: "read" });
-    if (permission !== "granted") throw new Error("Allow access or select the file again.");
-    const file = await entry.handle.getFile();
+    let file;
+    const desktop=window.mynusNativeFiles?.available();
+    if(desktop)await window.mynusNativeFiles.request('recent-read-begin');
+    try{
+      let permission=await entry.handle.queryPermission({mode:'read'});
+      if(permission!=='granted')permission=await entry.handle.requestPermission({mode:'read'});
+      if(permission!=='granted')throw Error('The selected audio file is unavailable.');
+      file=await entry.handle.getFile();
+    }finally{if(desktop)await window.mynusNativeFiles.request('recent-read-end').catch(()=>{});}
     clearProjectState();
     audioFile.value = "";
     recentSelectedAudioFile = file;
@@ -7239,10 +7244,10 @@ async function startSeparation(restoreRequest = null, resumeJob760 = null) {
     }
 
     const restore = restoreRequest || window.pendingMynusRestore;
-    const file = restore?.originalFile || audioFile.files[0] || recentSelectedAudioFile;
+    let file = resumeJob760 ? null : (restore?.originalFile || audioFile.files[0] || recentSelectedAudioFile);
 
 
-    if (!file) {
+    if (!file && !resumeJob760) {
 
       status.textContent =
         "Select an audio file";
@@ -7258,7 +7263,7 @@ async function startSeparation(restoreRequest = null, resumeJob760 = null) {
       aborted: false, serverFinished: false, abortError: "",
       previousStudioDisplay: studio.style.display
     };
-    run.restore = restore;run.sourceName799=file.name;
+    run.restore = resumeJob760 ? null : restore;run.sourceName799=file?.name||restore?.sourceName||'Selected song';
     window.pendingMynusRestore = null;
     activeSeparation = run;
     updateSplitButton();
@@ -7267,10 +7272,7 @@ async function startSeparation(restoreRequest = null, resumeJob760 = null) {
       new FormData();
 
 
-    formData.append(
-      "audio",
-      file
-    );
+    if(file)formData.append("audio",file);
 
     formData.append(
       "lyrics_language",
@@ -7317,14 +7319,7 @@ async function startSeparation(restoreRequest = null, resumeJob760 = null) {
       }
 
 
-      originalFileURL =
-        URL.createObjectURL(
-          file
-        );
-
-
-      originalAudio.src =
-        originalFileURL;
+      if(file){originalFileURL=URL.createObjectURL(file);originalAudio.src=originalFileURL;}
 
 
       const response = resumeJob760 ? new Response(JSON.stringify({job_id:resumeJob760}),{headers:{"Content-Type":"application/json"}}) :
@@ -7375,7 +7370,7 @@ async function startSeparation(restoreRequest = null, resumeJob760 = null) {
 
       if (!jobId) throw new Error("Server did not return job_id");
       run.jobId = jobId;
-      sessionStorage.setItem("mynusPendingResult760",JSON.stringify({job_id:jobId,source:file.name}));
+      sessionStorage.setItem("mynusPendingResult760",JSON.stringify({job_id:jobId,source:run.sourceName799}));
       if (run.abortRequested) await abortCurrentSeparation(run);
       if (run.aborted) throw separationAbortedError();
 
@@ -7412,6 +7407,14 @@ async function startSeparation(restoreRequest = null, resumeJob760 = null) {
           jobId, run
         );
       await waitForPaidResult760(data,run);
+      if(resumeJob760){
+        status.textContent='Downloading original audio…';
+        const originalResponse=await mynusFetch('/api/separations/'+encodeURIComponent(jobId)+'/source',{cache:'no-store'});
+        if(!originalResponse.ok){let detail;try{detail=await originalResponse.json();}catch{}throw Error(detail?.error||'Cannot retrieve the original audio.');}
+        const sourceName=originalResponse.headers.get('X-MyNus-Source-Name');
+        file=new File([await originalResponse.blob()],sourceName?decodeURIComponent(sourceName):run.sourceName799);
+        originalFileURL=URL.createObjectURL(file);originalAudio.src=originalFileURL;run.sourceName799=file.name;
+      }
       status.textContent = "Downloading tracks for local project...";
       await retainSeparatedTracksLocally(data, run);
 
@@ -25649,12 +25652,8 @@ for(const id of ['lyricsUndoBtn','lyricsRedoBtn'])document.getElementById(id).ad
  const state=()=>{resume.hidden=mynusLoggedOut760;};window.addEventListener('mynus-session-change',state);
  async function retrieveSelected801(pending){
   if(activeSeparation){report799('A server operation is already running.');return;}
-  const file=audioFile.files[0]||recentSelectedAudioFile;
-  const expected=typeof pending.source==='string'&&pending.source.trim()&&pending.source!=='null'?pending.source:null;
-  if(!file||(expected&&file.name!==expected)){report799(expected?'Select the original audio file "'+expected+'", then click Retrieve Last.':'Select the original audio file used for this separation, then click Retrieve Last.');return;}
-  if(!expected){pending.source=file.name;sessionStorage.setItem('mynusPendingResult760',JSON.stringify(pending));}
   report799('Retrieving the existing server result…');
-  try{const result=await startSeparation(null,pending.job_id);if(result?.succeeded)report799('Server result retrieved successfully.');else console.warn(status.textContent);}catch(error){report799('Retrieve Last failed: '+error.message,true);}
+  try{const result=await startSeparation({sourceName:pending.source||pending.source_name||'Selected song'},pending.job_id);if(result?.succeeded)report799('Server result retrieved successfully.');else console.warn(status.textContent);}catch(error){report799('Retrieve Last failed: '+error.message,true);}
 
  }
  resume.onclick=async()=>{resume.disabled=true;try{const response=await mynusFetch('/api/separations/latest',{cache:'no-store'});const pending=await response.json();if(!response.ok)throw Error(pending.error||'No completed result is available.');await retrieveSelected801(pending);}catch(error){report799(error.message,true);}finally{resume.disabled=false;}};
@@ -28779,7 +28778,30 @@ async function waitForPaidResult760(data,run){
 }
 (function(){
  let generation=0,lastAccess=null;const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
- async function listen(){const ticket=++generation;let cursor=null;while(ticket===generation&&!mynusLoggedOut760){try{const response=await mynusFetch('/api/account/access-events'+(cursor==null?'':'?after='+cursor),{cache:'no-store',headers:{'X-MyNus-Background':'1'},signal:AbortSignal.timeout(30000)});const data=await response.json();if(ticket!==generation)return;if(!response.ok)throw Error(data.error||'Access notification unavailable.');cursor=data.cursor;const signature=JSON.stringify([data.access_status,data.available_tokens,data.subscription_expires_at]);if(lastAccess!==null&&lastAccess!==signature&&!(data.events||[]).length){accessNotice820('Access status updated.');window.dispatchEvent(new CustomEvent('mynus-access-changed820'));}lastAccess=signature;for(const event of data.events||[]){accessNotice820(event.message);window.dispatchEvent(new CustomEvent('mynus-access-changed820',{detail:event}));}if(data.events?.length&&document.getElementById('mnPaymentsPanel')?.hidden===false){window.mynusOpenPayments820();}}catch(e){if(ticket!==generation||mynusLoggedOut760)return;if(e.name!=='AbortError')console.warn('Access notifications: '+e.message);await pause(3000);}}}
+ async function listen(){
+  const ticket=++generation;
+  let cursor=null,connectionLost=false,retryDelay=5000;
+  while(ticket===generation&&!mynusLoggedOut760){
+   try{
+    const response=await mynusFetch('/api/account/access-events'+(cursor==null?'':'?after='+cursor),{cache:'no-store',headers:{'X-MyNus-Background':'1'},signal:AbortSignal.timeout(30000)});
+    const data=await response.json();
+    if(ticket!==generation||mynusLoggedOut760)return;
+    if(!response.ok)throw Error(data.error||'Access notification unavailable.');
+    if(connectionLost){connectionLost=false;console.info('Server connection restored.');}
+    retryDelay=5000;cursor=data.cursor;
+    const signature=JSON.stringify([data.access_status,data.available_tokens,data.subscription_expires_at]);
+    if(lastAccess!==null&&lastAccess!==signature&&!(data.events||[]).length){accessNotice820('Access status updated.');window.dispatchEvent(new CustomEvent('mynus-access-changed820'));}
+    lastAccess=signature;
+    for(const event of data.events||[]){accessNotice820(event.message);window.dispatchEvent(new CustomEvent('mynus-access-changed820',{detail:event}));}
+    if(data.events?.length&&document.getElementById('mnPaymentsPanel')?.hidden===false)void window.mynusOpenPayments820().catch(()=>{});
+   }catch(e){
+    if(ticket!==generation||mynusLoggedOut760)return;
+    if(!connectionLost){connectionLost=true;console.warn('Server connection lost. Reconnecting automatically.');}
+    await pause(retryDelay);
+    retryDelay=Math.min(retryDelay*2,60000);
+   }
+  }
+ }
  window.addEventListener('mynus-session-change',event=>{if(event.detail.authenticated){if(!window.accessListening820){window.accessListening820=true;const startedGeneration=generation+1;listen().finally(()=>{if(generation===startedGeneration)window.accessListening820=false;});}}else{generation++;window.accessListening820=false;}});
  if(!mynusLoggedOut760){window.accessListening820=true;const startedGeneration=generation+1;listen().finally(()=>{if(generation===startedGeneration)window.accessListening820=false;});}
 })();
