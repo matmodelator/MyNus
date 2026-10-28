@@ -1,5 +1,5 @@
 # ========================================
-#  Server Time Monitoring| 8.1.0 
+#  Server Push Token| 8.2.0 
 # ========================================
 
 # ========================================
@@ -3655,7 +3655,7 @@ def admin_console790():
     response.headers['Cache-Control']='no-store';return response
 
 
-# MyNus 8.1.0: one CPU job, persistent timing/resource history, retry and app licence.
+# MyNus 8.2.0: one CPU job, persistent timing/resource history, retry and app licence.
 import contextlib
 import math
 import psutil
@@ -3672,7 +3672,7 @@ _system800 = {}
 with db_connection() as db:
     db.execute('''CREATE TABLE IF NOT EXISTS tasks800(job_id TEXT PRIMARY KEY,user_id INTEGER NOT NULL,input_path TEXT NOT NULL,result_dir TEXT NOT NULL,language TEXT NOT NULL,phase TEXT NOT NULL,metrics_json TEXT NOT NULL)''')
     db.execute("CREATE TABLE IF NOT EXISTS licences800(user_id INTEGER PRIMARY KEY,level TEXT NOT NULL CHECK(level IN ('Basic','Advanced','Pro')))")
-    # Preserve retry information for unfinished tasks created before 8.1.0 too.
+    # Preserve retry information for unfinished tasks created before 8.2.0 too.
     for row in db.execute("SELECT * FROM separations WHERE status IN ('running','queued','pending')").fetchall():
         job_id=row['client_request_id'].removeprefix('job:')
         if not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',job_id):continue
@@ -3881,7 +3881,7 @@ def admin_monitor800():
     for item in stored:
         if item['job_id'] in live:item.update(live[item['job_id']])
         item['source_name']=names.get(item['job_id'],item['job_id'])
-    return jsonify(server_version='8.1.0',system=dict(_system800),cpu_percent=_system800.get('cpu_percent',0),ram_total_mb=round(memory.total/1048576),ram_available_mb=round(memory.available/1048576),tasks=stored,licences=users)
+    return jsonify(server_version='8.2.0',system=dict(_system800),cpu_percent=_system800.get('cpu_percent',0),ram_total_mb=round(memory.total/1048576),ram_available_mb=round(memory.available/1048576),tasks=stored,licences=users)
 
 
 @app.route('/api/admin/licence',methods=['POST'])
@@ -3899,7 +3899,7 @@ def admin_licence800():
 def licence800():
     uid=current_user_id()
     with db_connection() as db:row=db.execute('SELECT level FROM licences800 WHERE user_id=?',(uid,)).fetchone()
-    return jsonify(level=row['level'] if row else 'Basic',server_version='8.1.0')
+    return jsonify(level=row['level'] if row else 'Basic',server_version='8.2.0')
 
 threading.Thread(target=_monitor800,daemon=True).start()
 
@@ -3918,7 +3918,7 @@ def list_separations760():
 app.view_functions['list_separations760']=list_separations760
 
 
-# MyNus 8.1.0 — retention, queue estimate, latest completed result and chart history.
+# MyNus 8.2.0 — retention, queue estimate, latest completed result and chart history.
 from statistics import median
 from zoneinfo import ZoneInfo
 _israel801=ZoneInfo('Asia/Jerusalem')
@@ -3976,7 +3976,7 @@ def _queue_info801():
 _monitor_before801=admin_monitor800
 
 def admin_monitor801():
-    response=_monitor_before801();data=response.get_json();data['server_version']='8.1.0';data.pop('licences',None)
+    response=_monitor_before801();data=response.get_json();data['server_version']='8.2.0';data.pop('licences',None)
     data['queue']=_queue_info801()
     with _queue_condition800:data['history']=list(_history801)
     return jsonify(data)
@@ -4021,6 +4021,179 @@ for _logger801 in (app.logger,logging.getLogger('werkzeug'),logging.getLogger())
         if _handler801.formatter:
             _handler801.formatter.datefmt='%d.%m.%Y %H:%M:%S'
             _handler801.formatter.converter=lambda timestamp:datetime.fromtimestamp(timestamp,_israel801).timetuple()
+
+
+# MyNus 8.2.0 — explicit token application and account-wide access notifications.
+import calendar
+_access_condition820=threading.Condition()
+with db_connection() as db:
+    if 'applied_at' not in columns(db,'tokens'):db.execute('ALTER TABLE tokens ADD COLUMN applied_at TEXT')
+    db.execute('CREATE TABLE IF NOT EXISTS access_events820(event_id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,message TEXT NOT NULL,created_at TEXT NOT NULL)')
+    db.execute('CREATE INDEX IF NOT EXISTS access_events_user820 ON access_events820(user_id,event_id)')
+    db.execute('CREATE TABLE IF NOT EXISTS admin_grants820(request_id TEXT PRIMARY KEY,user_id INTEGER NOT NULL,kind TEXT NOT NULL,term TEXT,token_id INTEGER NOT NULL)')
+
+_token_public_before820=token_public780
+
+def token_public780(row):
+    data=_token_public_before820(row);data['received_at']=row['issued_at'];data['used_at']=row['closed_at'] if row['status']=='used' else None
+    return data
+
+_token_before820=token_access780
+
+def token_access780(uid,separation_id=None,issue=True,renew=False):
+    # Preserve the explicit debug confirmation flow. Reading a result never binds or issues a token.
+    if separation_id is None and issue:return _token_before820(uid,None,issue,renew)
+    with db_connection() as db:
+        rows=db.execute("SELECT * FROM tokens WHERE user_id=? AND status='active' AND (expires_at IS NULL OR julianday(expires_at)>julianday('now')) ORDER BY CASE type WHEN 'Subscription' THEN 0 ELSE 1 END,token_id",(uid,)).fetchall()
+    for row in rows:
+        if row['type']=='Subscription' or (separation_id is not None and row['separation_id']==separation_id):return dict(row)
+    return None
+
+
+def _access_summary820(uid):
+    with db_connection() as db:
+        db.execute("UPDATE subscriptions SET status='expired' WHERE user_id=? AND status='active' AND julianday(ends_at)<=julianday('now')",(uid,))
+        db.execute("UPDATE tokens SET status='expired',closed_at=? WHERE user_id=? AND status='active' AND expires_at IS NOT NULL AND julianday(expires_at)<=julianday('now')",(_utc760(),uid))
+        rows=db.execute("SELECT * FROM tokens WHERE user_id=? AND status='active' AND (expires_at IS NULL OR julianday(expires_at)>julianday('now')) ORDER BY token_id DESC",(uid,)).fetchall()
+    subscription=next((row for row in rows if row['type']=='Subscription'),None)
+    return {'access_status':'Subscription' if subscription else 'OneTime' if rows else None,'available_tokens':sum(1 for row in rows if row['type']=='OneTime' and row['separation_id'] is None),'subscription_expires_at':subscription['expires_at'] if subscription else None}
+
+
+def _event820(db,uid,message):
+    db.execute('INSERT INTO access_events820(user_id,message,created_at) VALUES(?,?,?)',(uid,message,_utc760()))
+
+
+@app.route('/api/account/access-events')
+def access_events820():
+    uid=current_user_id();after=request.args.get('after',type=int)
+    def read():
+        with db_connection() as db:
+            if after is None:
+                cursor=db.execute('SELECT COALESCE(MAX(event_id),0) FROM access_events820 WHERE user_id=?',(uid,)).fetchone()[0]
+                return cursor,[]
+            rows=db.execute('SELECT * FROM access_events820 WHERE user_id=? AND event_id>? ORDER BY event_id LIMIT 100',(uid,after)).fetchall()
+            return (rows[-1]['event_id'] if rows else after),[dict(row) for row in rows]
+    with _access_condition820:
+        cursor,events=read()
+        if after is not None and not events:
+            _access_condition820.wait(timeout=20);cursor,events=read()
+    if not session_is_active760():abort(401)
+    response=jsonify(cursor=cursor,events=events,**_access_summary820(uid));response.headers['Cache-Control']='no-store';return response
+
+
+@app.route('/api/admin/users/<int:uid>/grant-access',methods=['POST'])
+@admin_required
+def grant_access820(uid):
+    data=auth_request_data();kind=data.get('type');term=data.get('term');key=data.get('request_id')
+    if kind not in ('OneTime','Subscription') or (kind=='Subscription' and term not in ('Month','Year','Lifetime')):abort(400,description='Select a valid access type and duration.')
+    try:uuid.UUID(str(key))
+    except (ValueError,TypeError):abort(400,description='Invalid request ID.')
+    action='Send Token' if kind=='OneTime' else 'Set Subscription '+str(term)
+    try:
+        with db_connection() as db:
+            db.execute('BEGIN IMMEDIATE');user=db.execute('SELECT email FROM users WHERE user_id=?',(uid,)).fetchone()
+            if not user:abort(404)
+            previous=db.execute('SELECT * FROM admin_grants820 WHERE request_id=?',(key,)).fetchone()
+            if previous:
+                if (previous['user_id'],previous['kind'],previous['term'])!=(uid,kind,term):abort(409,description='Request ID already used.')
+                row=db.execute('SELECT * FROM tokens WHERE token_id=?',(previous['token_id'],)).fetchone()
+                return jsonify(ok=True,token=token_public780(row),already_processed=True)
+            now=datetime.now(timezone.utc);expiry=None
+            if kind=='Subscription':
+                if term=='Month':
+                    year=now.year+(now.month==12);month=now.month%12+1;end=now.replace(year=year,month=month,day=min(now.day,calendar.monthrange(year,month)[1]))
+                elif term=='Year':end=now.replace(year=now.year+1,day=min(now.day,calendar.monthrange(now.year+1,now.month)[1]))
+                else:end=None
+                expiry=end.isoformat(timespec='milliseconds').replace('+00:00','Z') if end else None
+                db.execute("UPDATE tokens SET status='revoked',closed_at=? WHERE user_id=? AND type='Subscription' AND status='active'",(_utc760(),uid))
+                db.execute("UPDATE subscriptions SET status='cancelled' WHERE user_id=? AND status='active'",(uid,))
+                db.execute("INSERT INTO subscriptions(user_id,plan_name,status,starts_at,ends_at) VALUES(?,?,'active',?,?)",(uid,term,_utc760(),expiry or '9999-12-31T23:59:59.999Z'))
+            value=('ONE' if kind=='OneTime' else 'SUB')+secrets.token_urlsafe(8)
+            token_id=db.execute("INSERT INTO tokens(user_id,token,type,expires_at) VALUES(?,?,?,?)",(uid,value,kind,expiry)).lastrowid
+            db.execute('UPDATE users SET status=? WHERE user_id=?',(kind,uid))
+            db.execute('INSERT INTO admin_grants820 VALUES(?,?,?,?,?)',(key,uid,kind,term,token_id))
+            message='Admin → '+user['email']+' → '+action+' → Success · token #'+str(token_id)
+            _admin_audit(db,'access.grant',uid,{'action':action,'token_id':token_id,'term':term});_event820(db,uid,message)
+            row=db.execute('SELECT * FROM tokens WHERE token_id=?',(token_id,)).fetchone()
+        with _access_condition820:_access_condition820.notify_all()
+        _publish_server_line(message,'INFO')
+        return jsonify(ok=True,token=token_public780(row))
+    except Exception:
+        _publish_server_line('Admin → user #'+str(uid)+' → '+action+' → Failed','ERROR');raise
+
+
+@app.route('/api/separations/<job_id>/apply-token',methods=['POST'])
+def apply_token820(job_id):
+    uid=current_user_id();auth_request_data();separation=separation_row760(job_id,uid)
+    if separation['status']!='completed' or separation['files_deleted_at'] or (separation['delete_after'] and separation['delete_after']<=_utc760()):abort(409,description='This result is not available.')
+    with db_connection() as db:
+        db.execute('BEGIN IMMEDIATE')
+        row=db.execute("SELECT * FROM tokens WHERE user_id=? AND status='active' AND (expires_at IS NULL OR julianday(expires_at)>julianday('now')) AND (type='Subscription' OR separation_id=?) ORDER BY CASE type WHEN 'Subscription' THEN 0 ELSE 1 END,token_id LIMIT 1",(uid,separation['separation_id'])).fetchone()
+        if row is None:
+            row=db.execute("SELECT * FROM tokens WHERE user_id=? AND type='OneTime' AND status='active' AND separation_id IS NULL AND (expires_at IS NULL OR julianday(expires_at)>julianday('now')) ORDER BY token_id LIMIT 1",(uid,)).fetchone()
+            if row is None:
+                bound=db.execute("SELECT token_id,separation_id FROM tokens WHERE user_id=? AND type='OneTime' AND status='active' AND separation_id IS NOT NULL ORDER BY token_id DESC LIMIT 1",(uid,)).fetchone()
+                if bound:abort(409,description='Token #'+str(bound['token_id'])+' is already applied to Separation #'+str(bound['separation_id'])+'. Open Account / Payments for another token.')
+                abort(409,description='No available token. Open Account / Payments to view access.')
+            db.execute('UPDATE tokens SET separation_id=?,applied_at=? WHERE token_id=? AND separation_id IS NULL',(separation['separation_id'],_utc760(),row['token_id']))
+            row=db.execute('SELECT * FROM tokens WHERE token_id=?',(row['token_id'],)).fetchone()
+            _event820(db,uid,'Token #'+str(row['token_id'])+' applied to Separation #'+str(separation['separation_id']))
+    with _access_condition820:_access_condition820.notify_all()
+    return jsonify(ok=True,token=token_public780(row))
+
+
+_ack_before820=acknowledge_result780
+
+def acknowledge_result820(job_id):
+    response=_ack_before820(job_id);data=response.get_json()
+    if data.get('token',{}).get('status')=='used':
+        uid=current_user_id();message='Token #'+str(data['token']['token_id'])+' used for Separation #'+str(data['token']['separation_id'])
+        with db_connection() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if not db.execute('SELECT 1 FROM access_events820 WHERE user_id=? AND message=?',(uid,message)).fetchone():_event820(db,uid,message)
+        with _access_condition820:_access_condition820.notify_all()
+    return response
+app.view_functions['acknowledge_result780']=acknowledge_result820
+
+_tokens_view820=account_tokens780
+
+def account_tokens820():
+    response=_tokens_view820();data=response.get_json();data.update(_access_summary820(current_user_id()));return jsonify(data)
+app.view_functions['account_tokens780']=account_tokens820
+
+_payments_view820=account_payments
+
+def account_payments820():
+    response=_payments_view820();data=response.get_json();data.update(_access_summary820(current_user_id()))
+    sub=data.get('subscription')
+    if data['access_status']!='Subscription' or not sub or sub['status']!='active':data['subscription']=None
+    return jsonify(data)
+app.view_functions['account_payments']=account_payments820
+# Keep the existing debug buttons functional and notify other sessions too.
+_debug_confirm820=confirm_token780
+
+def debug_confirm820():
+    response=_debug_confirm820()
+    if isinstance(response,tuple):return response
+    data=response.get_json()
+    if data.get('token'):
+        uid=current_user_id()
+        with db_connection() as db:_event820(db,uid,'Access updated · token #'+str(data['token']['token_id']))
+        with _access_condition820:_access_condition820.notify_all()
+    return response
+app.view_functions['confirm_token780']=debug_confirm820
+
+# Long-poll transport is silent on success; actual access events are logged above.
+class AccessTransportFilter820(logging.Filter):
+    def filter(self,record):
+        text=record.getMessage()
+        return not ('/api/account/access-events' in text and re.search(r'HTTP/[^\"]*\"\s+(?:2\d\d|304)\b',text))
+logging.getLogger('werkzeug').addFilter(AccessTransportFilter820())
+
+_admin_account_before820=app.view_functions['admin_account']
+def admin_account_access820(uid):
+    response=_admin_account_before820(uid);data=response.get_json();data['user']['access_status']=_access_summary820(uid)['access_status'];return jsonify(data)
+app.view_functions['admin_account']=admin_account_access820
 
 
 if __name__ == "__main__":
