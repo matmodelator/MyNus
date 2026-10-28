@@ -1,5 +1,5 @@
 # ========================================
-#  Server Push Token| 8.2.0 
+#  Fix Recent&Retreive| 8.2.1 
 # ========================================
 
 # ========================================
@@ -2966,7 +2966,8 @@ def cleanup_media760():
                     with _media_lock760:
                         if not _media_readers760.get(candidate.name,0):_remove_media_folder760(folder);removed+=1
             except Exception:app.logger.exception('Cleanup skipped legacy media %s',candidate.name)
-    print('[CLEANUP] Removed '+str(removed)+' expired media tasks.',flush=True)
+    if removed:
+        print('[CLEANUP] Removed '+str(removed)+' expired media tasks.',flush=True)
 
 def cleanup_worker760():
     # Startup catches cleanup missed while the server was stopped.
@@ -4195,6 +4196,26 @@ def admin_account_access820(uid):
     response=_admin_account_before820(uid);data=response.get_json();data['user']['access_status']=_access_summary820(uid)['access_status'];return jsonify(data)
 app.view_functions['admin_account']=admin_account_access820
 
+
+
+@app.route('/api/separations/<job_id>/source',methods=['GET'])
+def separation_source820(job_id):
+    from urllib.parse import quote
+    uid=current_user_id()
+    with _media_lock760:
+        row=separation_row760(job_id,uid)
+        if row['files_deleted_at'] or (row['delete_after'] and row['delete_after']<=_utc760()):abort(410,description='The original audio has expired.')
+        if row['status']!='completed':abort(409,description='Separation is not complete.')
+        if token_access780(uid,row['separation_id'],issue=False) is None:return jsonify(error='Apply access to this result first.'),402
+        folder=_safe_media_folder760(UPLOAD_DIR,job_id)
+        files=[p for p in folder.iterdir() if p.is_file()] if folder.is_dir() else []
+        source=next((p for p in files if p.name==secure_filename(row['source_name'] or '')),files[0] if len(files)==1 else None)
+        if source is None:abort(410,description='The original audio is no longer available.')
+        response=send_file(source,conditional=False)
+        response.headers['X-MyNus-Source-Name']=quote(row['source_name'] or source.name,safe='')
+        response.headers['Access-Control-Expose-Headers']='X-MyNus-Source-Name'
+        response.headers['Cache-Control']='no-store'
+        return response
 
 if __name__ == "__main__":
     with open(__file__, "r", encoding="utf-8-sig") as f:
