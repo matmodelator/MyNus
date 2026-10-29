@@ -21,7 +21,7 @@ window.mynusLogTime801=function(text){return String(text).replace(/\b\d{4}-\d{2}
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>Fix Recent&Retreive&Console / MyNus 8.2.1</title>
+  <title>MyNus 8.3.0 | Messages</title>
 
 
  <style>
@@ -21583,11 +21583,20 @@ const projectTrackIds = ["microphone", "original", "vocals", "pitchCorrection", 
 
 // Сохранение текущего Project и связанных данных.
 function projectSafeName() {
-  const raw = fileName?.textContent || currentPlaylistProject || "Project";
-  return String(raw)
-    .replace(/\.[^.]+$/, "")
-    .replace(/[\\/:*?"<>|]+/g, "_")
-    .trim() || "Project";
+  const raw = [
+    currentSourceAudioName,
+    currentPlaylistProject,
+    fileName?.textContent
+  ].find(value =>
+    typeof value === 'string' &&
+    value.trim() &&
+    value.trim() !== 'No file selected'
+  ) || 'Project';
+
+  return raw
+    .replace(/\.[^.]+$/, '')
+    .replace(/[\\/:*?"<>|]+/g, '_')
+    .trim() || 'Project';
 }
 
 // Локальная функциональная операция этого блока.
@@ -21637,7 +21646,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "8.2.0",
+    version: "8.3.0",
     duration: Number(duration)||0,
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
@@ -22557,7 +22566,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "8.2.0";
+const MYNUS_CLIENT_VERSION = "8.3.0";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -24282,7 +24291,7 @@ document.addEventListener("click", event => {
   document.getElementById('mnAuthClose').onclick = () => dialog.close();
   document.addEventListener('pointerdown', event => {
     if (!authenticated || !dialog.open || !dialog.classList.contains('mnAccountDropdown')) return;
-    if (dialog.contains(event.target) || open.contains(event.target)) return;
+    if (dialog.contains(event.target) || open.contains(event.target) || event.target.closest?.('.mynus-chat830')) return;
     dialog.close();
   }, true);
 
@@ -28762,20 +28771,130 @@ async function waitForPaidResult760(data,run){
  const message=document.createElement('p');message.className='ready-access820';message.setAttribute('role','status');const expiry=document.createElement('p');expiry.className='ready-expiry820';expiry.textContent='Deletion: '+(data.delete_after?mynusTime801(data.delete_after)+' — Israel time':'Not scheduled');
  const footer=document.createElement('div');footer.className='ready-actions820';const use=document.createElement('button'),account=document.createElement('button'),close=document.createElement('button');use.textContent='Use Token';use.title='Apply token to this separation result.';account.textContent='Account / Payments';account.title='Check access status.';close.textContent='Close';close.title='Close this window. The result remains available in Results until deletion.';footer.append(use,account,close);box.append(message,expiry,footer);
  let alive=true,busy=false;
- async function refresh(){try{const response=await mynusFetch('/api/account/tokens',{cache:'no-store'});const tokens=await response.json();if(!response.ok)throw Error(tokens.error||'Unable to check access.');if(!alive)return;const available=tokens.tokens?.some(t=>t.status==='active'&&(t.type==='Subscription'||!t.separation_id||t.separation_id===data.separation_id));message.textContent=available?'Access available. Choose Use Token to download this result.':'No active token. Open Account / Payments to view access.';message.classList.toggle('available',available);}catch(e){if(alive)message.textContent=e.message;}}
- const changed=()=>{void refresh();};window.addEventListener('mynus-access-changed820',changed);void refresh();
+async function refresh(){
+ try{
+  const response=await mynusFetch('/api/account/tokens',{cache:'no-store'});
+  const tokens=await response.json();
+  if(!response.ok)throw Error(tokens.error||'Unable to check access.');
+  if(!alive)return;
+
+  const paid=!!data.download_allowed||tokens.tokens?.some(t=>
+   t.type==='OneTime'&&t.status==='used'&&
+   Number(t.separation_id)===Number(data.separation_id)
+  );
+  const available=tokens.tokens?.some(t=>
+   t.status==='active'&&
+   (t.type==='Subscription'||!t.separation_id||
+    Number(t.separation_id)===Number(data.separation_id))
+  );
+
+  data.download_allowed=!!paid;
+  use.textContent=paid?'Download':'Use Token';
+  use.title=paid?'Download this result again. No additional token required.':
+   'Apply token to this separation result.';
+  message.textContent=paid?
+   'Access granted. Download this result again until deletion.':
+   available?'Access available. Choose Use Token to download this result.':
+   'No active token. Open Account / Payments to view access.';
+  message.classList.toggle('available',!!(paid||available));
+ }catch(e){
+  if(alive)message.textContent=e.message;
+ }
+}
+
+ const changed=()=>{void refresh();};
+ window.addEventListener('mynus-access-changed820',changed);
  account.onclick=()=>window.mynusOpenPayments820();
+
  await new Promise((resolve,reject)=>{
-  function finish(error){alive=false;cleanupPreview();window.removeEventListener('mynus-access-changed820',changed);window.removeEventListener('mynus-session-change',sessionChanged);box.remove();if(error)reject(error);else resolve();}
-  function sessionChanged(event){if(!event.detail.authenticated)finish(new DOMException('Signed out. Result remains available in Results.','AbortError'));}window.addEventListener('mynus-session-change',sessionChanged);
-  close.onclick=()=>{if(!busy)finish(new DOMException('Result remains available in Results until deletion.','AbortError'));};
-  use.onclick=async()=>{if(busy)return;busy=true;use.disabled=true;const name=run.sourceName799||currentSourceAudioName||'Selected song';const choice=await dialog7913('Use Token',name+'\nSeparation #'+data.separation_id+'\nApply your token to this result and start downloading?',[['use','Use Token'],['cancel','Cancel']]);if(choice!=='use'||!alive){busy=false;use.disabled=false;return;}use.disabled=account.disabled=close.disabled=true;message.textContent='Applying token…';accessNotice820('Separation #'+data.separation_id+': applying token.');
-   try{const response=await mynusFetch('/api/separations/'+encodeURIComponent(run.jobId)+'/apply-token',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});const result=await response.json();if(!response.ok)throw Error(result.error||'Token could not be applied.');const progress=await mynusFetch('/progress/'+encodeURIComponent(run.jobId),{cache:'no-store'});const fresh=await progress.json();if(!progress.ok||!fresh.download_allowed)throw Error(fresh.error||'Access is not available.');Object.assign(data,fresh);accessNotice820('Separation #'+data.separation_id+': access granted. Downloading result.');finish();}
-   catch(e){if(alive){message.textContent=e.message;accessNotice820('Separation #'+data.separation_id+': '+e.message,true);}}
-   finally{busy=false;use.disabled=account.disabled=close.disabled=false;}
+  function finish(error){
+   alive=false;
+   cleanupPreview();
+   window.removeEventListener('mynus-access-changed820',changed);
+   window.removeEventListener('mynus-session-change',sessionChanged);
+   box.remove();
+   if(error)reject(error);else resolve();
+  }
+
+  function sessionChanged(event){
+   if(!event.detail.authenticated){
+    finish(new DOMException('Signed out.','AbortError'));
+   }
+  }
+
+  window.addEventListener('mynus-session-change',sessionChanged);
+
+  close.onclick=()=>{
+   if(!busy)finish(new DOMException(
+    'Result remains available in Results until deletion.',
+    'AbortError'
+   ));
   };
+
+  use.onclick=async()=>{
+   if(busy)return;
+
+   if(data.download_allowed){
+    finish();
+    return;
+   }
+
+   busy=true;
+   use.disabled=true;
+
+   try{
+    const name=run.sourceName799||currentSourceAudioName||'Selected song';
+    const choice=await dialog7913(
+     'Use Token',
+     name+'\nSeparation #'+data.separation_id+
+     '\nApply your token to this result and start downloading?',
+     [['use','Use Token'],['cancel','Cancel']]
+    );
+
+    if(choice!=='use'||!alive)return;
+
+    account.disabled=close.disabled=true;
+    message.textContent='Applying token…';
+
+    const response=await mynusFetch(
+     '/api/separations/'+encodeURIComponent(run.jobId)+'/apply-token',
+     {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:'{}'
+     }
+    );
+    const result=await response.json();
+    if(!response.ok)throw Error(result.error||'Token could not be applied.');
+
+    const progress=await mynusFetch(
+     '/progress/'+encodeURIComponent(run.jobId),
+     {cache:'no-store'}
+    );
+    const fresh=await progress.json();
+    if(!progress.ok||!fresh.download_allowed){
+     throw Error(fresh.error||'Access is not available.');
+    }
+
+    Object.assign(data,fresh);
+    accessNotice820('Separation #'+data.separation_id+
+     ': access granted. Downloading result.');
+    finish();
+   }catch(error){
+    if(alive){
+     message.textContent=error.message;
+     accessNotice820(error.message,true);
+    }
+   }finally{
+    busy=false;
+    use.disabled=account.disabled=close.disabled=false;
+   }
+  };
+
+  void refresh();
  });
 }
+
 (function(){
  let generation=0,lastAccess=null;const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  async function listen(){
@@ -28807,5 +28926,118 @@ async function waitForPaidResult760(data,run){
 })();
 
 for(const [id,title] of [['mnConsoleCopy','Copy all messages from the console.'],['mnConsoleSave','Save console messages to a log file.'],['mnConsoleClear','Clear the console field.'],['mnAuthClose','Close the account panel.'],['mnOpenPayments','View account access status and tokens.']]){const button=document.getElementById(id);if(button)button.title=title;}
-</script></body>
+</script><style>
+.mynus-chat830{background:#222;color:#ddd;border:1px solid #444;border-radius:8px;box-shadow:0 5px 18px #0003;display:flex;flex-direction:column;min-height:40px;overflow:hidden;font:13px/1.4 'Segoe UI',Arial,sans-serif;z-index:30011;box-sizing:border-box}.mynus-chat830[hidden],.mynus-chat830 [hidden]{display:none!important}.mynus-chat830:not(.chat-column830>.mynus-chat830){position:fixed}.chat-head830{flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border-bottom:1px solid #444}.chat-head830>div{min-width:0}.chat-head830 strong{font-size:14px}.chat-identity830{font-size:11px;color:#bdbdbd;overflow-wrap:anywhere;margin-top:3px}.chat-count830{background:#be3434;color:white;border-radius:10px;padding:1px 6px;font:600 11px 'Segoe UI'}.mynus-chat830 button{font:12px 'Segoe UI';border:1px solid #555;border-radius:5px;padding:5px 8px;background:#333;color:#eee;cursor:pointer;min-height:26px;width:auto}.mynus-chat830 button:hover{background:#454545}.mynus-chat830 button:disabled{opacity:.5;cursor:default}.mynus-chat830 .chat-fold830{width:26px;height:26px;padding:0;font-size:18px;flex:none}.chat-body830{display:flex;flex-direction:column;flex:1;min-height:0;position:relative}.chat-list830{overflow:auto;flex:1;min-height:65px;padding:8px 10px;user-select:text;overscroll-behavior:contain;scrollbar-width:thin}.chat-date830{text-align:center;color:#aaa;font-size:10px;padding:6px 0}.chat-message830{padding:7px 0;border-bottom:1px solid #ffffff0d;overflow-wrap:anywhere}.chat-meta830{display:flex;justify-content:space-between;font-size:10px;opacity:.75;gap:8px;margin-bottom:2px}.chat-text830{white-space:pre-wrap;user-select:text}.chat-admin830{color:#ff7272}.chat-user830{color:#b9b9b9}.chat-column830 .mynus-chat830[data-online=true] .chat-user830{color:#62d58b}.chat-column830 .mynus-chat830[data-online=false] .chat-user830{color:#e6c94d}.chat-compose830{display:flex!important;flex-direction:column!important;gap:5px!important;padding:7px 9px;border-top:1px solid #444;margin:0!important;flex:none}.chat-compose830 textarea{font:13px/1.4 'Segoe UI';width:100%;min-height:46px;max-height:120px;resize:vertical;background:#f5f5f5;color:#222;border:1px solid #777;border-radius:5px;padding:6px;box-sizing:border-box}.chat-compose830>div{display:flex;gap:5px}.chat-compose830 .chat-send830{margin-left:auto;background:#35699b}.chat-status830{padding:0 9px 6px;font-size:10px;min-height:18px;color:#aaa;overflow-wrap:anywhere}.chat-status830.error{color:#ff8989}.chat-files830{flex:none;max-height:90px;overflow:auto}.chat-file830{display:flex;align-items:center;gap:4px;padding:3px 9px;font-size:11px}.chat-file830 span{flex:1;min-width:0;overflow-wrap:anywhere}.chat-file830 button{padding:0 5px;min-height:20px}.chat-download830{display:block!important;max-width:100%;text-align:left;overflow-wrap:anywhere;white-space:normal;color:#8bc5ff!important;margin-top:4px}.chat-new830{position:absolute;bottom:125px;align-self:center;box-shadow:0 2px 8px #0008;background:#315f85!important}.chat-drop830{outline:2px solid #6fb7e8}.unread830>.chat-head830{background:#383021}.chat-older830{margin:4px auto;flex:none}.chat-users830{font:11px 'Segoe UI';height:29px;padding:4px;color:#222;background:#fff;margin:5px 8px;border-radius:4px;width:calc(100% - 16px);flex:none}.chat-column830{display:flex;flex-direction:column;min-width:0;min-height:0;gap:10px;height:100%}.chat-column830>#right{flex:0 1 auto;max-height:54%;min-height:110px;overflow:auto}.chat-column830>.mynus-chat830{position:relative;flex:1;min-height:240px}.chat-global830{font:12px 'Segoe UI';color:#bbb;white-space:nowrap}.chat-global830.unread830{color:#ffd75a}[data-chat-user830][data-unread830]:not([data-unread830=""])::after{content:attr(data-unread830);display:inline-block;background:#be3434;color:#fff;padding:1px 5px;border-radius:9px;margin-left:6px;font-size:10px}#mnLoginButton[data-messages-unread830]:not([data-messages-unread830=""])::after{content:attr(data-messages-unread830);background:#be3434;color:#fff;padding:1px 5px;border-radius:9px;margin-left:5px;font-size:10px}@media(max-height:650px){.chat-head830{padding:5px 8px}.chat-compose830 textarea{min-height:36px}.chat-column830>.mynus-chat830{min-height:210px}}
+
+</style><script>
+/* MyNus 8.3.0 — one compact private conversation, shared user/admin UI. */
+(()=>{
+ const admin=document.documentElement.dataset.chatAdmin830==='1';
+ const host=admin?document.getElementById('right'):document.getElementById('mnLoginDialog');
+ if(!host)return;
+ const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
+ const panel=el('section','mynus-chat830');panel.id='mynusChat830';panel.setAttribute('aria-label','Messages');
+ panel.innerHTML='<header class="chat-head830"><div><strong>Messages</strong> <span class="chat-count830" hidden></span><div class="chat-identity830"></div></div><button type="button" class="chat-fold830" title="Minimize or restore messages" aria-label="Minimize or restore messages">−</button></header><select class="chat-users830" aria-label="Choose conversation" hidden></select><div class="chat-body830"><button type="button" class="chat-older830" hidden>Earlier messages</button><div class="chat-list830" tabindex="0" aria-label="Conversation"></div><button type="button" class="chat-new830" hidden>New messages ↓</button><div class="chat-files830"></div><form class="chat-compose830"><textarea rows="2" maxlength="10000" placeholder="Message…" aria-label="Message"></textarea><div><button type="button" class="chat-attach830" title="Attach files">📎</button><button type="button" class="chat-log830" title="Attach the console log">Log</button><button type="submit" class="chat-send830" title="Send message. Ctrl+Enter also sends.">Send</button></div><input class="chat-input830" type="file" multiple accept=".log,.txt,.json,.wav,.mynus,.zip,.png,.jpg,.jpeg,.webp" hidden></form><div class="chat-status830" role="status"></div></div>';
+ const originalMaxHeight=host.style.getPropertyValue('max-height'),originalMaxPriority=host.style.getPropertyPriority('max-height');
+ const q=s=>panel.querySelector(s),body=q('.chat-body830'),list=q('.chat-list830'),compose=q('form'),input=q('textarea'),fileInput=q('.chat-input830'),filesBox=q('.chat-files830'),status=q('.chat-status830'),count=q('.chat-count830'),identity=q('.chat-identity830'),select=q('.chat-users830'),newButton=q('.chat-new830'),older=q('.chat-older830');
+ let uid=null,email='',cursor=0,oldest=0,hasOlder=false,reading=false,busy=false,polling=false,loading=false,folded=false,files=[],nonce=null,timer=null,generation=0,loaded=false,unread=0,initialThreads=true,lastIncoming=0,connectionLost=false,retry=0;
+ const drafts=new Map();
+ const rendered=new Set(),allowed=/\.(log|txt|json|wav|mynus|zip|png|jpe?g|webp)$/i;
+ let sound=null;
+ function unlock(){try{sound ||= new (window.AudioContext||window.webkitAudioContext)();if(sound.state==='suspended')void sound.resume().catch(()=>{});}catch{}}
+ document.addEventListener('pointerdown',unlock,{once:true});document.addEventListener('keydown',unlock,{once:true});
+ function beep(){try{if(!sound||sound.state!=='running')return;const oscillator=sound.createOscillator(),gain=sound.createGain(),now=sound.currentTime;oscillator.frequency.value=880;gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(.09,now+.015);gain.gain.exponentialRampToValueAtTime(.0001,now+.16);oscillator.connect(gain);gain.connect(sound.destination);oscillator.start(now);oscillator.stop(now+.18);}catch{}}
+ function notice(text,error=false){status.textContent=text;status.classList.toggle('error',error);}
+ function log(text,error=false){console[error?'warn':'info']('Messages: '+text);}
+ const size=n=>n>=1048576?(n/1048576).toFixed(1)+' MB':Math.ceil(n/1024)+' KB';
+ function dates(value){const raw=typeof window.mynusTime801==='function'?window.mynusTime801(value):String(value);return {day:raw.slice(0,10),time:raw.slice(11,19)};}
+ function active(){return admin?uid!==null:!mynusLoggedOut760;}
+ function visible(){return !panel.hidden&&!folded&&!document.hidden&&document.hasFocus()&&panel.getClientRects().length>0;}
+ function bottom(){return list.scrollHeight-list.scrollTop-list.clientHeight<48;}
+ function endpoint(kind){return admin?'/api/admin/messages/'+uid+'/'+kind:'/api/messages/'+kind;}
+ async function api(path,options={}){
+  const headers=new Headers(options.headers||{});headers.set('X-MyNus-Background','1');
+  if(admin&&options.method==='POST')headers.set('X-MyNus-Admin-CSRF',window.mynusAdminChat830.csrf());
+  const r=admin?await fetch(path,{...options,headers,credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(60000)}):await mynusFetch(path,{...options,headers,cache:'no-store',signal:AbortSignal.timeout(60000)});
+  if(!r.ok){let data;try{data=await r.json();}catch{}throw Error(data?.error||'Messages request failed ('+r.status+').');}
+  return r;
+ }
+ function jsonPost(path,data){return api(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});}
+ function setCount(n){unread=n;count.hidden=!n;count.textContent=String(n);panel.classList.toggle('unread830',n>0);if(!admin){const b=document.getElementById('mnLoginButton');if(b){b.dataset.messagesUnread830=n?String(n):'';b.title=n?'Account — '+n+' unread messages':'Open account and sign-in options.';}}}
+ function reset(){generation++;cursor=oldest=0;hasOlder=false;rendered.clear();list.replaceChildren();loaded=false;newButton.hidden=older.hidden=true;setCount(0);files=[];nonce=null;input.value='';renderFiles();}
+ function setUser(id,mail=''){
+  const next=id?Number(id):null;if(next===uid){if(mail)email=mail;return;}
+  if(busy){notice('Wait for the current message to finish sending.',true);return;}
+  if(uid)drafts.set(uid,{text:input.value,files:files.slice(),nonce});uid=next;email=mail;reset();const draft=drafts.get(uid);if(draft){input.value=draft.text;files=draft.files.slice();nonce=draft.nonce;renderFiles();}identity.textContent=uid?'ID '+uid+' · '+email:'Select a user';compose.hidden=!uid;select.value=uid?String(uid):'';schedule(0);
+ }
+ function renderFiles(){filesBox.replaceChildren();files.forEach((f,i)=>{const chip=el('div','chat-file830');chip.append(el('span','',f.name+' · '+size(f.size)));const remove=el('button','','×');remove.type='button';remove.title='Remove this attachment';remove.disabled=busy;remove.onclick=()=>{files.splice(i,1);nonce=null;renderFiles();};chip.append(remove);filesBox.append(chip);});}
+ function attach(incoming){if(busy)return;for(const file of incoming){if(!allowed.test(file.name)){notice('Unsupported file: '+file.name,true);continue;}if(file.size>256*1048576){notice('File exceeds 256 MB: '+file.name,true);continue;}if(files.length>=10||files.reduce((n,f)=>n+f.size,0)+file.size>512*1048576){notice('Attachment limit reached.',true);break;}files.push(file);nonce=null;}renderFiles();}
+ q('.chat-attach830').onclick=()=>fileInput.click();fileInput.onchange=()=>{attach(fileInput.files);fileInput.value='';};
+ q('.chat-log830').onclick=()=>{const text=admin?document.getElementById('consoleText')?.innerText:window.mynusLocalConsole?.text();if(!text){notice('The console is empty.');return;}attach([new File([text],'MyNus-console-'+new Date().toISOString().replace(/[:.]/g,'-')+'.log',{type:'text/plain'})]);};
+ input.addEventListener('input',()=>nonce=null);
+ input.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();compose.requestSubmit();}});
+ input.addEventListener('paste',e=>{if(e.clipboardData?.files.length){e.preventDefault();attach(e.clipboardData.files);}});
+ panel.addEventListener('dragover',e=>{if([...e.dataTransfer.types].includes('Files')){e.preventDefault();panel.classList.add('chat-drop830');}});
+ panel.addEventListener('dragleave',()=>panel.classList.remove('chat-drop830'));
+ panel.addEventListener('drop',e=>{if(e.dataTransfer.files.length){e.preventDefault();panel.classList.remove('chat-drop830');attach(e.dataTransfer.files);}});
+ async function download(file,button){button.disabled=true;try{const path=admin?'/api/admin/messages/files/'+file.file_id:'/api/messages/files/'+file.file_id;const response=await api(path),blob=await response.blob(),url=URL.createObjectURL(blob),a=el('a');a.href=url;a.download=file.name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}catch(e){notice(e.message,true);log(e.message,true);}finally{button.disabled=false;}}
+ function addMessages(messages,prepend=false){
+  const fragment=document.createDocumentFragment();let incoming=false;
+  for(const m of messages){if(rendered.has(m.message_id))continue;rendered.add(m.message_id);cursor=Math.max(cursor,m.message_id);oldest=oldest?Math.min(oldest,m.message_id):m.message_id;
+   const row=el('article','chat-message830 '+(m.sender==='admin'?'chat-admin830':'chat-user830'));row.dataset.messageId=m.message_id;
+   const dt=dates(m.created_at);row.dataset.day=dt.day;const meta=el('div','chat-meta830');meta.append(el('span','',m.sender==='admin'?'Admin':admin?'User':'You'),el('time','',dt.time));row.append(meta);
+   if(m.text)row.append(el('div','chat-text830',m.text));
+   for(const f of m.files||[]){const b=el('button','chat-download830',f.name+' · '+size(f.size));b.type='button';b.title='Download attachment';b.onclick=()=>download(f,b);row.append(b);}
+   fragment.append(row);if(m.sender===(admin?'user':'admin'))incoming=true;
+  }
+  if(prepend)list.prepend(fragment);else list.append(fragment);
+  for(const d of list.querySelectorAll('.chat-date830'))d.remove();let previous='';for(const row of [...list.children]){if(row.dataset.day!==previous){const d=el('div','chat-date830',row.dataset.day);row.before(d);previous=row.dataset.day;}}
+  return incoming;
+ }
+ async function markRead(){if(reading||!active()||!visible()||!bottom()||!cursor||!unread)return;reading=true;const stamp=generation,last=cursor;try{await jsonPost(endpoint('read'),{message_id:last});if(stamp===generation){setCount(0);newButton.hidden=true;if(admin)void threads();}}catch{}finally{reading=false;}}
+ list.addEventListener('scroll',()=>{if(bottom()){newButton.hidden=true;void markRead();}});
+ newButton.onclick=()=>{list.scrollTop=list.scrollHeight;newButton.hidden=true;void markRead();};
+ older.onclick=async()=>{if(loading||!oldest)return;loading=true;const stamp=generation,path=endpoint('poll')+'?before='+oldest,oldHeight=list.scrollHeight;older.disabled=true;try{const data=await(await api(path)).json();if(stamp!==generation)return;addMessages(data.messages,true);hasOlder=data.has_older;older.hidden=!hasOlder;list.scrollTop+=list.scrollHeight-oldHeight;}catch(e){notice(e.message,true);}finally{loading=false;older.disabled=false;}};
+ q('.chat-fold830').onclick=()=>{folded=!folded;body.hidden=folded;q('.chat-fold830').textContent=folded?'+':'−';layout();if(!folded){list.scrollTop=list.scrollHeight;void markRead();schedule(0);}};
+ compose.onsubmit=async e=>{e.preventDefault();if(busy||!active()||(!input.value.trim()&&!files.length))return;busy=true;nonce ||= crypto.randomUUID();const captured=input.value,capturedFiles=files.slice(),stamp=generation;const form=new FormData();form.append('text',captured);form.append('nonce',nonce);for(const f of capturedFiles)form.append('files',f,f.name);q('.chat-send830').disabled=q('.chat-attach830').disabled=q('.chat-log830').disabled=true;input.readOnly=true;renderFiles();notice('Sending…');
+  try{await api(endpoint('send'),{method:'POST',body:form});if(stamp===generation){input.value='';files=[];nonce=null;renderFiles();notice('Sent.');log('Message sent.');}schedule(0);}
+  catch(error){notice(error.message+' Your message has not been cleared.',true);log(error.message,true);}
+  finally{busy=false;q('.chat-send830').disabled=q('.chat-attach830').disabled=q('.chat-log830').disabled=false;input.readOnly=false;renderFiles();}
+ };
+ let threadBusy=false;
+ async function threads(){if(!admin||threadBusy)return;threadBusy=true;try{const data=await(await api('/api/admin/messages/threads')).json();const current=String(uid||'');select.replaceChildren(new Option('Choose user…',''));for(const t of data.threads){select.add(new Option((t.unread?'('+t.unread+') ':'')+'ID '+t.user_id+' · '+t.email+(t.online?' · Online':''),String(t.user_id)));for(const b of document.querySelectorAll('[data-chat-user830="'+t.user_id+'"]')){b.dataset.unread830=t.unread?String(t.unread):'';b.dataset.online830=String(t.online);}}
+   select.value=current;const global=document.getElementById('chatGlobal830');if(global){global.textContent='Messages'+(data.unread?' · '+data.unread:'');global.classList.toggle('unread830',data.unread>0);}
+   const incoming=data.latest_incoming_id||0;if(!initialThreads&&incoming>lastIncoming)beep();lastIncoming=Math.max(lastIncoming,incoming);initialThreads=false;
+   const selected=data.threads.find(t=>Number(t.user_id)===uid);if(selected){email=selected.email;identity.textContent='ID '+uid+' · '+email;panel.dataset.online=String(selected.online);setCount(selected.unread);}
+  }catch{}finally{threadBusy=false;}}
+ select.onchange=()=>{if(select.value)window.mynusAdminChat830.select(Number(select.value));};
+ function schedule(ms){clearTimeout(timer);timer=setTimeout(poll,ms);}
+ async function poll(){if(polling){schedule(500);return;}polling=true;const stamp=generation;try{
+   if(admin)await threads();
+   if(!active())return;
+   const data=await(await api(endpoint('poll')+(cursor?'?after='+cursor:''))).json();if(stamp!==generation)return;
+   const follow=bottom(),fresh=data.messages.filter(m=>!rendered.has(m.message_id));const incoming=addMessages(fresh);if(!admin&&loaded&&incoming)beep();
+   if(!loaded){hasOlder=data.has_older;older.hidden=!hasOlder;loaded=true;list.scrollTop=list.scrollHeight;}
+   else if(follow)list.scrollTop=list.scrollHeight;else if(fresh.length)newButton.hidden=false;
+   panel.dataset.online=String(data.online);setCount(admin?data.unread_admin:data.unread_user);if(!admin)identity.textContent='Private conversation with Admin';
+   if(connectionLost){connectionLost=false;notice('Connected.');log('Connection restored.');}retry=0;void markRead();
+  }catch(e){if(active()&&!connectionLost){connectionLost=true;notice('Connection unavailable. Reconnecting…',true);log('Connection unavailable. Reconnecting automatically.',true);}retry=Math.min(retry?retry*2:5000,60000);}
+  finally{polling=false;schedule(retry||(admin||visible()?3000:15000));}}
+ function layout(){if(admin)return;const open=host.open&&host.classList.contains('mnAccountDropdown')&&!document.getElementById('mnAccount').hidden&&!mynusLoggedOut760;panel.hidden=!open;if(!open){if(originalMaxHeight)host.style.setProperty('max-height',originalMaxHeight,originalMaxPriority);else host.style.removeProperty('max-height');return;}const top=Math.max(0,host.getBoundingClientRect().top),space=folded?54:Math.max(220,Math.min(340,window.innerHeight*.42));const max=Math.max(130,window.innerHeight-top-space-20);host.style.setProperty('max-height',max+'px','important');const r=host.getBoundingClientRect();Object.assign(panel.style,{right:Math.max(8,window.innerWidth-r.right)+'px',top:(r.bottom+8)+'px',width:r.width+'px',height:Math.max(40,window.innerHeight-r.bottom-16)+'px'});}
+ if(admin){
+  const column=el('div','chat-column830');host.before(column);column.append(host,panel);select.hidden=false;compose.hidden=true;identity.textContent='Select a user';const global=el('span','chat-global830','Messages');global.id='chatGlobal830';document.getElementById('top').append(global);
+  window.addEventListener('mynus-chat-user830',e=>{setUser(e.detail?.user_id,e.detail?.email||'');});
+  new MutationObserver(()=>{if(!threadBusy)void threads();}).observe(document.getElementById('results'),{childList:true});
+ }else{
+  document.body.append(panel);panel.hidden=true;
+  window.addEventListener('mynus-session-change',e=>{if(!e.detail.authenticated){reset();}layout();schedule(0);});
+  new MutationObserver(layout).observe(host,{attributes:true,attributeFilter:['open','class']});new MutationObserver(layout).observe(document.getElementById('mnAccount'),{attributes:true,attributeFilter:['hidden']});
+  new ResizeObserver(layout).observe(host);window.addEventListener('resize',layout);window.addEventListener('focus',()=>{layout();void markRead();});layout();
+ }
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden){void markRead();schedule(0);}});
+ schedule(0);
+})();
+
+</script>
+</body>
 </html>
