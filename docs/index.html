@@ -21,7 +21,7 @@ window.mynusLogTime801=function(text){return String(text).replace(/\b\d{4}-\d{2}
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 8.3.0 | Messages</title>
+  <title>MyNus 8.4.0</title>
 
 
  <style>
@@ -21646,7 +21646,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "8.3.0",
+    version: "8.4.0",
     duration: Number(duration)||0,
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
@@ -22566,7 +22566,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "8.3.0";
+const MYNUS_CLIENT_VERSION = "8.4.0";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -24018,7 +24018,7 @@ document.addEventListener("click", event => {
   }
 </style>
 
-<button id="mnLoginButton" type="button">REG / LOG</button>
+<button id="mnLoginButton" type="button">Account</button>
 <dialog id="mnLoginDialog">
   <form id="mnLoginForm">
     <strong id="mnAuthTitle">MyNus — REG / LOG</strong>
@@ -24084,12 +24084,13 @@ document.addEventListener("click", event => {
     <div id="mnLoginError" role="status" aria-live="polite"></div>
     <button id="mnLoginSubmit" type="submit">Log in</button>
     <button id="mnLogout" type="button" hidden>Log out</button>
-    <button id="mnAuthClose" type="button" hidden>Close</button>
+    <button id="mnAuthClose" type="button" aria-label="Close account" title="Close the account panel." style="position:absolute;top:10px;right:10px;width:24px;height:24px;min-height:24px;margin:0;padding:0;border:0;background:transparent;color:inherit;font:17px Arial;display:block!important">×</button>
   </form>
 </dialog>
 <script>
 (() => {
   const dialog = document.getElementById('mnLoginDialog');
+  function accountHeading840(){const u=accountUser;document.getElementById('mnAuthTitle').textContent=u?'ID '+u.user_id+' · '+u.email:'Account';}
   const form = document.getElementById('mnLoginForm');
   const email = document.getElementById('mnAuthEmail');
   const code = document.getElementById('mnAuthCode');
@@ -24232,12 +24233,12 @@ document.addEventListener("click", event => {
   const accountMenu=document.getElementById('mnAccountMenu');
   const profilePanel=document.getElementById('mnProfilePanel');
   const paymentsPanel=document.getElementById('mnPaymentsPanel');
-  function showAccountMenu(){resetAccountEdit();accountMenu.hidden=false;profilePanel.hidden=true;paymentsPanel.hidden=true;document.getElementById('mnAuthTitle').textContent='MyNus — Account';message.textContent='';}
-  function showProfile(){accountMenu.hidden=true;profilePanel.hidden=false;paymentsPanel.hidden=true;document.getElementById('mnAuthTitle').textContent='MyNus — Profile';message.textContent='';accountStatus('mnProfileStatus','');}
-  function showPayments(){accountMenu.hidden=true;profilePanel.hidden=true;paymentsPanel.hidden=false;document.getElementById('mnAuthTitle').textContent='MyNus — Payments';message.textContent='';accountStatus('mnPaymentNotice','');loadPayments();}
+  function showAccountMenu(){resetAccountEdit();accountMenu.hidden=false;profilePanel.hidden=true;paymentsPanel.hidden=true;accountHeading840();message.textContent='';}
+  function showProfile(){accountMenu.hidden=true;profilePanel.hidden=false;paymentsPanel.hidden=true;accountHeading840();message.textContent='';accountStatus('mnProfileStatus','');}
+  function showPayments(){accountMenu.hidden=true;profilePanel.hidden=true;paymentsPanel.hidden=false;accountHeading840();message.textContent='';accountStatus('mnPaymentNotice','');loadPayments();}
   document.getElementById('mnOpenProfile').onclick=showProfile;
   document.getElementById('mnOpenPayments').onclick=showPayments;
-  window.mynusOpenPayments820=async()=>{if(!accountChecked)await checkAccountOnDemand();if(!authenticated){openAuthDialog();return;}showPayments();openAccountDropdown();dialog.style.setProperty('z-index','30010','important');await refreshTokens780();};
+  window.mynusOpenPayments820=async()=>{if(!accountChecked)await checkAccountOnDemand();if(!authenticated){openAuthDialog();return;}showPayments();openAccountDropdown();dialog.style.setProperty('z-index','30020','important');await refreshTokens780();};
   document.getElementById('mnProfileBack').onclick=showAccountMenu;
   document.getElementById('mnProfileToPayments').onclick=showPayments;
   document.getElementById('mnPaymentsToProfile').onclick=showProfile;
@@ -24265,14 +24266,16 @@ document.addEventListener("click", event => {
 
   function openAuthDialog() {
   dialog.classList.remove('mnAccountDropdown');
-  dialog.style.setProperty('z-index', '20000', 'important');
+  dialog.style.setProperty('z-index', '30020', 'important');
   if (!dialog.open) dialog.show();
 }
 
-  function openAccountDropdown() {
+    function openAccountDropdown() {
     dialog.classList.add('mnAccountDropdown');
+    dialog.style.setProperty('z-index','30020','important');
     if (!dialog.open) dialog.show();
   }
+
   open.addEventListener('click', async () => {
     if(dialog.open){dialog.close();return;}
 
@@ -24291,7 +24294,7 @@ document.addEventListener("click", event => {
   document.getElementById('mnAuthClose').onclick = () => dialog.close();
   document.addEventListener('pointerdown', event => {
     if (!authenticated || !dialog.open || !dialog.classList.contains('mnAccountDropdown')) return;
-    if (dialog.contains(event.target) || open.contains(event.target) || event.target.closest?.('.mynus-chat830')) return;
+    if (dialog.contains(event.target) || open.contains(event.target)) return;
     dialog.close();
   }, true);
 
@@ -24330,8 +24333,8 @@ document.addEventListener("click", event => {
 
   function resetAccount760(){
     authenticated=false;accountUser=null;accountRequest=null;accountChecked=false;
-    open.textContent='REG / LOG';open.title='Sign in or register';
-    document.getElementById('mnAuthTitle').textContent='MyNus — REG / LOG';
+    open.textContent='Account';open.title='Sign in or register';
+    document.getElementById('mnAuthTitle').textContent='Account';
     document.getElementById('mnAccount').hidden=true;
     document.getElementById('mnLogout').hidden=true;
     document.getElementById('mnLoginMethods').hidden=false;document.getElementById('mnLoginMethods').style.display='';
@@ -24356,10 +24359,10 @@ document.addEventListener("click", event => {
       if (!response.ok) throw new Error('Unable to verify login');
       if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('Open MyNus at http://127.0.2.1:5000 and check the server version.');
       const user = await response.json(); authenticated = true; accountUser = user;
-      email.value = user.email || ''; open.textContent = user.name || user.email || 'REG / LOG';
+      email.value = user.email || ''; open.textContent = 'Account';
       open.title = 'Open account';
       open.setAttribute('aria-label', 'Account: ' + (user.name || user.email || user.user_id));
-      document.getElementById('mnAuthTitle').textContent = 'MyNus — Account';
+      accountHeading840();
       showAccountMenu();
       if(dialog.open)openAccountDropdown();
       document.getElementById('mnLoginMethods').hidden = true;
@@ -25615,7 +25618,7 @@ for(const id of ['lyricsUndoBtn','lyricsRedoBtn'])document.getElementById(id).ad
  const native=!!window.mynusDesktopHeader;
  if(native)document.documentElement.classList.add('mynus-native-header');
  window.chrome?.webview?.addEventListener('message',event=>{
-  if(event.data?.type==='mynus-header-toggle')document.getElementById(event.data.panel==='console'?'mnConsoleButton':'mnLoginButton').click();
+  if(event.data?.type==='mynus-header-toggle'&&['console','account'].includes(event.data.panel))document.getElementById(event.data.panel==='console'?'mnConsoleButton':'mnLoginButton').click();
  });
  function panels(entry){
   consolePanel.hidden=!entry;consoleButton.setAttribute('aria-expanded',String(entry));
@@ -28738,9 +28741,15 @@ renderTrackNames7920();
 <style>.app-menu-dialog800{max-width:560px;min-width:300px;border:0;border-radius:10px;padding:22px}.app-menu-dialog800 button{margin-top:18px;float:right}.app-menu-dialog800::backdrop{background:#0005}.app-menu800{position:fixed;z-index:999999;background:white;box-shadow:0 3px 15px #0005;padding:5px}.app-menu800 button{display:block;width:100%;font-weight:bold;text-align:left}</style><script>(function(){
  const descriptions={Update:'Update checks for a newer version of MyNus. Updates are not connected in this release. Microsoft Store installations will use Store updates.',Upgrade:'Upgrade changes the application level: Basic, Advanced or Pro. Purchasing is not connected in this release.',Help:'MyNus Help\n\nOpen audio and use SPLIT for Separation. Server access requires sign-in.\nProjects preserve editable tracks. MyNus saves karaoke.\nKeys ? lists keyboard shortcuts. Console shows operation messages.\nSeparation supports audio up to 10 minutes. One server task runs at a time; other tasks are queued.'};
  async function openMenu800(action,exeVersion){
-  const box=document.createElement('dialog');box.className='app-menu-dialog800';const title=document.createElement('h3');title.textContent=action;box.append(title);const content=document.createElement('div');content.style.whiteSpace='pre-wrap';box.append(content);
+ const existing=document.querySelector('dialog[data-menu-action840="'+action+'"]');if(existing){existing.close();return;}
+  const box=document.createElement('dialog');box.className='app-menu-dialog800';box.dataset.menuAction840=action;const title=document.createElement('h3');title.textContent=action;box.append(title);const content=document.createElement('div');content.style.whiteSpace='pre-wrap';box.append(content);
   const close=document.createElement('button');close.textContent='OK';close.onclick=()=>box.close();box.append(close);box.addEventListener('close',()=>box.remove());document.body.append(box);box.showModal();
-  if(action==='About')content.textContent='MyNus\nEXE: '+(exeVersion||'Browser')+'\nHTML: '+MYNUS_CLIENT_VERSION;
+  if(action==='About'){
+ const local='MyNus\nEXE: '+(exeVersion?String(exeVersion).replace(/^(\d+\.\d+\.\d+)\.0$/,'$1'):'Browser')+'\nHTML: '+MYNUS_CLIENT_VERSION;
+ content.textContent=local+'\nServer: Checking…\nAdmin: Checking…';
+ try{const r=await mynusNativeFetch(mynusServerBase+'/api/component-versions',{cache:'no-store',headers:{'X-MyNus-Background':'1'},signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error();const v=await r.json();content.textContent=local+'\nServer: '+(v.server?.version||'Unavailable')+'\nAdmin: '+(v.admin?.version||'Unavailable');}
+ catch{content.textContent=local+'\nServer: Unavailable\nAdmin: Unavailable';}
+} 
   else if(action==='License'){content.textContent='Loading licence…';try{const r=await mynusFetch('/api/licence');if(!r.ok)throw Error('Sign in to view the server-assigned licence.');const v=await r.json();content.textContent='Application level: '+v.level+'\nSeparation is the only server processing task.\nPayment access and application level are separate.';}catch(e){content.textContent=e.message;}}
   else if(action==='Server')content.textContent='Current server: '+mynusServerBase+'\nOnly the current configured server is available. Additional server addresses have not been configured.';
   else content.textContent=descriptions[action]||action;
@@ -28749,7 +28758,7 @@ renderTrackNames7920();
  window.chrome?.webview?.addEventListener('message',event=>{if(event.data?.type==='mynus-menu800')openMenu800(event.data.action,event.data.exeVersion);});
  // Reuse the existing browser header. Do not add a second bar.
  if(!window.mynusNativeFiles?.available()){
- const bar=document.getElementById('mynusModeBar784')||document.getElementById('mynusBrowserBar7914');if(bar){const button=document.createElement('button');button.textContent='MyNus ▾';button.style.fontWeight='bold';const menu=document.createElement('div');menu.className='app-menu800';menu.hidden=true;for(const action of ['Update','Upgrade','License','Server','About','Help']){const item=document.createElement('button');item.textContent=action;item.onclick=()=>{menu.hidden=true;openMenu800(action);};menu.append(item);}button.onclick=()=>{menu.hidden=!menu.hidden;const r=button.getBoundingClientRect();menu.style.left=r.left+'px';menu.style.top=r.bottom+'px';};const oldBrand=bar.querySelector('.header-brand7915');if(oldBrand){const icon=oldBrand.querySelector('img');if(icon)button.prepend(icon);oldBrand.replaceWith(button);}else (bar.querySelector('.header-left7915')||bar).prepend(button);button.style.cssText='font-weight:bold;background:transparent;color:inherit;border:0;cursor:pointer;height:30px;display:flex;align-items:center;gap:4px';document.body.append(menu);document.addEventListener('pointerdown',e=>{if(!menu.contains(e.target)&&e.target!==button)menu.hidden=true;});}}
+ const bar=document.getElementById('mynusModeBar784')||document.getElementById('mynusBrowserBar7914');if(bar){const button=document.createElement('button');button.textContent='MyNus ▾';button.style.fontWeight='bold';const menu=document.createElement('div');menu.className='app-menu800';menu.hidden=true;for(const action of ['Update','Upgrade','License','Server','About','Help']){const item=document.createElement('button');item.textContent=action;item.onclick=()=>{menu.hidden=true;openMenu800(action);};menu.append(item);}button.onclick=()=>{menu.hidden=!menu.hidden;const r=button.getBoundingClientRect();menu.style.left=r.left+'px';menu.style.top=r.bottom+'px';};const oldBrand=bar.querySelector('.header-brand7915');if(oldBrand){const icon=oldBrand.querySelector('img');if(icon)button.prepend(icon);oldBrand.replaceWith(button);}else (bar.querySelector('.header-left7915')||bar).prepend(button);button.style.cssText='font-weight:bold;background:transparent;color:inherit;border:0;cursor:pointer;height:30px;display:flex;align-items:center;gap:4px';document.body.append(menu);document.addEventListener('pointerdown',e=>{if(!menu.contains(e.target)&&!button.contains(e.target))menu.hidden=true;});}}
 })();
 </script><style>#loadKaraokeTopBtn{display:none!important}#mnConsolePanel,#mnLoginDialog{top:var(--side-top801,6px)!important;max-height:calc(100dvh - var(--side-top801,6px) - 12px)!important}#mnConsolePanel{height:calc(100dvh - var(--side-top801,6px) - 12px)!important}</style><script>(function(){
 const tips={selectFileBtn:'Select the original audio file.',openProjectStartBtn:'Open a saved project.',splitBtn:'Start Separation or stop the current operation.',mnConsoleButton:'Show or hide the console.',mnLoginButton:'Open account and sign-in options.'};const symbol={'▶':'Start playback.','■':'Stop playback.','×':'Close this window.','−':'Zoom out.','+':'Zoom in.','□':'Resize this window.','?':'Show keyboard shortcuts.'};
@@ -28937,9 +28946,10 @@ for(const [id,title] of [['mnConsoleCopy','Copy all messages from the console.']
  if(!host)return;
  const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
  const panel=el('section','mynus-chat830');panel.id='mynusChat830';panel.setAttribute('aria-label','Messages');
- panel.innerHTML='<header class="chat-head830"><div><strong>Messages</strong> <span class="chat-count830" hidden></span><div class="chat-identity830"></div></div><button type="button" class="chat-fold830" title="Minimize or restore messages" aria-label="Minimize or restore messages">−</button></header><select class="chat-users830" aria-label="Choose conversation" hidden></select><div class="chat-body830"><button type="button" class="chat-older830" hidden>Earlier messages</button><div class="chat-list830" tabindex="0" aria-label="Conversation"></div><button type="button" class="chat-new830" hidden>New messages ↓</button><div class="chat-files830"></div><form class="chat-compose830"><textarea rows="2" maxlength="10000" placeholder="Message…" aria-label="Message"></textarea><div><button type="button" class="chat-attach830" title="Attach files">📎</button><button type="button" class="chat-log830" title="Attach the console log">Log</button><button type="submit" class="chat-send830" title="Send message. Ctrl+Enter also sends.">Send</button></div><input class="chat-input830" type="file" multiple accept=".log,.txt,.json,.wav,.mynus,.zip,.png,.jpg,.jpeg,.webp" hidden></form><div class="chat-status830" role="status"></div></div>';
+ panel.innerHTML='<header class="chat-head830"><div><strong>Messages</strong> <span class="chat-count830" hidden></span><div class="chat-identity830"></div></div><button type="button" class="chat-close840" title="Close messages" aria-label="Close messages">×</button></header><select class="chat-users830" aria-label="Choose conversation" hidden></select><div class="chat-body830"><button type="button" class="chat-older830" hidden>Earlier messages</button><div class="chat-list830" tabindex="0" aria-label="Conversation"></div><button type="button" class="chat-new830" hidden>New messages ↓</button><div class="chat-files830"></div><form class="chat-compose830"><textarea rows="2" maxlength="10000" placeholder="Message…" aria-label="Message"></textarea><div><button type="button" class="chat-attach830" title="Attach files">📎</button><button type="button" class="chat-log830" title="Attach the console log">Log</button><button type="submit" class="chat-send830" title="Send message. Ctrl+Enter also sends.">Send</button></div><input class="chat-input830" type="file" multiple accept=".log,.txt,.json,.wav,.mynus,.zip,.png,.jpg,.jpeg,.webp" hidden></form><div class="chat-status830" role="status"></div></div>';
  const originalMaxHeight=host.style.getPropertyValue('max-height'),originalMaxPriority=host.style.getPropertyPriority('max-height');
  const q=s=>panel.querySelector(s),body=q('.chat-body830'),list=q('.chat-list830'),compose=q('form'),input=q('textarea'),fileInput=q('.chat-input830'),filesBox=q('.chat-files830'),status=q('.chat-status830'),count=q('.chat-count830'),identity=q('.chat-identity830'),select=q('.chat-users830'),newButton=q('.chat-new830'),older=q('.chat-older830');
+ let chatOpen=false,listOpen=false,lastThreads=[];
  let uid=null,email='',cursor=0,oldest=0,hasOlder=false,reading=false,busy=false,polling=false,loading=false,folded=false,files=[],nonce=null,timer=null,generation=0,loaded=false,unread=0,initialThreads=true,lastIncoming=0,connectionLost=false,retry=0;
  const drafts=new Map();
  const rendered=new Set(),allowed=/\.(log|txt|json|wav|mynus|zip|png|jpe?g|webp)$/i;
@@ -28963,10 +28973,10 @@ for(const [id,title] of [['mnConsoleCopy','Copy all messages from the console.']
   return r;
  }
  function jsonPost(path,data){return api(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});}
- function setCount(n){unread=n;count.hidden=!n;count.textContent=String(n);panel.classList.toggle('unread830',n>0);if(!admin){const b=document.getElementById('mnLoginButton');if(b){b.dataset.messagesUnread830=n?String(n):'';b.title=n?'Account — '+n+' unread messages':'Open account and sign-in options.';}}}
+ function setCount(n){unread=n;count.hidden=!n;count.textContent=String(n);panel.classList.toggle('unread830',n>0);if(!admin){const b=document.getElementById('mnMessages840');if(b)b.dataset.unread840=n?String(n):'';window.chrome?.webview?.postMessage({type:'mynus-message-count840',count:n});}}
  function reset(){generation++;cursor=oldest=0;hasOlder=false;rendered.clear();list.replaceChildren();loaded=false;newButton.hidden=older.hidden=true;setCount(0);files=[];nonce=null;input.value='';renderFiles();}
  function setUser(id,mail=''){
-  const next=id?Number(id):null;if(next===uid){if(mail)email=mail;return;}
+  const next=id?Number(id):null;if(next===uid){if(mail){email=mail;if(admin)identity.textContent='ID '+uid+' · '+email;}return;}
   if(busy){notice('Wait for the current message to finish sending.',true);return;}
   if(uid)drafts.set(uid,{text:input.value,files:files.slice(),nonce});uid=next;email=mail;reset();const draft=drafts.get(uid);if(draft){input.value=draft.text;files=draft.files.slice();nonce=draft.nonce;renderFiles();}identity.textContent=uid?'ID '+uid+' · '+email:'Select a user';compose.hidden=!uid;select.value=uid?String(uid):'';schedule(0);
  }
@@ -28985,7 +28995,10 @@ for(const [id,title] of [['mnConsoleCopy','Copy all messages from the console.']
   const fragment=document.createDocumentFragment();let incoming=false;
   for(const m of messages){if(rendered.has(m.message_id))continue;rendered.add(m.message_id);cursor=Math.max(cursor,m.message_id);oldest=oldest?Math.min(oldest,m.message_id):m.message_id;
    const row=el('article','chat-message830 '+(m.sender==='admin'?'chat-admin830':'chat-user830'));row.dataset.messageId=m.message_id;
-   const dt=dates(m.created_at);row.dataset.day=dt.day;const meta=el('div','chat-meta830');meta.append(el('span','',m.sender==='admin'?'Admin':admin?'User':'You'),el('time','',dt.time));row.append(meta);
+   const dt=dates(m.created_at);row.dataset.day=dt.day;const meta=el('div','chat-meta830');meta.append(
+ el('span','','#'+m.message_id+' · '+(m.sender==='admin'?'Admin':admin?'User':'You')),
+ el('time','',dt.time)
+);row.append(meta);
    if(m.text)row.append(el('div','chat-text830',m.text));
    for(const f of m.files||[]){const b=el('button','chat-download830',f.name+' · '+size(f.size));b.type='button';b.title='Download attachment';b.onclick=()=>download(f,b);row.append(b);}
    fragment.append(row);if(m.sender===(admin?'user':'admin'))incoming=true;
@@ -28998,7 +29011,7 @@ for(const [id,title] of [['mnConsoleCopy','Copy all messages from the console.']
  list.addEventListener('scroll',()=>{if(bottom()){newButton.hidden=true;void markRead();}});
  newButton.onclick=()=>{list.scrollTop=list.scrollHeight;newButton.hidden=true;void markRead();};
  older.onclick=async()=>{if(loading||!oldest)return;loading=true;const stamp=generation,path=endpoint('poll')+'?before='+oldest,oldHeight=list.scrollHeight;older.disabled=true;try{const data=await(await api(path)).json();if(stamp!==generation)return;addMessages(data.messages,true);hasOlder=data.has_older;older.hidden=!hasOlder;list.scrollTop+=list.scrollHeight-oldHeight;}catch(e){notice(e.message,true);}finally{loading=false;older.disabled=false;}};
- q('.chat-fold830').onclick=()=>{folded=!folded;body.hidden=folded;q('.chat-fold830').textContent=folded?'+':'−';layout();if(!folded){list.scrollTop=list.scrollHeight;void markRead();schedule(0);}};
+ q('.chat-close840').onclick=()=>{chatOpen=false;panel.hidden=true;};
  compose.onsubmit=async e=>{e.preventDefault();if(busy||!active()||(!input.value.trim()&&!files.length))return;busy=true;nonce ||= crypto.randomUUID();const captured=input.value,capturedFiles=files.slice(),stamp=generation;const form=new FormData();form.append('text',captured);form.append('nonce',nonce);for(const f of capturedFiles)form.append('files',f,f.name);q('.chat-send830').disabled=q('.chat-attach830').disabled=q('.chat-log830').disabled=true;input.readOnly=true;renderFiles();notice('Sending…');
   try{await api(endpoint('send'),{method:'POST',body:form});if(stamp===generation){input.value='';files=[];nonce=null;renderFiles();notice('Sent.');log('Message sent.');}schedule(0);}
   catch(error){notice(error.message+' Your message has not been cleared.',true);log(error.message,true);}
@@ -29006,7 +29019,8 @@ for(const [id,title] of [['mnConsoleCopy','Copy all messages from the console.']
  };
  let threadBusy=false;
  async function threads(){if(!admin||threadBusy)return;threadBusy=true;try{const data=await(await api('/api/admin/messages/threads')).json();const current=String(uid||'');select.replaceChildren(new Option('Choose user…',''));for(const t of data.threads){select.add(new Option((t.unread?'('+t.unread+') ':'')+'ID '+t.user_id+' · '+t.email+(t.online?' · Online':''),String(t.user_id)));for(const b of document.querySelectorAll('[data-chat-user830="'+t.user_id+'"]')){b.dataset.unread830=t.unread?String(t.unread):'';b.dataset.online830=String(t.online);}}
-   select.value=current;const global=document.getElementById('chatGlobal830');if(global){global.textContent='Messages'+(data.unread?' · '+data.unread:'');global.classList.toggle('unread830',data.unread>0);}
+   select.value=current;lastThreads=data.threads;
+   if(admin){renderThreads840(data);window.dispatchEvent(new CustomEvent('mynus-chat-threads840',{detail:data}));}
    const incoming=data.latest_incoming_id||0;if(!initialThreads&&incoming>lastIncoming)beep();lastIncoming=Math.max(lastIncoming,incoming);initialThreads=false;
    const selected=data.threads.find(t=>Number(t.user_id)===uid);if(selected){email=selected.email;identity.textContent='ID '+uid+' · '+email;panel.dataset.online=String(selected.online);setCount(selected.unread);}
   }catch{}finally{threadBusy=false;}}
@@ -29023,21 +29037,99 @@ for(const [id,title] of [['mnConsoleCopy','Copy all messages from the console.']
    if(connectionLost){connectionLost=false;notice('Connected.');log('Connection restored.');}retry=0;void markRead();
   }catch(e){if(active()&&!connectionLost){connectionLost=true;notice('Connection unavailable. Reconnecting…',true);log('Connection unavailable. Reconnecting automatically.',true);}retry=Math.min(retry?retry*2:5000,60000);}
   finally{polling=false;schedule(retry||(admin||visible()?3000:15000));}}
- function layout(){if(admin)return;const open=host.open&&host.classList.contains('mnAccountDropdown')&&!document.getElementById('mnAccount').hidden&&!mynusLoggedOut760;panel.hidden=!open;if(!open){if(originalMaxHeight)host.style.setProperty('max-height',originalMaxHeight,originalMaxPriority);else host.style.removeProperty('max-height');return;}const top=Math.max(0,host.getBoundingClientRect().top),space=folded?54:Math.max(220,Math.min(340,window.innerHeight*.42));const max=Math.max(130,window.innerHeight-top-space-20);host.style.setProperty('max-height',max+'px','important');const r=host.getBoundingClientRect();Object.assign(panel.style,{right:Math.max(8,window.innerWidth-r.right)+'px',top:(r.bottom+8)+'px',width:r.width+'px',height:Math.max(40,window.innerHeight-r.bottom-16)+'px'});}
+ function layout(){
+  const top=admin?Math.round(document.getElementById('top').getBoundingClientRect().bottom+6):Math.max(6,Math.round(document.getElementById('mnConsolePanel')?.getBoundingClientRect().top||6));
+  const maxWidth=Math.max(250,Math.min(350,innerWidth-16));
+  if(admin){
+   Object.assign(threadList.style,{top:top+'px',right:'8px',maxHeight:Math.max(160,innerHeight-top-10)+'px'});
+   const leftRoom=innerWidth-300-maxWidth-24;
+   Object.assign(panel.style,{top:top+'px',right:(listOpen&&leftRoom>=8?308:8)+'px',width:maxWidth+'px',height:Math.max(180,innerHeight-top-12)+'px'});
+    }else{
+   const consoleRect=document.getElementById('mnConsolePanel').getBoundingClientRect();
+   const sideWidth=consoleRect.width||Math.min(330,innerWidth-24);
+   const sideInset=consoleRect.width?consoleRect.left:12;
+   Object.assign(panel.style,{
+    top:top+'px',
+    right:sideInset+'px',
+    width:sideWidth+'px',
+    height:Math.max(180,innerHeight-top-12)+'px'
+   });
+  }
+
+  panel.hidden=!chatOpen||(!admin&&mynusLoggedOut760);
+ }
+
+  function toggleChat840(){
+  if(!admin&&mynusLoggedOut760){
+   const menu=document.getElementById('mnLoginDialog');
+   if(!menu.open)document.getElementById('mnLoginButton').click();
+   return;
+  }
+  chatOpen=!chatOpen;
+  if(chatOpen&&!admin&&host.open)host.close();
+  layout();
+  if(chatOpen){
+   list.focus({preventScroll:true});
+   requestAnimationFrame(()=>{void markRead();});
+   schedule(0);
+  }
+ }
+
+ let threadList=null,threadButton=null;
+ function renderThreads840(data){
+  if(!admin)return;
+  const active=data.threads.filter(t=>t.active);const total=data.unread||0;
+  threadButton.dataset.unread840=total?String(total):'';
+  const nav=document.getElementById('chatTab840');if(nav)nav.textContent='Чаты · '+active.length;
+  threadList.replaceChildren();const head=el('div','chat-thread-head840','Messages');threadList.append(head);
+  if(!active.length)threadList.append(el('p','chat-thread-empty840','Нет актуальных чатов.'));
+  for(const t of active){const b=el('button','chat-thread840');b.type='button';b.append(el('span','', 'ID '+t.user_id+' · '+t.email));if(t.unread)b.append(el('sup','',String(t.unread)));b.title='Open conversation';b.onclick=()=>openChat840(t.user_id);threadList.append(b);}
+ }
+ function openChat840(id){
+  if(busy){notice('Wait for the current message to finish sending.',true);return;}
+  const same=uid===Number(id);if(same&&chatOpen){chatOpen=false;panel.hidden=true;return;}
+  chatOpen=true;setUser(Number(id),lastThreads.find(t=>Number(t.user_id)===Number(id))?.email||'');window.mynusAdminChat830.select(Number(id));layout();
+ }
  if(admin){
-  const column=el('div','chat-column830');host.before(column);column.append(host,panel);select.hidden=false;compose.hidden=true;identity.textContent='Select a user';const global=el('span','chat-global830','Messages');global.id='chatGlobal830';document.getElementById('top').append(global);
-  window.addEventListener('mynus-chat-user830',e=>{setUser(e.detail?.user_id,e.detail?.email||'');});
+  document.body.append(panel);panel.hidden=true;select.hidden=true;compose.hidden=true;identity.textContent='Select a user';
+  threadButton=el('button','menu-button840','Messages');threadButton.id='chatMessages840';threadButton.title='Open active conversations';document.getElementById('top').append(threadButton);
+  threadList=el('section','chat-thread-list840');threadList.hidden=true;document.body.append(threadList);
+  threadButton.onclick=()=>{listOpen=!listOpen;threadList.hidden=!listOpen;layout();if(listOpen)void threads();};
+  window.mynusOpenChat840=openChat840;
+  window.addEventListener('mynus-chat-user830',e=>{setUser(e.detail?.user_id,e.detail?.email||'');if(!e.detail){chatOpen=false;}layout();});
   new MutationObserver(()=>{if(!threadBusy)void threads();}).observe(document.getElementById('results'),{childList:true});
  }else{
   document.body.append(panel);panel.hidden=true;
-  window.addEventListener('mynus-session-change',e=>{if(!e.detail.authenticated){reset();}layout();schedule(0);});
-  new MutationObserver(layout).observe(host,{attributes:true,attributeFilter:['open','class']});new MutationObserver(layout).observe(document.getElementById('mnAccount'),{attributes:true,attributeFilter:['hidden']});
-  new ResizeObserver(layout).observe(host);window.addEventListener('resize',layout);window.addEventListener('focus',()=>{layout();void markRead();});layout();
+  if(!window.mynusDesktopHeader){const accountButton=document.getElementById('mnLoginButton');const button=el('button','menu-button840','Messages');button.id='mnMessages840';button.type='button';button.title='Chat with Admin';accountButton.before(button);button.onclick=toggleChat840;}
+  window.chrome?.webview?.addEventListener('message',e=>{if(e.data?.type==='mynus-header-toggle'&&e.data.panel==='chat')toggleChat840();});
+  window.addEventListener('mynus-session-change',e=>{if(!e.detail.authenticated){reset();chatOpen=false;}layout();schedule(0);});
  }
+
+ if(!admin){
+  const previousSetUiMode840=setUiMode;
+  setUiMode=function(nextMode){
+   if(nextMode===UI_MODE.SEQUENCER){
+    chatOpen=false;
+    panel.hidden=true;
+   }
+   return previousSetUiMode840.apply(this,arguments);
+  };
+ }
+
+ window.addEventListener('resize',layout);window.addEventListener('focus',()=>{layout();void markRead();});layout();
  document.addEventListener('visibilitychange',()=>{if(!document.hidden){void markRead();schedule(0);}});
  schedule(0);
 })();
 
 </script>
+<style>/* 8.4.0 — independent right-side chat and cascading admin conversations. */
+.mynus-chat830{position:fixed!important;z-index:30011!important}.chat-head830 .chat-close840{background:transparent;border:0;width:24px;height:24px;min-height:24px;padding:0;font:17px Arial;color:inherit}.chat-head830 .chat-close840:hover{background:#ffffff15}.chat-count830{background:transparent!important;color:#ff3939!important;vertical-align:super;padding:0 2px;font-size:10px}.menu-button840,#mnLoginButton{position:relative;background:#fff!important;color:#222!important;font:13px 'Segoe UI',Arial!important;font-weight:400!important;border:0!important;border-radius:5px!important;padding:6px 13px!important;cursor:pointer;min-height:29px}.menu-button840:hover,#mnLoginButton:hover{background:#e8ebef!important}.menu-button840[data-unread840]:not([data-unread840=""])::after{content:attr(data-unread840);position:absolute;right:2px;top:0;color:#e22323;font:700 10px 'Segoe UI';line-height:1;background:none}#mnLoginButton::after{display:none!important}#mnLoginDialog.mnAccountDropdown{background:#f8f9fb!important;color:#222!important;border:1px solid #dce0e7!important;border-radius:10px!important;box-shadow:0 6px 25px #0002!important;max-height:calc(100dvh - 50px)!important}#mnLoginDialog.mnAccountDropdown button{background:transparent!important;color:#263142!important;font-weight:400!important;border:0!important;border-radius:6px;padding:8px 12px}#mnLoginDialog.mnAccountDropdown button:hover{background:#e6eaf1!important}#mnLoginDialog.mnAccountDropdown label,#mnLoginDialog.mnAccountDropdown p,#mnLoginDialog.mnAccountDropdown dd{color:#333}#mnLoginDialog.mnAccountDropdown dt{color:#69717e}#mnAuthTitle{display:block;font:12px/1.5 'Segoe UI';font-weight:600;overflow-wrap:anywhere;padding-bottom:10px;border-bottom:1px solid #dce0e7;margin-bottom:8px}#mnLoginDialog.mnAccountDropdown .mnAccountStatus{color:#666}.chat-thread-list840{position:fixed;z-index:30012;width:292px;overflow:auto;background:#f8f9fb;color:#222;border:1px solid #dce0e7;border-radius:9px;padding:5px;box-shadow:0 6px 25px #0002;box-sizing:border-box}.chat-thread-list840[hidden]{display:none!important}.chat-thread-head840{padding:7px 10px;font:600 13px 'Segoe UI';border-bottom:1px solid #dce0e7}.chat-thread-empty840{font:12px 'Segoe UI';color:#666;padding:12px}.chat-thread840{display:flex;width:100%;align-items:center;gap:5px;padding:9px 10px;text-align:left;border:0;border-radius:5px;background:transparent;color:#222;font:12px 'Segoe UI';overflow-wrap:anywhere;white-space:normal}.chat-thread840:hover{background:#e6eaf1}.chat-thread840 sup{margin-left:auto;color:#e22323;font-size:10px;align-self:flex-start}#right{max-height:none!important;height:100%;min-height:0;overflow:auto}.chat-column830{display:contents}#top>h1{font-size:18px}#top .version{display:none}.chat-table840{width:100%}.chat-table840 td{white-space:normal}.chat-cell840{position:relative;white-space:nowrap}.chat-cell840 button{padding:4px 8px}.chat-cell840 sup{color:#ff3939;vertical-align:super;margin-left:2px;font-size:10px}.chat-new830{bottom:125px}.mynus-chat830 .chat-status830{user-select:text}
+
+html[data-chat-admin830="1"] .mynus-chat830[data-online=true] .chat-user830{color:#62d58b}html[data-chat-admin830="1"] .mynus-chat830[data-online=false] .chat-user830{color:#e6c94d}
+
+#chatMessages840{margin-left:auto}.chat-thread-list840 .chat-thread840 sup{background:none}
+
+#mnLoginDialog.mnAccountDropdown input,#mnLoginDialog.mnAccountDropdown select{background:#fff!important;color:#222!important;border-color:#ccc}#mnLoginDialog.mnAccountDropdown .mnAccountStatus.success{background:transparent!important;color:#227348!important}#mnLoginDialog.mnAccountDropdown .mnAccountStatus.error{color:#b42318!important}#accountTitle{overflow-wrap:anywhere}
+</style>
 </body>
 </html>
