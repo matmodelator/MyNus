@@ -1,5 +1,5 @@
 # ========================================
-#  Fix Recent&Retreive| 8.2.1 
+# MyNus 8.3.0 — Messages+Exe
 # ========================================
 
 # ========================================
@@ -2839,7 +2839,7 @@ def protected_operations760():
         return
     if request.path in ('/admin','/admin.html') or request.path.startswith('/api/admin/'):
         return
-    public={'/','/api/auth/login','/api/auth/register','/api/auth/register-code','/api/auth/logout'}
+    public={'/','/api/auth/login','/api/auth/register','/api/auth/register-code','/api/auth/logout','/api/component-versions'}
     if request.method=='OPTIONS' or request.path in public:return
     if not session_is_active760():
         session.clear()
@@ -3882,7 +3882,7 @@ def admin_monitor800():
     for item in stored:
         if item['job_id'] in live:item.update(live[item['job_id']])
         item['source_name']=names.get(item['job_id'],item['job_id'])
-    return jsonify(server_version='8.2.0',system=dict(_system800),cpu_percent=_system800.get('cpu_percent',0),ram_total_mb=round(memory.total/1048576),ram_available_mb=round(memory.available/1048576),tasks=stored,licences=users)
+    return jsonify(server_version='8.3.0',system=dict(_system800),cpu_percent=_system800.get('cpu_percent',0),ram_total_mb=round(memory.total/1048576),ram_available_mb=round(memory.available/1048576),tasks=stored,licences=users)
 
 
 @app.route('/api/admin/licence',methods=['POST'])
@@ -3900,7 +3900,7 @@ def admin_licence800():
 def licence800():
     uid=current_user_id()
     with db_connection() as db:row=db.execute('SELECT level FROM licences800 WHERE user_id=?',(uid,)).fetchone()
-    return jsonify(level=row['level'] if row else 'Basic',server_version='8.2.0')
+    return jsonify(level=row['level'] if row else 'Basic',server_version='8.3.0')
 
 threading.Thread(target=_monitor800,daemon=True).start()
 
@@ -3977,7 +3977,7 @@ def _queue_info801():
 _monitor_before801=admin_monitor800
 
 def admin_monitor801():
-    response=_monitor_before801();data=response.get_json();data['server_version']='8.2.0';data.pop('licences',None)
+    response=_monitor_before801();data=response.get_json();data['server_version']='8.3.0';data.pop('licences',None)
     data['queue']=_queue_info801()
     with _queue_condition800:data['history']=list(_history801)
     return jsonify(data)
@@ -4045,6 +4045,13 @@ def token_access780(uid,separation_id=None,issue=True,renew=False):
     # Preserve the explicit debug confirmation flow. Reading a result never binds or issues a token.
     if separation_id is None and issue:return _token_before820(uid,None,issue,renew)
     with db_connection() as db:
+        if separation_id is not None:
+            paid = db.execute(
+                "SELECT * FROM tokens WHERE user_id=? AND type='OneTime' AND status='used' AND separation_id=? ORDER BY token_id LIMIT 1",
+                (uid, separation_id)
+            ).fetchone()
+            if paid:
+                return dict(paid)
         rows=db.execute("SELECT * FROM tokens WHERE user_id=? AND status='active' AND (expires_at IS NULL OR julianday(expires_at)>julianday('now')) ORDER BY CASE type WHEN 'Subscription' THEN 0 ELSE 1 END,token_id",(uid,)).fetchall()
     for row in rows:
         if row['type']=='Subscription' or (separation_id is not None and row['separation_id']==separation_id):return dict(row)
@@ -4129,6 +4136,12 @@ def apply_token820(job_id):
     if separation['status']!='completed' or separation['files_deleted_at'] or (separation['delete_after'] and separation['delete_after']<=_utc760()):abort(409,description='This result is not available.')
     with db_connection() as db:
         db.execute('BEGIN IMMEDIATE')
+        paid = db.execute(
+            "SELECT * FROM tokens WHERE user_id=? AND type='OneTime' AND status='used' AND separation_id=? ORDER BY token_id LIMIT 1",
+            (uid, separation['separation_id'])
+        ).fetchone()
+        if paid:
+            return jsonify(ok=True, token=token_public780(paid))
         row=db.execute("SELECT * FROM tokens WHERE user_id=? AND status='active' AND (expires_at IS NULL OR julianday(expires_at)>julianday('now')) AND (type='Subscription' OR separation_id=?) ORDER BY CASE type WHEN 'Subscription' THEN 0 ELSE 1 END,token_id LIMIT 1",(uid,separation['separation_id'])).fetchone()
         if row is None:
             row=db.execute("SELECT * FROM tokens WHERE user_id=? AND type='OneTime' AND status='active' AND separation_id IS NULL AND (expires_at IS NULL OR julianday(expires_at)>julianday('now')) ORDER BY token_id LIMIT 1",(uid,)).fetchone()
@@ -4216,6 +4229,194 @@ def separation_source820(job_id):
         response.headers['Access-Control-Expose-Headers']='X-MyNus-Source-Name'
         response.headers['Cache-Control']='no-store'
         return response
+
+# MyNus 8.3.0 — private user/admin messaging; independent from media tasks.
+CHAT_FILES830=Path(BASE_DIR)/'messages'
+CHAT_FILE_LIMIT830=256*1024*1024
+CHAT_EXT830={'.log','.txt','.json','.wav','.mynus','.zip','.png','.jpg','.jpeg','.webp'}
+with db_connection() as db:
+    if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='chat_messages830'").fetchone():
+        backup=Path(BASE_DIR)/('mynus-before-messages-'+datetime.now().strftime('%Y%m%d-%H%M%S')+'.db')
+        with sqlite3.connect(backup) as saved:db.backup(saved)
+    db.executescript('''
+    CREATE TABLE IF NOT EXISTS chat_messages830(message_id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL REFERENCES users(user_id),sender TEXT NOT NULL CHECK(sender IN ('user','admin')),text TEXT NOT NULL,created_at TEXT NOT NULL,nonce TEXT NOT NULL,UNIQUE(user_id,sender,nonce));
+    CREATE INDEX IF NOT EXISTS chat_user830 ON chat_messages830(user_id,message_id);
+    CREATE TABLE IF NOT EXISTS chat_files830(file_id TEXT PRIMARY KEY,message_id INTEGER NOT NULL REFERENCES chat_messages830(message_id),name TEXT NOT NULL,size INTEGER NOT NULL,mime TEXT NOT NULL,stored_name TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS chat_reads830(user_id INTEGER PRIMARY KEY REFERENCES users(user_id),user_read INTEGER NOT NULL DEFAULT 0,admin_read INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS chat_presence830(session_id TEXT PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(user_id),seen_at TEXT NOT NULL);
+    ''')
+
+def _chat_number830(name,default=0):
+    try:n=int(request.args.get(name,default))
+    except (ValueError,TypeError):abort(400,description='Invalid message cursor.')
+    if n<0:abort(400,description='Invalid message cursor.')
+    return n
+
+def _chat_origin830():
+    origin=request.headers.get('Origin')
+    expected=request.host_url.rstrip('/')
+    if request.remote_addr in ('127.0.0.1','::1') and request.headers.get('X-Forwarded-Proto') in ('http','https'):
+        expected=request.headers['X-Forwarded-Proto']+'://'+request.host
+    if origin and origin.rstrip('/')!=expected and origin not in DESKTOP_ORIGINS:abort(403,description='Use the MyNus application.')
+
+def _chat_online830(db,uid):
+    cutoff=(datetime.now(timezone.utc)-timedelta(seconds=45)).isoformat(timespec='milliseconds').replace('+00:00','Z')
+    return db.execute('''SELECT 1 FROM chat_presence830 p JOIN sessions s ON s.session_id=p.session_id WHERE p.user_id=? AND p.seen_at>? AND s.revoked_at IS NULL AND s.expires_at>? LIMIT 1''',(uid,cutoff,_utc760())).fetchone() is not None
+
+def _chat_messages830(uid):
+    after=_chat_number830('after');before=_chat_number830('before')
+    with db_connection() as db:
+        if not db.execute('SELECT 1 FROM users WHERE user_id=?',(uid,)).fetchone():abort(404)
+        if before:rows=db.execute('SELECT * FROM chat_messages830 WHERE user_id=? AND message_id<? ORDER BY message_id DESC LIMIT 101',(uid,before)).fetchall();older=len(rows)>100;rows=list(reversed(rows[:100]))
+        elif after:rows=db.execute('SELECT * FROM chat_messages830 WHERE user_id=? AND message_id>? ORDER BY message_id LIMIT 100',(uid,after)).fetchall();older=False
+        else:rows=db.execute('SELECT * FROM chat_messages830 WHERE user_id=? ORDER BY message_id DESC LIMIT 101',(uid,)).fetchall();older=len(rows)>100;rows=list(reversed(rows[:100]))
+        result=[]
+        for row in rows:
+            item=dict(row);item.pop('nonce',None)
+            item['files']=[{k:f[k] for k in ('file_id','name','size','mime')} for f in db.execute('SELECT * FROM chat_files830 WHERE message_id=?',(row['message_id'],))]
+            result.append(item)
+        read=db.execute('SELECT * FROM chat_reads830 WHERE user_id=?',(uid,)).fetchone()
+        ur=read['user_read'] if read else 0;ar=read['admin_read'] if read else 0
+        unread_user=db.execute("SELECT count(*) FROM chat_messages830 WHERE user_id=? AND sender='admin' AND message_id>?",(uid,ur)).fetchone()[0]
+        unread_admin=db.execute("SELECT count(*) FROM chat_messages830 WHERE user_id=? AND sender='user' AND message_id>?",(uid,ar)).fetchone()[0]
+        user=db.execute('SELECT user_id,email FROM users WHERE user_id=?',(uid,)).fetchone()
+        return jsonify(messages=result,has_older=older,user=dict(user),online=_chat_online830(db,uid),user_read=ur,admin_read=ar,unread_user=unread_user,unread_admin=unread_admin)
+
+def _chat_send830(uid,sender):
+    import uuid,mimetypes
+    _chat_origin830()
+    if request.content_length and request.content_length>CHAT_FILE_LIMIT830*2:abort(413,description='Attachments exceed 512 MB.')
+    data=request.get_json(silent=True) if request.is_json else request.form
+    if data is None:abort(400)
+    text=str(data.get('text','')).strip();nonce=str(data.get('nonce',''))
+    try:uuid.UUID(nonce)
+    except (ValueError,AttributeError):abort(400,description='Invalid message ID.')
+    if len(text)>10000:abort(400,description='Message is longer than 10000 characters.')
+    files=request.files.getlist('files')
+    if len(files)>10:abort(400,description='Attach no more than 10 files at a time.')
+    if not text and not files:abort(400,description='Enter a message or attach a file.')
+    prepared=[];committed=False
+    try:
+        with db_connection() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if not db.execute('SELECT 1 FROM users WHERE user_id=?',(uid,)).fetchone():abort(404)
+            old=db.execute('SELECT message_id FROM chat_messages830 WHERE user_id=? AND sender=? AND nonce=?',(uid,sender,nonce)).fetchone()
+            if old:return jsonify(ok=True,message_id=old[0],duplicate=True)
+            for source in files:
+                name=re.sub(r'[\x00-\x1f\x7f]','',str(source.filename or '').replace('\\','/').split('/')[-1])
+                ext=Path(name).suffix.lower()
+                if not name or len(name)>240 or ext not in CHAT_EXT830:abort(400,description='Unsupported attachment. Use LOG, TXT, JSON, WAV, MyNus, ZIP, PNG, JPG or WebP.')
+                CHAT_FILES830.mkdir(parents=True,exist_ok=True)
+                file_id=uuid.uuid4().hex;path=CHAT_FILES830/(file_id+ext);size=0
+                prepared.append((file_id,name,path,size,mimetypes.guess_type(name)[0] or 'application/octet-stream'))
+                with path.open('xb') as output:
+                    while True:
+                        chunk=source.stream.read(262144)
+                        if not chunk:break
+                        size+=len(chunk)
+                        if size>CHAT_FILE_LIMIT830:abort(413,description='An attachment exceeds 256 MB.')
+                        output.write(chunk)
+                if sum(x[3] for x in prepared)+size>CHAT_FILE_LIMIT830*2:abort(413,description='Attachments exceed 512 MB.')
+                prepared[-1]=(file_id,name,path,size,prepared[-1][4])
+            now=_utc760()
+            mid=db.execute('INSERT INTO chat_messages830(user_id,sender,text,created_at,nonce) VALUES(?,?,?,?,?)',(uid,sender,text,now,nonce)).lastrowid
+            for fid,name,path,size,mime in prepared:db.execute('INSERT INTO chat_files830 VALUES(?,?,?,?,?,?)',(fid,mid,name,size,mime,path.name))
+        committed=True
+        _publish_server_line('Messages: '+('Admin → user #'+str(uid) if sender=='admin' else 'user #'+str(uid)+' → Admin')+' · message #'+str(mid),'INFO')
+        return jsonify(ok=True,message_id=mid)
+    finally:
+        if not committed:
+            for item in prepared:
+                try:item[2].unlink(missing_ok=True)
+                except OSError:pass
+
+def _chat_read830(uid,role):
+    data=auth_request_data();mid=data.get('message_id')
+    if type(mid) is not int or mid<0:abort(400)
+    field='admin_read' if role=='admin' else 'user_read'
+    with db_connection() as db:
+        maximum=db.execute('SELECT COALESCE(max(message_id),0) FROM chat_messages830 WHERE user_id=?',(uid,)).fetchone()[0]
+        mid=min(mid,maximum)
+        db.execute('INSERT OR IGNORE INTO chat_reads830(user_id) VALUES(?)',(uid,))
+        db.execute('UPDATE chat_reads830 SET '+field+'=MAX('+field+',?) WHERE user_id=?',(mid,uid))
+    return jsonify(ok=True)
+
+def _chat_file830(file_id,uid=None):
+    with db_connection() as db:
+        row=db.execute('SELECT f.*,m.user_id FROM chat_files830 f JOIN chat_messages830 m ON m.message_id=f.message_id WHERE f.file_id=?',(file_id,)).fetchone()
+    if row is None or (uid is not None and row['user_id']!=uid):abort(404)
+    path=CHAT_FILES830/row['stored_name']
+    if not path.is_file():abort(404)
+    response=send_file(path,as_attachment=True,download_name=row['name'],mimetype=row['mime'])
+    response.headers['X-Content-Type-Options']='nosniff';response.headers['Cache-Control']='private, no-store'
+    return response
+
+@app.route('/api/messages/poll')
+def chat_user_poll830():
+    uid=current_user_id()
+    with db_connection() as db:
+        db.execute('INSERT INTO chat_presence830 VALUES(?,?,?) ON CONFLICT(session_id) DO UPDATE SET seen_at=excluded.seen_at',(session['session_id'],uid,_utc760()))
+    return _chat_messages830(uid)
+
+@app.route('/api/messages/send',methods=['POST'])
+def chat_user_send830():return _chat_send830(current_user_id(),'user')
+
+@app.route('/api/messages/read',methods=['POST'])
+def chat_user_read830():return _chat_read830(current_user_id(),'user')
+
+@app.route('/api/messages/files/<file_id>')
+def chat_user_file830(file_id):return _chat_file830(file_id,current_user_id())
+
+@app.route('/api/admin/messages/threads')
+@admin_required
+def chat_admin_threads830():
+    with db_connection() as db:
+        rows=db.execute('''SELECT u.user_id,u.email,COALESCE(MAX(m.message_id),0) AS latest_id,COALESCE(MAX(CASE WHEN m.sender='user' THEN m.message_id ELSE 0 END),0) AS latest_incoming_id,COALESCE(SUM(CASE WHEN m.sender='user' AND m.message_id>COALESCE(r.admin_read,0) THEN 1 ELSE 0 END),0) AS unread FROM users u LEFT JOIN chat_messages830 m ON m.user_id=u.user_id LEFT JOIN chat_reads830 r ON r.user_id=u.user_id GROUP BY u.user_id ORDER BY latest_id DESC,u.user_id''').fetchall()
+        result=[dict(r,online=_chat_online830(db,r['user_id'])) for r in rows]
+    return jsonify(threads=result,unread=sum(r['unread'] for r in result),latest_id=max((r['latest_id'] for r in result),default=0),latest_incoming_id=max((r['latest_incoming_id'] for r in result),default=0))
+
+@app.route('/api/admin/messages/<int:uid>/poll')
+@admin_required
+def chat_admin_poll830(uid):return _chat_messages830(uid)
+
+@app.route('/api/admin/messages/<int:uid>/send',methods=['POST'])
+@admin_required
+def chat_admin_send830(uid):return _chat_send830(uid,'admin')
+
+@app.route('/api/admin/messages/<int:uid>/read',methods=['POST'])
+@admin_required
+def chat_admin_read830(uid):return _chat_read830(uid,'admin')
+
+@app.route('/api/admin/messages/files/<file_id>')
+@admin_required
+def chat_admin_file830(file_id):return _chat_file830(file_id)
+
+class ChatTransportFilter830(logging.Filter):
+    def filter(self,record):
+        line=record.getMessage()
+        return not (('/api/messages/poll' in line or '/api/admin/messages/threads' in line or ('/api/admin/messages/' in line and '/poll' in line)) and re.search(r'HTTP/[^\"]*\"\s+(?:2\d\d|304)\b',line))
+logging.getLogger('werkzeug').addFilter(ChatTransportFilter830())
+
+
+# Real version identity of the running server; cached at module load, not on each request.
+import hashlib as _hashlib830
+_version_source830=Path(__file__).read_text(encoding='utf-8-sig')
+_version_header830=re.search(r'^#.*?\b(\d+\.\d+\.\d+)\b',_version_source830,re.M)
+_running_component830={'version':_version_header830.group(1) if _version_header830 else None,'sha256':_hashlib830.sha256(Path(__file__).read_bytes()).hexdigest()}
+
+@app.route('/api/component-versions')
+def component_versions830():
+    admin_path=Path(BASE_DIR)/'admin.html';admin={'version':None,'sha256':None}
+    try:
+        raw=admin_path.read_bytes();text=raw.decode('utf-8-sig')
+        match=re.search(r'<span\b[^>]*class=[\"\']version[\"\'][^>]*>\s*(\d+\.\d+\.\d+)',text,re.I)
+        if match is None:match=re.search(r'<title>[^<]*?\b(\d+\.\d+\.\d+)\b',text,re.I)
+        admin={'version':match.group(1) if match else None,'sha256':_hashlib830.sha256(raw).hexdigest()}
+    except (OSError,UnicodeError):pass
+    response=jsonify(server=_running_component830,admin=admin)
+    response.headers['Cache-Control']='no-store'
+    return response
+
 
 if __name__ == "__main__":
     with open(__file__, "r", encoding="utf-8-sig") as f:
