@@ -2,7 +2,7 @@
 <!DOCTYPE html>
 <html lang="en">
 
-<head>
+<head><script>window.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.getElementById('mynusAppMenu841')?.hidden&&document.getElementById('mynusAppMenu841')){e.preventDefault();e.stopImmediatePropagation();window.mynusCloseAppMenu841?.();}},true);</script>
 <script>(function(){
 const p=n=>String(n).padStart(2,'0');
 window.mynusTime801=function(value=new Date()) {let raw=value;if(typeof raw==='string'&&/^\d{4}-\d{2}-\d{2} \d{2}:/.test(raw))raw=raw.replace(' ','T')+'Z';const d=new Date(raw);if(isNaN(d))return String(value||'—');const parts=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Jerusalem',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(d).map(x=>[x.type,x.value]));return parts.day+'.'+parts.month+'.'+parts.year+' '+parts.hour+':'+parts.minute+':'+parts.second;};
@@ -21,7 +21,7 @@ window.mynusLogTime801=function(text){return String(text).replace(/\b\d{4}-\d{2}
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 8.4.0</title>
+  <title>MyNus 8.4.1 |  меню верхнего бара</title>
 
 
  <style>
@@ -21646,7 +21646,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "8.4.0",
+    version: "8.4.1",
     duration: Number(duration)||0,
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
@@ -22566,7 +22566,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "8.4.0";
+const MYNUS_CLIENT_VERSION = "8.4.1";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -28740,7 +28740,34 @@ renderTrackNames7920();
 </script>
 <style>.app-menu-dialog800{max-width:560px;min-width:300px;border:0;border-radius:10px;padding:22px}.app-menu-dialog800 button{margin-top:18px;float:right}.app-menu-dialog800::backdrop{background:#0005}.app-menu800{position:fixed;z-index:999999;background:white;box-shadow:0 3px 15px #0005;padding:5px}.app-menu800 button{display:block;width:100%;font-weight:bold;text-align:left}</style><script>(function(){
  const descriptions={Update:'Update checks for a newer version of MyNus. Updates are not connected in this release. Microsoft Store installations will use Store updates.',Upgrade:'Upgrade changes the application level: Basic, Advanced or Pro. Purchasing is not connected in this release.',Help:'MyNus Help\n\nOpen audio and use SPLIT for Separation. Server access requires sign-in.\nProjects preserve editable tracks. MyNus saves karaoke.\nKeys ? lists keyboard shortcuts. Console shows operation messages.\nSeparation supports audio up to 10 minutes. One server task runs at a time; other tasks are queued.'};
+async function showAbout841(exeVersion841){return (async()=>{
+ const exeVersion=exeVersion841||"Browser";
+ const old=document.getElementById('mynusAbout830');if(old){old.close();return;}
+ const box=document.createElement('dialog');box.id='mynusAbout830';box.style.cssText='border:1px solid #ddd;border-radius:10px;padding:22px;width:min(520px,calc(100vw - 32px));box-sizing:border-box;background:#fff;color:#222;font:14px/1.5 Segoe UI,Arial';
+ const title=document.createElement('h3');title.textContent='About MyNus';title.style.cssText='margin:0 0 16px;font-size:18px';box.append(title);
+ const table=document.createElement('div');table.style.cssText='display:grid;grid-template-columns:110px minmax(0,1fr);gap:10px 16px';box.append(table);
+ function row(name,value){const label=document.createElement('strong'),text=document.createElement('span');label.textContent=name;text.textContent=value;text.style.cssText='user-select:text;overflow-wrap:anywhere';table.append(label,text);return text;}
+ row('MyNus.exe',exeVersion);
+ row('index.html',typeof MYNUS_CLIENT_VERSION==='string'?MYNUS_CLIENT_VERSION:'Unavailable');
+ const server=row('server.py','Checking…'),admin=row('admin.html','Checking…');
+ const note=document.createElement('p');note.style.cssText='font-size:12px;color:#666;margin:16px 0 8px;overflow-wrap:anywhere;user-select:text';
+ const base=typeof mynusServerBase==='string'?mynusServerBase:'';note.textContent=base?'Server: '+base:'Server address unavailable';box.append(note);
+ const close=document.createElement('button');close.type='button';close.textContent='OK';close.title='Close version information';close.style.cssText='display:block;margin:18px 0 0 auto;padding:7px 22px';close.onclick=()=>box.close();box.append(close);box.addEventListener('close',()=>box.remove());document.body.append(box);box.showModal();
+ try{
+  if(!base)throw Error('Server address unavailable');
+  const fetcher=typeof mynusNativeFetch==='function'?mynusNativeFetch:window.fetch.bind(window);
+  const response=await fetcher(base+'/api/component-versions',{cache:'no-store',headers:{'X-MyNus-Background':'1'},signal:AbortSignal.timeout(5000)});
+  if(!response.ok)throw Error('Server version information is unavailable ('+response.status+').');
+  const data=await response.json();
+  server.textContent=data.server?.version||'Unavailable';admin.textContent=data.admin?.version||'Unavailable';
+  if(data.server?.sha256)server.title='Running server · SHA-256: '+data.server.sha256;
+  if(data.admin?.sha256)admin.title='Current admin.html · SHA-256: '+data.admin.sha256;
+  note.textContent='Server: '+base;
+ }catch(error){server.textContent=admin.textContent='Unavailable';note.textContent='Server: '+base+'\n'+(error.name==='TimeoutError'?'Connection timed out.':error.message);note.style.whiteSpace='pre-line';}
+})();
+}
  async function openMenu800(action,exeVersion){
+ if(action==='About')return showAbout841(exeVersion);
  const existing=document.querySelector('dialog[data-menu-action840="'+action+'"]');if(existing){existing.close();return;}
   const box=document.createElement('dialog');box.className='app-menu-dialog800';box.dataset.menuAction840=action;const title=document.createElement('h3');title.textContent=action;box.append(title);const content=document.createElement('div');content.style.whiteSpace='pre-wrap';box.append(content);
   const close=document.createElement('button');close.textContent='OK';close.onclick=()=>box.close();box.append(close);box.addEventListener('close',()=>box.remove());document.body.append(box);box.showModal();
@@ -28756,9 +28783,27 @@ renderTrackNames7920();
  }
  window.mynusMenu800=openMenu800;
  window.chrome?.webview?.addEventListener('message',event=>{if(event.data?.type==='mynus-menu800')openMenu800(event.data.action,event.data.exeVersion);});
- // Reuse the existing browser header. Do not add a second bar.
- if(!window.mynusNativeFiles?.available()){
- const bar=document.getElementById('mynusModeBar784')||document.getElementById('mynusBrowserBar7914');if(bar){const button=document.createElement('button');button.textContent='MyNus ▾';button.style.fontWeight='bold';const menu=document.createElement('div');menu.className='app-menu800';menu.hidden=true;for(const action of ['Update','Upgrade','License','Server','About','Help']){const item=document.createElement('button');item.textContent=action;item.onclick=()=>{menu.hidden=true;openMenu800(action);};menu.append(item);}button.onclick=()=>{menu.hidden=!menu.hidden;const r=button.getBoundingClientRect();menu.style.left=r.left+'px';menu.style.top=r.bottom+'px';};const oldBrand=bar.querySelector('.header-brand7915');if(oldBrand){const icon=oldBrand.querySelector('img');if(icon)button.prepend(icon);oldBrand.replaceWith(button);}else (bar.querySelector('.header-left7915')||bar).prepend(button);button.style.cssText='font-weight:bold;background:transparent;color:inherit;border:0;cursor:pointer;height:30px;display:flex;align-items:center;gap:4px';document.body.append(menu);document.addEventListener('pointerdown',e=>{if(!menu.contains(e.target)&&!button.contains(e.target))menu.hidden=true;});}}
+ const menu=document.createElement('section');menu.id='mynusAppMenu841';menu.className='app-menu800';menu.hidden=true;menu.setAttribute('aria-label','MyNus menu');
+ let exeVersion841=null,brandButton841=null;
+ const head=document.createElement('header');head.style.cssText='display:flex;justify-content:flex-end';
+ const cross=document.createElement('button');cross.type='button';cross.textContent='×';cross.title='Close the MyNus menu.';cross.setAttribute('aria-label','Close MyNus menu');cross.style.cssText='width:26px;height:26px;min-height:26px;padding:0;text-align:center;font:18px Arial;border:0;margin:0';head.append(cross);menu.append(head);
+ function close841(){menu.hidden=true;brandButton841?.setAttribute('aria-expanded','false');}
+ cross.onclick=close841;
+ const hints841={Update:'View information about application updates.',Upgrade:'View Basic, Advanced and Pro upgrade information.',License:'View the server-assigned application licence.',Server:'View the configured server address.','Screen Size':'Preview MyNus at another screen size.',About:'View the current EXE, HTML, server and admin versions.',Help:'Read MyNus usage instructions.'};
+ for(const action of ['Update','Upgrade','License','Server','Screen Size','About','Help']){
+  const item=document.createElement('button');item.type='button';item.textContent=action;item.title=hints841[action];item.dataset.action841=action;
+  if(action==='License'||action==='About')item.style.cssText='border-top:1px solid #dce0e7;margin-top:5px;padding-top:12px';
+  item.onclick=()=>{close841();if(action==='Screen Size'&&window.mynusDesktopHeader){window.chrome.webview.postMessage({type:'mynus-menu-command841',action});return;}if(action==='Screen Size'){openMenu800(action,exeVersion841);const content=document.querySelector('dialog[data-menu-action840="Screen Size"]>div');if(content)content.textContent='Screen Size is available in the MyNus desktop application.';return;}void openMenu800(action,exeVersion841);};menu.append(item);
+ }
+ document.body.append(menu);
+ const style841=document.createElement('style');style841.textContent='#mynusAppMenu841{width:240px;box-sizing:border-box;max-width:calc(100vw - 8px);max-height:calc(100dvh - 8px);overflow:auto;font:13px Segoe UI,Arial}#mynusAppMenu841[hidden]{display:none!important}#mynusAppMenu841>button{font:inherit;font-weight:400;text-align:left;width:100%;display:block;border-top:0;margin-top:0;padding:8px 18px}#mynusAppMenu841 header button{border-top:0;margin:0}';document.head.append(style841);
+ function toggle841(anchor){if(!menu.hidden){close841();return;}menu.hidden=false;brandButton841?.setAttribute('aria-expanded','true');const r=anchor?.getBoundingClientRect();menu.style.left=Math.max(4,Math.min(r?.left??4,innerWidth-menu.offsetWidth-4))+'px';menu.style.top=Math.max(4,Math.min(r?.bottom??4,innerHeight-menu.offsetHeight-4))+'px';}
+ window.chrome?.webview?.addEventListener('message',event=>{if(event.data?.type!=='mynus-header-toggle')return;if(event.data.panel==='mynus'){exeVersion841=event.data.exeVersion||exeVersion841;toggle841();}else close841();});
+ if(!window.mynusDesktopHeader){const bar=document.getElementById('mynusModeBar784')||document.getElementById('mynusBrowserBar7914');if(bar){const button=document.createElement('button');brandButton841=button;button.type='button';button.textContent='MyNus';button.title='Open or close the MyNus menu.';button.setAttribute('aria-expanded','false');button.style.cssText='font:13px Segoe UI,Arial;background:transparent;color:inherit;border:0;cursor:pointer;height:30px;display:flex;align-items:center;gap:4px';const oldBrand=bar.querySelector('.header-brand7915');if(oldBrand){const icon=oldBrand.querySelector('img');if(icon)button.prepend(icon);oldBrand.replaceWith(button);}else (bar.querySelector('.header-left7915')||bar).prepend(button);button.onclick=()=>toggle841(button);}}
+ document.addEventListener('pointerdown',e=>{if(!menu.contains(e.target)&&!brandButton841?.contains(e.target))close841();});
+ window.mynusCloseAppMenu841=close841;
+ window.addEventListener('resize',close841);
+
 })();
 </script><style>#loadKaraokeTopBtn{display:none!important}#mnConsolePanel,#mnLoginDialog{top:var(--side-top801,6px)!important;max-height:calc(100dvh - var(--side-top801,6px) - 12px)!important}#mnConsolePanel{height:calc(100dvh - var(--side-top801,6px) - 12px)!important}</style><script>(function(){
 const tips={selectFileBtn:'Select the original audio file.',openProjectStartBtn:'Open a saved project.',splitBtn:'Start Separation or stop the current operation.',mnConsoleButton:'Show or hide the console.',mnLoginButton:'Open account and sign-in options.'};const symbol={'▶':'Start playback.','■':'Stop playback.','×':'Close this window.','−':'Zoom out.','+':'Zoom in.','□':'Resize this window.','?':'Show keyboard shortcuts.'};
