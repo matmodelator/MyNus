@@ -21,7 +21,7 @@ window.mynusLogTime801=function(text){return String(text).replace(/\b\d{4}-\d{2}
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 8.4.1 |  меню верхнего бара</title>
+  <title>MyNus 8.5.0 |  Sep-without-reg</title>
 
 
  <style>
@@ -5553,6 +5553,17 @@ function showMynusRequestFailure(path, code, details) {
 let mynusAuthEpoch760=0;
 const mynusRequests760=new Set();
 let mynusLoggedOut760=!mynusSessionToken;
+let mynusGuest850=false,guestPromise850=null;
+async function ensureIdentity850(){
+ if(guestPromise850)return guestPromise850;
+ guestPromise850=(async()=>{
+  if(mynusSessionToken){const r=await mynusFetch('/api/current-user',{headers:{'X-MyNus-Background':'1'},cache:'no-store'});if(r.ok){const u=await r.json();mynusGuest850=u.status==='Guest';return u;}}
+  const r=await mynusFetch('/api/auth/guest',{method:'POST',headers:{'Content-Type':'application/json','X-MyNus-Background':'1'},body:'{}'});
+  const u=await r.json();if(!r.ok)throw Error(u.error||'Unable to create a guest session.');mynusGuest850=u.status==='Guest';return u;
+ })().finally(()=>guestPromise850=null);
+ return guestPromise850;
+}
+
 function detachServer760(){
  mynusAuthEpoch760++;mynusLoggedOut760=true;mynusSessionToken='';
  localStorage.removeItem('mynusSessionToken:'+mynusServerBase);
@@ -5564,7 +5575,8 @@ async function mynusFetch(input,options={}){
  let path=raw;
  if(raw&&raw.startsWith(mynusServerBase+'/'))path=raw.slice(mynusServerBase.length);
  if(!path||!isMynusServerPath(path))return mynusNativeFetch(input,options);
- const authPath=/^\/api\/auth\/(?:login|register|register-code)(?:$|\?)/.test(path);
+ if(guestPromise850&&/^\/api\/auth\/(?:login|register)(?:$|\?)/.test(path))await guestPromise850.catch(()=>{});
+ const authPath=/^\/api\/auth\/(?:login|register|register-code|guest)(?:$|\?)/.test(path);
  const logout=path==='/api/auth/logout';
  const explicitAccount=path==='/api/current-user';
  if(mynusLoggedOut760&&!authPath&&!logout&&!explicitAccount){
@@ -5593,10 +5605,11 @@ async function mynusFetch(input,options={}){
    if(response.status===401&&!authPath&&!logout&&!explicitAccount&&!mynusLoggedOut760)detachServer760();
    // Only a successful, current login/register response may establish a session.
    if(response.ok&&(authPath||explicitAccount)&&path!=='/api/auth/register-code'){
+     if(path==='/api/auth/guest'||explicitAccount){const identity=await response.clone().json();mynusGuest850=identity.status==='Guest';}else mynusGuest850=false;
      const token=response.headers.get('X-MyNus-Session');
-     if(token){mynusSessionToken=token;mynusLoggedOut760=false;localStorage.setItem('mynusSessionToken:'+mynusServerBase,token);window.dispatchEvent(new CustomEvent('mynus-session-change',{detail:{authenticated:true}}));}
+     if(token){mynusSessionToken=token;mynusLoggedOut760=false;localStorage.setItem('mynusSessionToken:'+mynusServerBase,token);window.dispatchEvent(new CustomEvent('mynus-session-change',{detail:{authenticated:true,guest:mynusGuest850}}));}
    }
-   if(response.ok&&explicitAccount){mynusLoggedOut760=false;window.dispatchEvent(new CustomEvent('mynus-session-change',{detail:{authenticated:true}}));}
+   if(response.ok&&explicitAccount){mynusLoggedOut760=false;window.dispatchEvent(new CustomEvent('mynus-session-change',{detail:{authenticated:true,guest:mynusGuest850}}));}
    if(response.status===401&&explicitAccount&&!mynusLoggedOut760)detachServer760();
    return response;
  }catch(error){
@@ -7237,7 +7250,7 @@ updateSplitButton();
 
 
 async function startSeparation(restoreRequest = null, resumeJob760 = null) {
-    if(mynusLoggedOut760){status.textContent="Sign in or register to start separation.";progressWrap.style.display="block";return;}
+    if(!activeSeparation){try{await ensureIdentity850();}catch(error){status.textContent='Cannot start Separation: '+error.message;progressWrap.style.display='block';return;}}
     if (activeSeparation) {
       await abortCurrentSeparation();
       return;
@@ -21646,7 +21659,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "8.4.1",
+    version: "8.5.0",
     duration: Number(duration)||0,
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
@@ -22566,7 +22579,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "8.4.1";
+const MYNUS_CLIENT_VERSION = "8.5.0";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -24238,7 +24251,7 @@ document.addEventListener("click", event => {
   function showPayments(){accountMenu.hidden=true;profilePanel.hidden=true;paymentsPanel.hidden=false;accountHeading840();message.textContent='';accountStatus('mnPaymentNotice','');loadPayments();}
   document.getElementById('mnOpenProfile').onclick=showProfile;
   document.getElementById('mnOpenPayments').onclick=showPayments;
-  window.mynusOpenPayments820=async()=>{if(!accountChecked)await checkAccountOnDemand();if(!authenticated){openAuthDialog();return;}showPayments();openAccountDropdown();dialog.style.setProperty('z-index','30020','important');await refreshTokens780();};
+  window.mynusOpenPayments820=async()=>{if(mynusGuest850){openAuthDialog();email.focus();return;}if(!accountChecked)await checkAccountOnDemand();if(!authenticated){openAuthDialog();return;}showPayments();openAccountDropdown();dialog.style.setProperty('z-index','30020','important');await refreshTokens780();};
   document.getElementById('mnProfileBack').onclick=showAccountMenu;
   document.getElementById('mnProfileToPayments').onclick=showPayments;
   document.getElementById('mnPaymentsToProfile').onclick=showProfile;
@@ -24292,11 +24305,7 @@ document.addEventListener("click", event => {
   });
   dialog.addEventListener('cancel', event => {if (!authenticated && busy) event.preventDefault();});
   document.getElementById('mnAuthClose').onclick = () => dialog.close();
-  document.addEventListener('pointerdown', event => {
-    if (!authenticated || !dialog.open || !dialog.classList.contains('mnAccountDropdown')) return;
-    if (dialog.contains(event.target) || open.contains(event.target)) return;
-    dialog.close();
-  }, true);
+
 
   document.getElementById('mnLogMode').onclick = () => mode(false);
   document.getElementById('mnRegMode').onclick = () => mode(true);
@@ -24342,7 +24351,7 @@ document.addEventListener("click", event => {
     mode(false);setBusy(false);
   }
   window.addEventListener('mynus-session-change',event=>{
-    if(!event.detail.authenticated)resetAccount760();
+    if(event.detail.guest){if(authenticated)resetAccount760();return;}if(!event.detail.authenticated)resetAccount760();
     else if(!authenticated&&!busy)void checkAccountOnDemand(true);
   });
   window.addEventListener('mynus-open-signin784',()=>{resetAccount760();openAuthDialog();email.focus();});
@@ -24358,7 +24367,7 @@ document.addEventListener("click", event => {
       if (response.status === 401) return;
       if (!response.ok) throw new Error('Unable to verify login');
       if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('Open MyNus at http://127.0.2.1:5000 and check the server version.');
-      const user = await response.json(); authenticated = true; accountUser = user;
+      const user = await response.json(); if(user.status==='Guest'){mynusGuest850=true;accountUser=user;resetAccount760();document.getElementById('mnAuthTitle').textContent='Guest №'+user.user_id;return;} authenticated = true; accountUser = user;
       email.value = user.email || ''; open.textContent = 'Account';
       open.title = 'Open account';
       open.setAttribute('aria-label', 'Account: ' + (user.name || user.email || user.user_id));
@@ -25622,7 +25631,7 @@ for(const id of ['lyricsUndoBtn','lyricsRedoBtn'])document.getElementById(id).ad
  });
  function panels(entry){
   consolePanel.hidden=!entry;consoleButton.setAttribute('aria-expanded',String(entry));
-  if(entry&&!account.open)account.show();else if(!entry&&account.open)account.close();
+
   if(entry)window.mynusLocalConsole.refresh();
  }
  // The initial landing screen is the entry screen. Loading or separating a project exits it.
@@ -25791,7 +25800,7 @@ for(const id of ['lyricsUndoBtn','lyricsRedoBtn'])document.getElementById(id).ad
    nextFrame=now;const values={L:-Infinity,R:-Infinity,Mic:-Infinity};
    for(const [label,node] of Object.entries({...meters,Mic:micAnalyser})){
     if(!node)continue;const data=new Float32Array(node.fftSize);node.getFloatTimeDomainData(data);
-    let peak=0;for(const v of data)peak=Math.max(peak,Math.abs(v));if(label==='L'||label==='R')peak*=outputLevels793[label];values[label]=peak>0?20*Math.log10(peak):-Infinity;
+    let peak=0;for(const v of data)peak=Math.max(peak,Math.abs(v));if(label==='L'||label==='R')peak*=outputLevels793[label];if(label==='Mic')peak*=stemState.microphone?.muted?0:(stemState.microphone?.volume??1);values[label]=peak>0?20*Math.log10(peak):-Infinity;window.mynusMeterDb850=values;
    }
    for(const meter of meterElements){
     const db=values[meter.label],fill=Math.max(0,Math.min(1,(db+48)/54));
@@ -25957,21 +25966,21 @@ async function mountPreview780(box,jobId){
  const local='MyNus · LocalMode · Offline capable · Local features enabled · Separation, server results, profile and payments disabled';
  const server='MyNus · ServerMode · Online only · Signed in · Local and server features enabled · Full results require an access token';
  const instruction='To enable ServerMode, connect to the Internet and sign up or sign in.';
- let signedIn=false,reachable=false,lastMode=null;
+ let signedIn=false,reachable=false,lastMode=null,lastGuest850=null;
  const notice=document.getElementById('mnConsoleNotice');
  function connected(){return signedIn&&reachable&&navigator.onLine!==false;}
  function footer(){if(notice){const text=connected()?'Server '+mynusServerBase:'Out of server';if(notice.textContent!==text)notice.textContent=text;}}
  function render(){
   const mode=connected()?'ServerMode':'LocalMode';
   footer();
-  if(mode===lastMode)return;
+  if(mode===lastMode&&lastGuest850===mynusGuest850)return;lastGuest850=mynusGuest850;
   lastMode=mode;
-  document.title=mode==='ServerMode'?server:local+' · '+instruction;
-  console.info('Mode: '+mode+' · '+(mode==='ServerMode'?'Signed in · Server features enabled':'Local features enabled · Server features disabled'));
+  const serverText850=mynusGuest850?server.replace('Signed in','Guest'):server;document.title=mode==='ServerMode'?serverText850:local+' · '+instruction;
+  console.info('Mode: '+mode+' · '+(mode==='ServerMode'?(mynusGuest850?'Guest · Server features enabled':'Signed in · Server features enabled'):'Local features enabled · Server features disabled'));
   window.dispatchEvent(new CustomEvent('mynus-mode-change784',{detail:{mode}}));
-  if(window.mynusNativeFiles?.available())window.mynusNativeFiles.request('app-mode',{mode}).catch(error=>console.warn('Window mode label:',error.message));
+  if(window.mynusNativeFiles?.available())window.mynusNativeFiles.request('app-mode',{mode,identity:mynusGuest850?'Guest':'Client'}).catch(error=>console.warn('Window mode label:',error.message));
   const fallback=document.getElementById('mynusModeBar784');
-  if(fallback){if(window.mynusUpdateHeaderInfo7915)window.mynusUpdateHeaderInfo7915(mode==='ServerMode'?server:local,mode!=='ServerMode');else{fallback.firstChild.textContent=(mode==='ServerMode'?server:local);fallback.lastChild.hidden=mode==='ServerMode';}}
+  if(fallback){if(window.mynusUpdateHeaderInfo7915)window.mynusUpdateHeaderInfo7915(mode==='ServerMode'?serverText850:local,mode!=='ServerMode');else{fallback.firstChild.textContent=(mode==='ServerMode'?serverText850:local);fallback.lastChild.hidden=mode==='ServerMode';}}
  }
  window.addEventListener('mynus-session-change',event=>{signedIn=!!event.detail?.authenticated;if(signedIn)reachable=true;render();});
  window.addEventListener('mynus-server-availability',event=>{reachable=!!event.detail?.reachable;render();});
@@ -26392,7 +26401,7 @@ function silenceBuffer793(buffer,track,context){const ranges=silenceRanges793(tr
  $('micRecord770').textContent='REC On';$('micStopRecord770').textContent='REC Off';
  const oldRestore=applySequencerHistoryState;applySequencerHistoryState=function(state){oldRestore(state);paint();update();};
  const oldClear=clearProjectState;clearProjectState=function(...args){const result=oldClear.apply(this,args);for(const track of [...stemIds,'master'])if(stemCrop[track])stemCrop[track].silences=[];paint();update();return result;};
- for(const host of document.querySelectorAll('[data-meter770]')){const label=host.dataset.meter770,input=document.createElement('input');input.type='range';input.className='level793';input.min=0;input.max=100;input.value=label==='Mic'?lyricsFullScreenMicRange.value:100;input.setAttribute('aria-label',label==='Mic'?'Microphone input level':label+' output level');input.title=input.getAttribute('aria-label');const scale=host.querySelector('.meter-scale770'),wrap=document.createElement('div');wrap.className='meter-control793';scale.before(wrap);wrap.append(scale,input);input.oninput=()=>{if(label==='Mic'){lyricsFullScreenMicRange.value=input.value;lyricsFullScreenMicRange.dispatchEvent(new Event('input',{bubbles:true}));}else{outputLevels793[label]=Number(input.value)/100;if(outputBus793)outputBus793.gains[label].gain.value=outputLevels793[label];}};if(label==='Mic')lyricsFullScreenMicRange.addEventListener('input',()=>input.value=lyricsFullScreenMicRange.value);}
+ for(const host of document.querySelectorAll('[data-meter770]')){const label=host.dataset.meter770,input=document.createElement('input');input.type='range';input.className='level793';input.min=0;input.max=100;input.value=label==='Mic'?document.getElementById('microphoneVolume').value:100;input.setAttribute('aria-label',label==='Mic'?'Microphone mix level':label+' output level');input.title=input.getAttribute('aria-label');const scale=host.querySelector('.meter-scale770'),wrap=document.createElement('div');wrap.className='meter-control793';scale.before(wrap);wrap.append(scale,input);input.oninput=()=>{if(label==='Mic'){const target=document.getElementById('microphoneVolume');target.value=input.value;target.dispatchEvent(new Event('input',{bubbles:true}));}else{outputLevels793[label]=Number(input.value)/100;if(outputBus793)outputBus793.gains[label].gain.value=outputLevels793[label];}};if(label==='Mic')document.getElementById('microphoneVolume').addEventListener('input',()=>input.value=document.getElementById('microphoneVolume').value);}
  paint();update();refreshGroups782();
 })();
 
@@ -27815,7 +27824,7 @@ function layoutFullscreen7912(){
   const meters=side==='left'?[group]:[...group.querySelectorAll('.fs-meter770')];
   for(const meter of meters){set(meter,'gap',Math.max(0,icon.top-rect.bottom)+'px');const box=meter.querySelector('.meter-frame7911');if(!box)continue;
    set(box,'height',rect.height+'px');set(box,'display','block');set(box,'paddingTop',Math.max(0,range.top-rect.top-1)+'px');set(box,'paddingBottom',Math.max(0,rect.bottom-range.bottom-1)+'px');
-   const bar=box.querySelector('.meter-scale770');bar.style.setProperty('height',range.height+'px','important');
+   const bar=box.querySelector('.meter-scale770');bar.style.setProperty('height',bar.closest('.meter-control793')?'100%':range.height+'px','important');
   }
  }
  const left=mic&&!mic.hidden?mic.getBoundingClientRect().right:lyricsFullScreenMicBtn.getBoundingClientRect().right;
@@ -28740,7 +28749,7 @@ renderTrackNames7920();
 </script>
 <style>.app-menu-dialog800{max-width:560px;min-width:300px;border:0;border-radius:10px;padding:22px}.app-menu-dialog800 button{margin-top:18px;float:right}.app-menu-dialog800::backdrop{background:#0005}.app-menu800{position:fixed;z-index:999999;background:white;box-shadow:0 3px 15px #0005;padding:5px}.app-menu800 button{display:block;width:100%;font-weight:bold;text-align:left}</style><script>(function(){
  const descriptions={Update:'Update checks for a newer version of MyNus. Updates are not connected in this release. Microsoft Store installations will use Store updates.',Upgrade:'Upgrade changes the application level: Basic, Advanced or Pro. Purchasing is not connected in this release.',Help:'MyNus Help\n\nOpen audio and use SPLIT for Separation. Server access requires sign-in.\nProjects preserve editable tracks. MyNus saves karaoke.\nKeys ? lists keyboard shortcuts. Console shows operation messages.\nSeparation supports audio up to 10 minutes. One server task runs at a time; other tasks are queued.'};
-async function showAbout841(exeVersion841){return (async()=>{
+async function showAbout841(exeVersion841,anchor850){return (async()=>{
  const exeVersion=exeVersion841||"Browser";
  const old=document.getElementById('mynusAbout830');if(old){old.close();return;}
  const box=document.createElement('dialog');box.id='mynusAbout830';box.style.cssText='border:1px solid #ddd;border-radius:10px;padding:22px;width:min(520px,calc(100vw - 32px));box-sizing:border-box;background:#fff;color:#222;font:14px/1.5 Segoe UI,Arial';
@@ -28752,7 +28761,7 @@ async function showAbout841(exeVersion841){return (async()=>{
  const server=row('server.py','Checking…'),admin=row('admin.html','Checking…');
  const note=document.createElement('p');note.style.cssText='font-size:12px;color:#666;margin:16px 0 8px;overflow-wrap:anywhere;user-select:text';
  const base=typeof mynusServerBase==='string'?mynusServerBase:'';note.textContent=base?'Server: '+base:'Server address unavailable';box.append(note);
- const close=document.createElement('button');close.type='button';close.textContent='OK';close.title='Close version information';close.style.cssText='display:block;margin:18px 0 0 auto;padding:7px 22px';close.onclick=()=>box.close();box.append(close);box.addEventListener('close',()=>box.remove());document.body.append(box);box.showModal();
+ const close=document.createElement('button');close.type='button';close.textContent='OK';close.title='Close version information';close.style.cssText='display:block;margin:18px 0 0 auto;padding:7px 22px';close.onclick=()=>box.close();box.append(close);box.addEventListener('close',()=>box.remove());document.body.append(box);box.show();window.mynusPositionCascade850?.(box,anchor850);
  try{
   if(!base)throw Error('Server address unavailable');
   const fetcher=typeof mynusNativeFetch==='function'?mynusNativeFetch:window.fetch.bind(window);
@@ -28766,11 +28775,11 @@ async function showAbout841(exeVersion841){return (async()=>{
  }catch(error){server.textContent=admin.textContent='Unavailable';note.textContent='Server: '+base+'\n'+(error.name==='TimeoutError'?'Connection timed out.':error.message);note.style.whiteSpace='pre-line';}
 })();
 }
- async function openMenu800(action,exeVersion){
- if(action==='About')return showAbout841(exeVersion);
+ async function openMenu800(action,exeVersion,anchor850){
+ if(action==='About')return showAbout841(exeVersion,anchor850);
  const existing=document.querySelector('dialog[data-menu-action840="'+action+'"]');if(existing){existing.close();return;}
   const box=document.createElement('dialog');box.className='app-menu-dialog800';box.dataset.menuAction840=action;const title=document.createElement('h3');title.textContent=action;box.append(title);const content=document.createElement('div');content.style.whiteSpace='pre-wrap';box.append(content);
-  const close=document.createElement('button');close.textContent='OK';close.onclick=()=>box.close();box.append(close);box.addEventListener('close',()=>box.remove());document.body.append(box);box.showModal();
+  const close=document.createElement('button');close.textContent='OK';close.onclick=()=>box.close();box.append(close);box.addEventListener('close',()=>box.remove());document.body.append(box);box.show();window.mynusPositionCascade850?.(box,anchor850);
   if(action==='About'){
  const local='MyNus\nEXE: '+(exeVersion?String(exeVersion).replace(/^(\d+\.\d+\.\d+)\.0$/,'$1'):'Browser')+'\nHTML: '+MYNUS_CLIENT_VERSION;
  content.textContent=local+'\nServer: Checking…\nAdmin: Checking…';
@@ -28784,25 +28793,37 @@ async function showAbout841(exeVersion841){return (async()=>{
  window.mynusMenu800=openMenu800;
  window.chrome?.webview?.addEventListener('message',event=>{if(event.data?.type==='mynus-menu800')openMenu800(event.data.action,event.data.exeVersion);});
  const menu=document.createElement('section');menu.id='mynusAppMenu841';menu.className='app-menu800';menu.hidden=true;menu.setAttribute('aria-label','MyNus menu');
+ const settings=document.createElement('section');settings.className='app-menu800 cascade850';settings.id='mynusSettings850';settings.hidden=true;
  let exeVersion841=null,brandButton841=null;
- const head=document.createElement('header');head.style.cssText='display:flex;justify-content:flex-end';
- const cross=document.createElement('button');cross.type='button';cross.textContent='×';cross.title='Close the MyNus menu.';cross.setAttribute('aria-label','Close MyNus menu');cross.style.cssText='width:26px;height:26px;min-height:26px;padding:0;text-align:center;font:18px Arial;border:0;margin:0';head.append(cross);menu.append(head);
- function close841(){menu.hidden=true;brandButton841?.setAttribute('aria-expanded','false');}
- cross.onclick=close841;
- const hints841={Update:'View information about application updates.',Upgrade:'View Basic, Advanced and Pro upgrade information.',License:'View the server-assigned application licence.',Server:'View the configured server address.','Screen Size':'Preview MyNus at another screen size.',About:'View the current EXE, HTML, server and admin versions.',Help:'Read MyNus usage instructions.'};
- for(const action of ['Update','Upgrade','License','Server','Screen Size','About','Help']){
-  const item=document.createElement('button');item.type='button';item.textContent=action;item.title=hints841[action];item.dataset.action841=action;
-  if(action==='License'||action==='About')item.style.cssText='border-top:1px solid #dce0e7;margin-top:5px;padding-top:12px';
-  item.onclick=()=>{close841();if(action==='Screen Size'&&window.mynusDesktopHeader){window.chrome.webview.postMessage({type:'mynus-menu-command841',action});return;}if(action==='Screen Size'){openMenu800(action,exeVersion841);const content=document.querySelector('dialog[data-menu-action840="Screen Size"]>div');if(content)content.textContent='Screen Size is available in the MyNus desktop application.';return;}void openMenu800(action,exeVersion841);};menu.append(item);
+ function position850(box,anchor){
+  box.classList.add('cascade850');const a=anchor?.getBoundingClientRect?.()||menu.getBoundingClientRect();
+  box.style.position='fixed';box.style.margin='0';box.style.inset='auto';box.style.maxHeight='calc(100dvh - 12px)';box.style.overflow='auto';
+  const b=box.getBoundingClientRect(),right=a.right+6,left=a.left-b.width-6;
+  box.style.left=Math.max(6,Math.min(right+b.width<=innerWidth-6?right:left,innerWidth-b.width-6))+'px';
+  box.style.top=Math.max(6,Math.min(a.top,innerHeight-b.height-6))+'px';
  }
- document.body.append(menu);
- const style841=document.createElement('style');style841.textContent='#mynusAppMenu841{width:240px;box-sizing:border-box;max-width:calc(100vw - 8px);max-height:calc(100dvh - 8px);overflow:auto;font:13px Segoe UI,Arial}#mynusAppMenu841[hidden]{display:none!important}#mynusAppMenu841>button{font:inherit;font-weight:400;text-align:left;width:100%;display:block;border-top:0;margin-top:0;padding:8px 18px}#mynusAppMenu841 header button{border-top:0;margin:0}';document.head.append(style841);
- function toggle841(anchor){if(!menu.hidden){close841();return;}menu.hidden=false;brandButton841?.setAttribute('aria-expanded','true');const r=anchor?.getBoundingClientRect();menu.style.left=Math.max(4,Math.min(r?.left??4,innerWidth-menu.offsetWidth-4))+'px';menu.style.top=Math.max(4,Math.min(r?.bottom??4,innerHeight-menu.offsetHeight-4))+'px';}
- window.chrome?.webview?.addEventListener('message',event=>{if(event.data?.type!=='mynus-header-toggle')return;if(event.data.panel==='mynus'){exeVersion841=event.data.exeVersion||exeVersion841;toggle841();}else close841();});
- if(!window.mynusDesktopHeader){const bar=document.getElementById('mynusModeBar784')||document.getElementById('mynusBrowserBar7914');if(bar){const button=document.createElement('button');brandButton841=button;button.type='button';button.textContent='MyNus';button.title='Open or close the MyNus menu.';button.setAttribute('aria-expanded','false');button.style.cssText='font:13px Segoe UI,Arial;background:transparent;color:inherit;border:0;cursor:pointer;height:30px;display:flex;align-items:center;gap:4px';const oldBrand=bar.querySelector('.header-brand7915');if(oldBrand){const icon=oldBrand.querySelector('img');if(icon)button.prepend(icon);oldBrand.replaceWith(button);}else (bar.querySelector('.header-left7915')||bar).prepend(button);button.onclick=()=>toggle841(button);}}
- document.addEventListener('pointerdown',e=>{if(!menu.contains(e.target)&&!brandButton841?.contains(e.target))close841();});
- window.mynusCloseAppMenu841=close841;
- window.addEventListener('resize',close841);
+ window.mynusPositionCascade850=position850;
+ function closeChildren850(){settings.hidden=true;for(const box of document.querySelectorAll('.app-menu-dialog800,#mynusAbout830'))if(box.open)box.close();}
+ function close841(){menu.hidden=true;closeChildren850();brandButton841?.setAttribute('aria-expanded','false');}
+ const header=document.createElement('header');header.style.cssText='display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #dce0e7;margin-bottom:5px';
+ const setting=document.createElement('button');setting.type='button';setting.textContent='Settings ›';setting.title='Open application settings.';setting.style.cssText='flex:1;width:auto;text-align:left';
+ const cross=document.createElement('button');cross.type='button';cross.textContent='×';cross.title='Close the MyNus menu.';cross.setAttribute('aria-label','Close MyNus menu');cross.style.cssText='width:26px;height:26px;min-height:26px;padding:0;text-align:center;font:18px Arial';cross.onclick=close841;header.append(setting,cross);menu.append(header);
+ setting.onclick=()=>{const opening=settings.hidden;closeChildren850();settings.hidden=!opening;if(opening)position850(settings,menu);};
+ const size=document.createElement('button');size.type='button';size.textContent='Screen Size';size.title='Preview MyNus at another screen size.';size.dataset.action841='Screen Size';settings.append(size);
+ size.onclick=()=>{if(!window.mynusDesktopHeader){void openMenu800('Screen Size',exeVersion841,settings);return;}const a=settings.getBoundingClientRect(),w=340,x=a.right+6+w<=innerWidth?a.right+6:Math.max(6,a.left-w-6);window.chrome.webview.postMessage({type:'mynus-menu-command841',action:'Screen Size',x,y:a.top});};
+ const hints={Update:'View information about application updates.',Upgrade:'View Basic, Advanced and Pro upgrade information.',License:'View the server-assigned application licence.',Server:'View the configured server address.',About:'View the current EXE, HTML, server and admin versions.',Help:'Read MyNus usage instructions.'};
+ for(const action of ['Update','Upgrade','License','Server','About','Help']){
+  const item=document.createElement('button');item.type='button';item.textContent=action;item.title=hints[action];item.dataset.action841=action;
+  if(action==='License'||action==='About')item.style.cssText='border-top:1px solid #dce0e7;margin-top:5px;padding-top:12px';
+  item.onclick=()=>{settings.hidden=true;const old=document.querySelector(action==='About'?'#mynusAbout830':'dialog[data-menu-action840="'+action+'"]');const wasOpen=!!old?.open;for(const box of document.querySelectorAll('.app-menu-dialog800,#mynusAbout830'))if(box.open)box.close();if(!wasOpen)void openMenu800(action,exeVersion841,menu);};menu.append(item);
+ }
+ document.body.append(menu,settings);
+ const css=document.createElement('style');css.textContent='#mynusAppMenu841,#mynusSettings850{width:240px;box-sizing:border-box;max-width:calc(100vw - 12px);max-height:calc(100dvh - 12px);overflow:auto;font:13px Segoe UI,Arial;z-index:30030}#mynusAppMenu841[hidden],#mynusSettings850[hidden]{display:none!important}#mynusAppMenu841 button,#mynusSettings850 button{font:inherit;font-weight:400;display:block;border-top:0;margin-top:0;padding:8px 18px}#mynusAppMenu841>button,#mynusSettings850>button{width:100%;text-align:left}.app-menu-dialog800.cascade850,#mynusAbout830.cascade850{z-index:30032!important;box-sizing:border-box;max-width:calc(100vw - 12px)}';document.head.append(css);
+ function toggle841(anchor){if(!menu.hidden){close841();return;}menu.hidden=false;brandButton841?.setAttribute('aria-expanded','true');const a=anchor?.getBoundingClientRect();menu.style.left=Math.max(6,Math.min(a?.left??6,innerWidth-menu.offsetWidth-6))+'px';menu.style.top=Math.max(6,Math.min(a?.bottom??6,innerHeight-menu.offsetHeight-6))+'px';}
+ window.chrome?.webview?.addEventListener('message',e=>{if(e.data?.type==='mynus-header-toggle'&&e.data.panel==='mynus'){exeVersion841=e.data.exeVersion||exeVersion841;toggle841();}});
+ if(!window.mynusDesktopHeader){const bar=document.getElementById('mynusModeBar784')||document.getElementById('mynusBrowserBar7914');if(bar){const button=document.createElement('button');brandButton841=button;button.type='button';button.textContent='MyNus';button.title='Open or close the MyNus menu.';button.style.cssText='font:13px Segoe UI;background:transparent;color:inherit;border:0;cursor:pointer;height:30px';const old=bar.querySelector('.header-brand7915');if(old)old.replaceWith(button);else (bar.querySelector('.header-left7915')||bar).prepend(button);button.onclick=()=>toggle841(button);}}
+ window.mynusCloseAppMenu841=()=>{const child=document.querySelector('.app-menu-dialog800[open],#mynusAbout830[open]');if(child){child.close();return;}if(!settings.hidden){settings.hidden=true;return;}close841();};
+ window.addEventListener('resize',()=>{if(!menu.hidden){menu.style.left='6px';menu.style.top='6px';if(!settings.hidden)position850(settings,menu);for(const box of document.querySelectorAll('.app-menu-dialog800[open],#mynusAbout830[open]'))position850(box,menu);}});
 
 })();
 </script><style>#loadKaraokeTopBtn{display:none!important}#mnConsolePanel,#mnLoginDialog{top:var(--side-top801,6px)!important;max-height:calc(100dvh - var(--side-top801,6px) - 12px)!important}#mnConsolePanel{height:calc(100dvh - var(--side-top801,6px) - 12px)!important}</style><script>(function(){
@@ -28843,10 +28864,10 @@ async function refresh(){
   );
 
   data.download_allowed=!!paid;
-  use.textContent=paid?'Download':'Use Token';
+  use.textContent=mynusGuest850?'Sign in / Register':paid?'Download':'Use Token';
   use.title=paid?'Download this result again. No additional token required.':
    'Apply token to this separation result.';
-  message.textContent=paid?
+  message.textContent=mynusGuest850?'Sign in or register to get the full result. Your Separation will be kept.':paid?
    'Access granted. Download this result again until deletion.':
    available?'Access available. Choose Use Token to download this result.':
    'No active token. Open Account / Payments to view access.';
@@ -28871,6 +28892,7 @@ async function refresh(){
   }
 
   function sessionChanged(event){
+   if(event.detail.authenticated){void refresh();return;}
    if(!event.detail.authenticated){
     finish(new DOMException('Signed out.','AbortError'));
    }
@@ -28887,6 +28909,7 @@ async function refresh(){
 
   use.onclick=async()=>{
    if(busy)return;
+   if(mynusGuest850){window.dispatchEvent(new Event('mynus-open-signin784'));return;}
 
    if(data.download_allowed){
     finish();
@@ -29111,7 +29134,7 @@ for(const [id,title] of [['mnConsoleCopy','Copy all messages from the console.']
    return;
   }
   chatOpen=!chatOpen;
-  if(chatOpen&&!admin&&host.open)host.close();
+  
   layout();
   if(chatOpen){
    list.focus({preventScroll:true});
@@ -29176,5 +29199,55 @@ html[data-chat-admin830="1"] .mynus-chat830[data-online=true] .chat-user830{colo
 
 #mnLoginDialog.mnAccountDropdown input,#mnLoginDialog.mnAccountDropdown select{background:#fff!important;color:#222!important;border-color:#ccc}#mnLoginDialog.mnAccountDropdown .mnAccountStatus.success{background:transparent!important;color:#227348!important}#mnLoginDialog.mnAccountDropdown .mnAccountStatus.error{color:#b42318!important}#accountTitle{overflow-wrap:anywhere}
 </style>
+<style>
+/* 8.5.0 gain faders share the complete meter lane. */
+.gain850{--thumb850:#f13f3f;accent-color:var(--thumb850)}
+.gain850::-webkit-slider-thumb{background:var(--thumb850)!important;border:1px solid #111!important;box-shadow:0 0 0 1px #ddd9!important}
+.gain850::-moz-range-thumb{background:var(--thumb850)!important;border:1px solid #111!important}
+.meter-control793{position:relative!important;display:block!important;width:100%!important;height:100%!important}
+.meter-control793>.meter-scale770{position:absolute!important;inset:0!important;width:100%!important;height:100%!important}
+.meter-control793>.level793{position:absolute!important;inset:0!important;margin:0!important;width:100%!important;height:100%!important;background:transparent!important;z-index:3;writing-mode:vertical-lr;direction:rtl;appearance:none;-webkit-appearance:none;cursor:ns-resize}
+.meter-control793>.level793::-webkit-slider-runnable-track{background:transparent;border:0;width:100%;height:100%}
+.meter-control793>.level793::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:22px;height:9px;border-radius:3px;background:var(--thumb850)!important;border:1px solid #111;box-shadow:0 0 0 1px #eee9}
+.meter-control793>.level793::-moz-range-track{background:transparent}
+.meter-control793>.level793::-moz-range-thumb{width:22px;height:9px;border-radius:3px}
+#lyricsFullScreenView .meter-frame7911>.meter-control793{position:absolute!important;left:4px;right:4px;top:24px;bottom:20px;width:auto!important;height:auto!important}
+#lyricsFullScreenView .meter-frame7911>.gain-value850{position:absolute;left:0;right:0;top:3px;font:11px Consolas;text-align:center;color:#fff;pointer-events:none}
+#lyricsFullScreenView .meter-frame7911 .meter-number770{font:9px Consolas!important;bottom:2px!important}
+.source-hidden850{visibility:hidden!important;pointer-events:none!important}
+#lyricsFullScreenVolumeScale.master850{padding:24px 4px 20px!important;box-sizing:border-box}
+#lyricsFullScreenView .master850 .master-lane850{position:relative;width:100%;height:100%;overflow:hidden}
+.master850 .master-signal850{position:absolute;inset:0;background:linear-gradient(to top,#258b4c 0%,#69b544 55%,#e8c538 78%,#e24535 100%)}
+.master850 .master-cover850{position:absolute;inset:0 0 auto;height:100%;background:#151515}
+#lyricsFullScreenVolumeRange.gain850{position:absolute!important;inset:24px 4px 20px!important;width:calc(100% - 8px)!important;height:calc(100% - 44px)!important;appearance:none;-webkit-appearance:none;writing-mode:vertical-lr;direction:rtl;margin:0!important;background:transparent!important;z-index:3}
+#lyricsFullScreenVolumeRange.gain850::-webkit-slider-runnable-track{background:transparent}
+#lyricsFullScreenVolumeRange.gain850::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:22px;height:9px;border-radius:3px}
+#lyricsFullScreenVolumeScale.master850 .scale-value{position:absolute;top:3px;left:0;right:0;font:11px Consolas;text-align:center;z-index:4;pointer-events:none}
+.input-level850{display:flex;align-items:center;gap:10px;font:12px Segoe UI;padding:8px 12px}.input-level850 input{flex:1;min-width:0}.input-level850 output{width:35px;text-align:right}
+</style>
+<script>
+(()=>{
+ function paint(input){const p=(Number(input.value)-Number(input.min||0))/(Number(input.max||100)-Number(input.min||0));const hue=Math.max(0,Math.min(120,(1-p)*120));input.style.setProperty('--thumb850','hsl('+hue+' 78% 49%)');const value=(input.closest('.meter-frame7911')||input.parentElement).querySelector('.gain-value850');if(value)value.textContent=input.value;}
+ function decorate(input){if(input.dataset.gain850)return;input.dataset.gain850='1';input.classList.add('gain850');input.addEventListener('input',()=>paint(input));paint(input);}
+ function enhance(){for(const input of document.querySelectorAll('.volume-row input[type=range],.lyrics-fullscreen-track-control input[type=range],.level793,#lyricsFullScreenVolumeRange,#lyricsFullScreenMicRange'))decorate(input);}
+ enhance();new MutationObserver(enhance).observe(document.body,{childList:true,subtree:true});
+ // Remove duplicate meter/fader columns while retaining existing anchor geometry.
+ const mic=document.querySelector('.fs-meter770.mic'),stereo=document.querySelector('.fs-stereo780');
+ const meters=[...document.querySelectorAll('#lyricsFullScreenView .fs-meter770')];
+ for(const host of meters){const frame=host.querySelector('.meter-frame7911'),scale=frame?.querySelector('.meter-scale770');if(!frame||!scale)continue;
+  const label=host.classList.contains('mic')?'Mic':host===stereo?.firstElementChild?'L':'R';const wrap=document.createElement('div');wrap.className='meter-control793';const input=document.createElement('input');input.type='range';input.className='level793';input.min=0;input.max=100;input.step=1;input.value=label==='Mic'?document.getElementById('microphoneVolume').value:String(Math.round(outputLevels793[label]*100));input.setAttribute('aria-label',label==='Mic'?'Microphone mix level':label+' output level');input.title=input.getAttribute('aria-label');wrap.append(scale,input);frame.append(wrap);const value=document.createElement('span');value.className='gain-value850';frame.append(value);
+  scale.style.setProperty('height','100%','important');input.addEventListener('input',()=>{if(label==='Mic'){const target=document.getElementById('microphoneVolume');target.value=input.value;target.dispatchEvent(new Event('input',{bubbles:true}));}else{outputLevels793[label]=Number(input.value)/100;if(outputBus793)outputBus793.gains[label].gain.value=outputLevels793[label];}paint(input);});if(label==='Mic')document.getElementById('microphoneVolume').addEventListener('input',()=>{input.value=document.getElementById('microphoneVolume').value;paint(input);});decorate(input);paint(input);
+ }
+ const originalMic=document.getElementById('lyricsFullScreenMicScale');originalMic.classList.add('source-hidden850');
+ const beforeLayout850=layoutFullscreen7911;layoutFullscreen7911=function(){beforeLayout850();if(mic&&!originalMic.hidden){const r=originalMic.getBoundingClientRect(),f=document.getElementById('lyricsFullScreenView').getBoundingClientRect();mic.style.setProperty('left',(r.left-f.left)+'px','important');}};window.layoutFullscreen7911=layoutFullscreen7911;alignFullScreenMeters780=layoutFullscreen7911;
+ const originalMaster=document.getElementById('lyricsFullScreenVolumeScale');originalMaster.classList.add('master850');
+ const lane=document.createElement('div');lane.className='master-lane850';lane.innerHTML='<div class="master-signal850"></div><div class="master-cover850"></div>';originalMaster.prepend(lane);
+ // Input gain remains available in the existing track menu, not as a duplicate column.
+ const inputSettings=document.createElement('label');inputSettings.className='input-level850';const text=document.createElement('span');text.textContent='Microphone input';const clone=document.createElement('input');clone.type='range';clone.min=0;clone.max=100;clone.value=lyricsFullScreenMicRange.value;clone.title='Microphone input gain before mixing.';const output=document.createElement('output');output.textContent=clone.value+'%';inputSettings.append(text,clone,output);document.getElementById('lyricsFullScreenTracksMenu').append(inputSettings);clone.oninput=()=>{lyricsFullScreenMicRange.value=clone.value;lyricsFullScreenMicRange.dispatchEvent(new Event('input',{bubbles:true}));output.textContent=clone.value+'%';};decorate(clone);
+ let last=0;function frame(now){if(now-last>50){last=now;enhance();for(const i of document.querySelectorAll('.gain850'))paint(i);const values=window.mynusMeterDb850||{},db=Math.max(values.L??-Infinity,values.R??-Infinity),fill=Math.max(0,Math.min(1,(db+48)/54));lane.querySelector('.master-cover850').style.height=(100-fill*100)+'%';}requestAnimationFrame(frame);}requestAnimationFrame(frame);
+ queueMicrotask(()=>{if(navigator.onLine!==false)void ensureIdentity850().catch(()=>{});});
+})();
+</script>
+
 </body>
 </html>
