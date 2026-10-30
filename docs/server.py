@@ -1,5 +1,5 @@
 # ========================================
-# MyNus 8.3.0 — Messages+Exe
+# MyNus 8.4.0 | Chats
 # ========================================
 
 # ========================================
@@ -3882,7 +3882,7 @@ def admin_monitor800():
     for item in stored:
         if item['job_id'] in live:item.update(live[item['job_id']])
         item['source_name']=names.get(item['job_id'],item['job_id'])
-    return jsonify(server_version='8.3.0',system=dict(_system800),cpu_percent=_system800.get('cpu_percent',0),ram_total_mb=round(memory.total/1048576),ram_available_mb=round(memory.available/1048576),tasks=stored,licences=users)
+    return jsonify(server_version='8.4.0',system=dict(_system800),cpu_percent=_system800.get('cpu_percent',0),ram_total_mb=round(memory.total/1048576),ram_available_mb=round(memory.available/1048576),tasks=stored,licences=users)
 
 
 @app.route('/api/admin/licence',methods=['POST'])
@@ -3900,7 +3900,7 @@ def admin_licence800():
 def licence800():
     uid=current_user_id()
     with db_connection() as db:row=db.execute('SELECT level FROM licences800 WHERE user_id=?',(uid,)).fetchone()
-    return jsonify(level=row['level'] if row else 'Basic',server_version='8.3.0')
+    return jsonify(level=row['level'] if row else 'Basic',server_version='8.4.0')
 
 threading.Thread(target=_monitor800,daemon=True).start()
 
@@ -3977,7 +3977,7 @@ def _queue_info801():
 _monitor_before801=admin_monitor800
 
 def admin_monitor801():
-    response=_monitor_before801();data=response.get_json();data['server_version']='8.3.0';data.pop('licences',None)
+    response=_monitor_before801();data=response.get_json();data['server_version']='8.4.0';data.pop('licences',None)
     data['queue']=_queue_info801()
     with _queue_condition800:data['history']=list(_history801)
     return jsonify(data)
@@ -4416,6 +4416,40 @@ def component_versions830():
     response=jsonify(server=_running_component830,admin=admin)
     response.headers['Cache-Control']='no-store'
     return response
+
+
+# 8.4.0 — active conversations remain listed for one day after all incoming messages are read.
+with db_connection() as db:
+    db.execute('''CREATE TABLE IF NOT EXISTS chat_activity840(user_id INTEGER PRIMARY KEY REFERENCES users(user_id),cleared_at TEXT NOT NULL)''')
+    for row in db.execute("SELECT DISTINCT m.user_id FROM chat_messages830 m JOIN chat_reads830 r ON r.user_id=m.user_id WHERE m.sender='user' AND NOT EXISTS(SELECT 1 FROM chat_messages830 n WHERE n.user_id=m.user_id AND n.sender='user' AND n.message_id>r.admin_read)").fetchall():
+        db.execute('INSERT OR IGNORE INTO chat_activity840 VALUES(?,?)',(row['user_id'],_utc760()))
+
+_chat_read_before840=_chat_read830
+
+def _chat_read830(uid,role):
+    before=0
+    if role=='admin':
+        with db_connection() as db:
+            before=db.execute("SELECT count(*) FROM chat_messages830 m WHERE m.user_id=? AND m.sender='user' AND m.message_id>COALESCE((SELECT admin_read FROM chat_reads830 WHERE user_id=?),0)",(uid,uid)).fetchone()[0]
+    response=_chat_read_before840(uid,role)
+    if role=='admin' and before:
+        with db_connection() as db:
+            remaining=db.execute("SELECT count(*) FROM chat_messages830 m WHERE m.user_id=? AND m.sender='user' AND m.message_id>COALESCE((SELECT admin_read FROM chat_reads830 WHERE user_id=?),0)",(uid,uid)).fetchone()[0]
+            if not remaining:db.execute('INSERT INTO chat_activity840 VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET cleared_at=excluded.cleared_at',(uid,_utc760()))
+    return response
+
+_threads_before840=chat_admin_threads830
+
+def chat_admin_threads840():
+    response=_threads_before840();data=response.get_json()
+    cutoff=(datetime.now(timezone.utc)-timedelta(days=1)).isoformat(timespec='milliseconds').replace('+00:00','Z')
+    with db_connection() as db:cleared={r['user_id']:r['cleared_at'] for r in db.execute('SELECT * FROM chat_activity840')}
+    for item in data['threads']:
+        item['cleared_at']=cleared.get(item['user_id'])
+        item['active']=bool(item['latest_incoming_id'] and (item['unread'] or (item['cleared_at'] and item['cleared_at']>cutoff)))
+    data['active_count']=sum(bool(t['active']) for t in data['threads'])
+    return jsonify(data)
+app.view_functions['chat_admin_threads830']=admin_required(chat_admin_threads840)
 
 
 if __name__ == "__main__":
