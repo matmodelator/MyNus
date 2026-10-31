@@ -1,5 +1,5 @@
 # ========================================
-# MyNus 8.5.0 | Sep-without-reg
+# MyNus 8.6.0 | noGuestID
 # ========================================
 
 # ========================================
@@ -51,7 +51,7 @@ def desktop_session_and_preflight():
     if origin in DESKTOP_ORIGINS and request.method == "OPTIONS" and _desktop_api_path(request.path):
         return "", 204
     auth = request.headers.get("Authorization", "")
-    if auth.startswith("Bearer "):
+    if auth.startswith("Bearer ") and request.path!="/api/separations/legacy-guest":
         key=auth[7:]
         with db_connection() as db:
             row=db.execute('SELECT session_id,user_id FROM sessions WHERE login_key=? AND revoked_at IS NULL',(key,)).fetchone() if re.fullmatch(r'[A-Za-z0-9_-]{11}',key) else None
@@ -69,7 +69,7 @@ def desktop_response_headers(response):
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Last-Event-ID, X-MyNus-Load-Trace, X-MyNus-Load-Track, X-MyNus-Client, X-MyNus-Background"
         response.headers["Access-Control-Expose-Headers"] = "X-MyNus-Session"
         response.vary.add("Origin")
-    if request.path in ("/api/auth/login","/api/auth/register","/api/auth/logout","/api/auth/guest","/api/current-user") and request.method != "OPTIONS":
+    if request.path in ("/api/auth/login","/api/auth/register","/api/auth/logout","/api/current-user") and request.method != "OPTIONS":
         with db_connection() as db:
             row=db.execute('SELECT login_key FROM sessions WHERE session_id=? AND user_id=? AND revoked_at IS NULL',(session.get('session_id'),session.get('user_id'))).fetchone()
         response.headers['X-MyNus-Session']=row['login_key'] if row else ''
@@ -255,7 +255,7 @@ def json_http_error(error):
 
 @app.route("/", methods=["GET"])
 def server_status():
-    return jsonify(service="MyNus Server", version="8.5.0", status="ready")
+    return jsonify(service="MyNus Server", version="8.6.0", status="ready")
 
 
 # ========================================
@@ -1970,7 +1970,7 @@ def save_project():
             )
             row = db.execute(
                 """SELECT project_id,separation_id FROM projects
-                   WHERE user_id=? AND client_request_id=?""",
+                   WHERE user_id IS ? AND client_request_id=?""",
                 (uid, key),
             ).fetchone()
             write_log(
@@ -2032,12 +2032,12 @@ def save_current_lyrics():
         with db_connection() as db:
             db.execute(
                 """UPDATE projects SET updated_at=?
-                   WHERE user_id=? AND client_request_id=?""",
+                   WHERE user_id IS ? AND client_request_id=?""",
                 (utc_now(), uid, key),
             )
             row = db.execute(
                 """SELECT project_id,separation_id FROM projects
-                   WHERE user_id=? AND client_request_id=?""",
+                   WHERE user_id IS ? AND client_request_id=?""",
                 (uid, key),
             ).fetchone()
             if row:
@@ -2329,6 +2329,7 @@ def register_code():
 @app.route("/api/auth/register", methods=["POST"])
 def register_user():
     data = auth_request_data()
+    requested_jobs860=parse_jobs860(data.get('job_ids',[]))
     try:
         email = auth_email(data.get("email"))
     except ValueError as exc:
@@ -2346,23 +2347,19 @@ def register_user():
             return jsonify(error="Incorrect code."), 400
         try:
             with db_connection() as db:
-                guest_id=session.get('user_id') if session_is_active760() and guest850() else None
-                if guest_id is not None:
-                    uid=guest_id
-                    db.execute("UPDATE users SET name=?,email=?,phone=?,email_verified_at=?,first_name=?,last_name=?,country=?,status='Client',updated_at=? WHERE user_id=? AND status='Guest'",(pending['first_name']+' '+pending['last_name'],email,pending['phone'],utc_now(),pending['first_name'],pending['last_name'],pending['country'],utc_now(),uid))
-                else:
-                    uid=db.execute("INSERT INTO users(name,email,phone,email_verified_at,first_name,last_name,country,max_active_sessions,status) VALUES(?,?,?,?,?,?,?,1,'Client')",(pending['first_name']+' '+pending['last_name'],email,pending['phone'],utc_now(),pending['first_name'],pending['last_name'],pending['country'])).lastrowid
+                uid=db.execute("INSERT INTO users(name,email,phone,email_verified_at,first_name,last_name,country,max_active_sessions,status) VALUES(?,?,?,?,?,?,?,1,'Client')",(pending['first_name']+' '+pending['last_name'],email,pending['phone'],utc_now(),pending['first_name'],pending['last_name'],pending['country'])).lastrowid
                 write_log(db, uid, "user.registered", "Email подтверждён")
         except sqlite3.IntegrityError:
             return jsonify(error="This email is already registered."), 409
         del pending_registrations[email]
-    start_session760(uid)
+    complete_account_login860(uid,requested_jobs860)
     return jsonify(ok=True, user_id=uid)
 
 
 @app.route("/api/auth/login", methods=["POST"])
 def login_email():
     data = auth_request_data()
+    requested_jobs860=parse_jobs860(data.get('job_ids',[]))
     try:
         email = auth_email(data.get("email"))
     except ValueError as exc:
@@ -2371,9 +2368,7 @@ def login_email():
         row = db.execute("SELECT user_id FROM users WHERE lower(trim(email))=?", (email,)).fetchone()
     if row is None:
         return jsonify(error="This email is not registered. Use REG."), 404
-    source=session.get('user_id') if session_is_active760() and guest850() else None
-    start_session760(row["user_id"])
-    if source is not None:merge_guest850(source,row["user_id"])
+    complete_account_login860(row["user_id"],requested_jobs860)
     return jsonify(ok=True, user_id=row["user_id"])
 
 
@@ -2655,7 +2650,7 @@ def watch_separation(job_id, uid, sid):
             db.execute(
                 """UPDATE separations
                    SET status=?,finished_at=?,error_message=?
-                   WHERE separation_id=? AND user_id=?""",
+                   WHERE separation_id=? AND user_id IS ?""",
                 (status, utc_now(), state.get("error"), sid, uid),
             )
             finish_session_operation790(db,sid)
@@ -2687,7 +2682,7 @@ def source_separation(db, uid):
         if len(parts) >= 3 and parts[0] == "results":
             row = db.execute(
                 """SELECT separation_id FROM separations
-                   WHERE user_id=? AND client_request_id=?""",
+                   WHERE user_id IS ? AND client_request_id=?""",
                 (uid, "job:" + parts[1]),
             ).fetchone()
 
@@ -2697,7 +2692,7 @@ def source_separation(db, uid):
             )
             row = db.execute(
                 """SELECT separation_id FROM projects
-                   WHERE user_id=? AND client_request_id=?""",
+                   WHERE user_id IS ? AND client_request_id=?""",
                 (uid, key),
             ).fetchone()
 
@@ -2706,7 +2701,7 @@ def source_separation(db, uid):
             if folder:
                 row = db.execute(
                     """SELECT separation_id FROM projects
-                       WHERE user_id=? AND client_request_id=?""",
+                       WHERE user_id IS ? AND client_request_id=?""",
                     (uid, project_path_key(folder)),
                 ).fetchone()
 
@@ -2842,8 +2837,8 @@ def protected_operations760():
         return
     if request.path in ('/admin','/admin.html') or request.path.startswith('/api/admin/'):
         return
-    public={'/','/api/auth/login','/api/auth/register','/api/auth/register-code','/api/auth/logout','/api/auth/guest','/api/component-versions'}
-    if request.method=='OPTIONS' or request.path in public:return
+    public={'/','/api/auth/login','/api/auth/register','/api/auth/register-code','/api/auth/logout','/api/component-versions','/api/separations/legacy-guest'}
+    if request.method=='OPTIONS' or request.path in public or anonymous_path860(request.path):return
     if not session_is_active760():
         session.clear()
         abort(401,description='Sign in or register to use server functions.')
@@ -2861,7 +2856,7 @@ def start_session760(uid):
 
 def separation_row760(job_id,uid):
     with db_connection() as db:
-        row=db.execute('SELECT * FROM separations WHERE user_id=? AND client_request_id=?',(uid,'job:'+job_id)).fetchone()
+        row=db.execute('SELECT * FROM separations WHERE user_id IS ? AND client_request_id=?',(uid,'job:'+job_id)).fetchone()
     if row is None:abort(404,description='Separation not found.')
     return dict(row)
 
@@ -3368,7 +3363,7 @@ def activity790():
     background=request.headers.get('X-MyNus-Background')=='1' or request.path.startswith('/debug/') or request.path=='/api/device-logs'
     if not background and request.path not in ('/','/api/auth/logout') and not request.path.startswith('/api/auth/'):
         with db_connection() as db:
-            db.execute("UPDATE sessions SET last_seen_at=?,expires_at=CASE WHEN (SELECT status FROM users WHERE user_id=sessions.user_id)='Guest' THEN '9999-12-31T23:59:59.999Z' ELSE ? END WHERE session_id=? AND revoked_at IS NULL",(_utc760(),_deadline790(),session['session_id']))
+            db.execute("UPDATE sessions SET last_seen_at=?,expires_at=? WHERE session_id=? AND revoked_at IS NULL",(_utc760(),_deadline790(),session['session_id']))
 
 def finish_session_operation790(db,separation_id):
     db.execute('UPDATE sessions SET last_seen_at=?,expires_at=? WHERE revoked_at IS NULL AND session_id=(SELECT session_id FROM separations WHERE separation_id=?)',(_utc760(),_deadline790(),separation_id))
@@ -3480,8 +3475,8 @@ def admin_state():
     q=request.args.get('q','').strip()[:200];uid=request.args.get('user_id','').strip()
     offset=max(0,request.args.get('offset',0,type=int) or 0)
     if uid and not uid.isdigit():abort(400,description='Неверный номер пользователя.')
-    where='';params=[]
-    if uid:where=' WHERE u.user_id=?';params=[int(uid)]
+    where=" WHERE u.status<>'Guest'";params=[]
+    if uid:where+=' AND u.user_id=?';params=[int(uid)]
     if q:
         where+=(' AND ' if where else ' WHERE ')+"(instr(lower(coalesce(u.email,'')),lower(?))>0 OR instr(lower(coalesce(u.name,'')),lower(?))>0)";params += [q,q]
     with db_connection() as db:
@@ -3494,13 +3489,15 @@ def admin_state():
         for row in db.execute('SELECT s.*,u.email FROM sessions s JOIN users u ON u.user_id=s.user_id'+sw+' ORDER BY s.created_at DESC',params):
             if row['expires_at']>_utc760() or _running790(db,row['session_id']):sessions.append(_session_admin790(db,row))
         sc=len(sessions);sessions=sessions[offset:offset+200]
+        sep_where=where.replace("u.status<>'Guest'","(u.user_id IS NULL OR u.status<>'Guest')")
         separations=[]
-        for row in db.execute('SELECT s.*,u.email FROM separations s JOIN users u ON u.user_id=s.user_id'+where+' ORDER BY s.separation_id DESC LIMIT 200 OFFSET ?',params+[offset]):
+        for row in db.execute('SELECT s.*,u.email FROM separations s LEFT JOIN users u ON u.user_id=s.user_id'+sep_where+' ORDER BY s.separation_id DESC LIMIT 200 OFFSET ?',params+[offset]):
             item=dict(row);job=jobs.get((item['client_request_id'] or '').removeprefix('job:'),{})
+            item['display_name']=item.get('email') or ('Guest' if item['user_id'] is None else 'ID '+str(item['user_id']))
             item['progress']=job.get('progress',100 if item['status']=='completed' else None)
             item['file_status']='Удалены' if item['files_deleted_at'] else 'Результат готов' if item['status']=='completed' else 'Нет результата'
             separations.append(item)
-        pc=db.execute('SELECT COUNT(*) FROM separations s JOIN users u ON u.user_id=s.user_id'+where,params).fetchone()[0]
+        pc=db.execute('SELECT COUNT(*) FROM separations s LEFT JOIN users u ON u.user_id=s.user_id'+sep_where,params).fetchone()[0]
         tokens=[dict(row) for row in db.execute('SELECT t.*,u.email FROM tokens t JOIN users u ON u.user_id=t.user_id'+where+' ORDER BY t.token_id DESC LIMIT 200 OFFSET ?',params+[offset])]
         tc=db.execute('SELECT COUNT(*) FROM tokens t JOIN users u ON u.user_id=t.user_id'+where,params).fetchone()[0]
         subs=[dict(row) for row in db.execute('SELECT s.*,u.email FROM subscriptions s JOIN users u ON u.user_id=s.user_id'+where+' ORDER BY s.subscription_id DESC',params)]
@@ -3697,6 +3694,8 @@ def _persist800(job_id):
         m=dict(_metrics800[job_id]);spec=m.pop('_spec');m.pop('_started',None)
         m['stages']=dict(m.get('stages',{}));m['resources']=dict(m.get('resources',{}))
     with db_connection() as db:
+        owner=db.execute('SELECT user_id FROM separations WHERE client_request_id=?',('job:'+job_id,)).fetchone()
+        if owner:spec['uid']=owner['user_id']
         db.execute('INSERT OR REPLACE INTO tasks800 VALUES(?,?,?,?,?,?,?)',(job_id,spec['uid'],spec['input'],spec['output'],spec['language'],m['phase'],json.dumps(m)))
 
 
@@ -3810,7 +3809,7 @@ def progress_payload760(job_id,uid):
     row=separation_row760(job_id,uid)
     m=_public800(job_id)
     if m is None:
-        with db_connection() as db:stored=db.execute('SELECT metrics_json FROM tasks800 WHERE job_id=? AND user_id=?',(job_id,uid)).fetchone()
+        with db_connection() as db:stored=db.execute('SELECT metrics_json FROM tasks800 WHERE job_id=? AND user_id IS ?',(job_id,uid)).fetchone()
         m=json.loads(stored['metrics_json']) if stored else None
     if m and m['phase'] in ('Interrupted','Error'):
         return dict(job_id=job_id,status='error' if m['phase']=='Error' else 'interrupted',error=row.get('error_message') or m['phase'],measurements=m,retry_available=True,download_allowed=False)
@@ -3825,7 +3824,7 @@ def retry800(job_id):
     with _queue_condition800:
         live=_metrics800.get(job_id)
         if live and live['phase'] in ('Queued','Running'):abort(409,description='Task is already active.')
-        with db_connection() as db:stored=db.execute('SELECT * FROM tasks800 WHERE job_id=? AND user_id=?',(job_id,uid)).fetchone()
+        with db_connection() as db:stored=db.execute('SELECT * FROM tasks800 WHERE job_id=? AND user_id IS ?',(job_id,uid)).fetchone()
         if not stored or stored['phase'] not in ('Interrupted','Error'):abort(409,description='Only Interrupted and Error tasks can be retried.')
         if not Path(stored['input_path']).is_file():abort(410,description='Source audio has expired. Upload it again; no token was consumed.')
         # Preserve job ownership and token; no access token is created or consumed here.
@@ -3885,7 +3884,7 @@ def admin_monitor800():
     for item in stored:
         if item['job_id'] in live:item.update(live[item['job_id']])
         item['source_name']=names.get(item['job_id'],item['job_id'])
-    return jsonify(server_version='8.4.0',system=dict(_system800),cpu_percent=_system800.get('cpu_percent',0),ram_total_mb=round(memory.total/1048576),ram_available_mb=round(memory.available/1048576),tasks=stored,licences=users)
+    return jsonify(server_version='8.6.0',system=dict(_system800),cpu_percent=_system800.get('cpu_percent',0),ram_total_mb=round(memory.total/1048576),ram_available_mb=round(memory.available/1048576),tasks=stored,licences=users)
 
 
 @app.route('/api/admin/licence',methods=['POST'])
@@ -3903,7 +3902,7 @@ def admin_licence800():
 def licence800():
     uid=current_user_id()
     with db_connection() as db:row=db.execute('SELECT level FROM licences800 WHERE user_id=?',(uid,)).fetchone()
-    return jsonify(level=row['level'] if row else 'Basic',server_version='8.4.0')
+    return jsonify(level=row['level'] if row else 'Basic',server_version='8.6.0')
 
 threading.Thread(target=_monitor800,daemon=True).start()
 
@@ -3974,13 +3973,13 @@ def _queue_info801():
         data=live.get(active) or {};elapsed=max(0,data.get('elapsed_seconds',0)-data.get('queue_seconds',0));remaining=max(0,expected(active)-elapsed)
     wait=remaining+sum(expected(key) for key in queued[:-1]) if queued else 0
     uid=jobs.get(active,{}).get('user_id') if active else None
-    return {'active_job':active,'active_username':users.get(uid,'#'+str(uid)) if active else None,'queued':len(queued),'max_wait_seconds':round(wait),'estimate_based_on':len(totals)}
+    return {'active_job':active,'active_username':('Guest' if uid is None else users.get(uid,'#'+str(uid))) if active else None,'queued':len(queued),'max_wait_seconds':round(wait),'estimate_based_on':len(totals)}
 
 
 _monitor_before801=admin_monitor800
 
 def admin_monitor801():
-    response=_monitor_before801();data=response.get_json();data['server_version']='8.4.0';data.pop('licences',None)
+    response=_monitor_before801();data=response.get_json();data['server_version']='8.6.0';data.pop('licences',None)
     data['queue']=_queue_info801()
     with _queue_condition800:data['history']=list(_history801)
     return jsonify(data)
@@ -4374,7 +4373,7 @@ def chat_user_file830(file_id):return _chat_file830(file_id,current_user_id())
 @admin_required
 def chat_admin_threads830():
     with db_connection() as db:
-        rows=db.execute('''SELECT u.user_id,u.email,COALESCE(MAX(m.message_id),0) AS latest_id,COALESCE(MAX(CASE WHEN m.sender='user' THEN m.message_id ELSE 0 END),0) AS latest_incoming_id,COALESCE(SUM(CASE WHEN m.sender='user' AND m.message_id>COALESCE(r.admin_read,0) THEN 1 ELSE 0 END),0) AS unread FROM users u LEFT JOIN chat_messages830 m ON m.user_id=u.user_id LEFT JOIN chat_reads830 r ON r.user_id=u.user_id GROUP BY u.user_id ORDER BY latest_id DESC,u.user_id''').fetchall()
+        rows=db.execute('''SELECT u.user_id,u.email,COALESCE(MAX(m.message_id),0) AS latest_id,COALESCE(MAX(CASE WHEN m.sender='user' THEN m.message_id ELSE 0 END),0) AS latest_incoming_id,COALESCE(SUM(CASE WHEN m.sender='user' AND m.message_id>COALESCE(r.admin_read,0) THEN 1 ELSE 0 END),0) AS unread FROM users u LEFT JOIN chat_messages830 m ON m.user_id=u.user_id LEFT JOIN chat_reads830 r ON r.user_id=u.user_id WHERE u.status<>'Guest' GROUP BY u.user_id ORDER BY latest_id DESC,u.user_id''').fetchall()
         result=[dict(r,online=_chat_online830(db,r['user_id'])) for r in rows]
     return jsonify(threads=result,unread=sum(r['unread'] for r in result),latest_id=max((r['latest_id'] for r in result),default=0),latest_incoming_id=max((r['latest_incoming_id'] for r in result),default=0))
 
@@ -4455,167 +4454,151 @@ def chat_admin_threads840():
 app.view_functions['chat_admin_threads830']=admin_required(chat_admin_threads840)
 
 
-# MyNus 8.5.0: guests use ordinary users and session keys.
-def migrate_users850():
+# 8.6.0: anonymous separations have no users row and no session.
+def anonymous_path860(path):
+    return path=='/separate' or path=='/api/separations/latest' or path.startswith(('/progress/','/abort/','/preview/')) or bool(re.fullmatch(r'/api/separations/[0-9a-f-]{36}/(?:preview|retry)',path))
+
+def migrate_anonymous860():
     con=sqlite3.connect(DB_PATH.resolve().as_uri()+'?mode=rw',uri=True,timeout=30)
     try:
-        sql=con.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").fetchone()[0]
-        if "'Guest'" in sql:return
-        backup=DB_PATH.with_name('mynus-before-8.5.0-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f')+'.db')
-        with sqlite3.connect(backup) as saved:con.backup(saved)
-        new,count=re.subn(r"status\s+TEXT\s+DEFAULT\s+NULL\s+CHECK\s*\(\s*status\s+IN\s*\(\s*'Subscription'\s*,\s*'OneTime'\s*\)\s*\)","status TEXT NOT NULL DEFAULT 'Client' CHECK(status IN ('Guest','Client','Subscription','OneTime'))",sql,flags=re.I)
-        if count!=1:raise RuntimeError('Unknown users schema: migration stopped; backup preserved.')
-        extras=con.execute("SELECT sql FROM sqlite_master WHERE tbl_name='users' AND type IN ('index','trigger') AND sql IS NOT NULL").fetchall()
-        sequence=con.execute("SELECT seq FROM sqlite_sequence WHERE name='users'").fetchone()
-        con.execute('PRAGMA foreign_keys=OFF');con.execute('PRAGMA legacy_alter_table=ON');con.execute('BEGIN IMMEDIATE')
-        con.execute(new.replace('CREATE TABLE users','CREATE TABLE users850',1))
-        names=[r[1] for r in con.execute('PRAGMA table_info(users)')]
-        cols=','.join('"'+n+'"' for n in names);values=','.join("COALESCE(status,'Client')" if n=='status' else '"'+n+'"' for n in names)
-        con.execute('INSERT INTO users850('+cols+') SELECT '+values+' FROM users')
-        con.execute('DROP TABLE users');con.execute('ALTER TABLE users850 RENAME TO users')
-        if sequence:con.execute("UPDATE sqlite_sequence SET seq=MAX(seq,?) WHERE name='users'",(sequence[0],))
-        for item in extras:con.execute(item[0])
-        if con.execute('PRAGMA foreign_key_check').fetchall():raise RuntimeError('8.5.0 foreign key validation failed')
-        con.commit();print('[DATABASE] Guest/Client migration complete. Backup: '+str(backup),flush=True)
+        schemas={name:con.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?",(name,)).fetchone()[0] for name in ('separations','diagnostic_logs','tasks800')}
+        needed=any(re.search(r'\buser_id\s+INTEGER\s+NOT NULL',sql,re.I) for sql in schemas.values())
+        if needed:
+            backup=DB_PATH.with_name('mynus-before-8.6.0-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f')+'.db')
+            with sqlite3.connect(backup) as saved:con.backup(saved)
+            con.execute('PRAGMA foreign_keys=OFF');con.execute('PRAGMA legacy_alter_table=ON');con.execute('BEGIN IMMEDIATE')
+            for name,sql in schemas.items():
+                if not re.search(r'\buser_id\s+INTEGER\s+NOT NULL',sql,re.I):continue
+                extras=con.execute("SELECT sql FROM sqlite_master WHERE tbl_name=? AND type IN ('index','trigger') AND sql IS NOT NULL",(name,)).fetchall()
+                seq=con.execute('SELECT seq FROM sqlite_sequence WHERE name=?',(name,)).fetchone()
+                sql=re.sub(r'\buser_id\s+INTEGER\s+NOT NULL','user_id INTEGER',sql,count=1,flags=re.I)
+                sql=re.sub(r'(?i)^CREATE TABLE\s+["`\[]?'+name+r'["`\]]?', 'CREATE TABLE '+name+'860',sql,count=1)
+                con.execute(sql);con.execute('INSERT INTO '+name+'860 SELECT * FROM '+name);con.execute('DROP TABLE '+name);con.execute('ALTER TABLE '+name+'860 RENAME TO '+name)
+                if seq:con.execute('UPDATE sqlite_sequence SET seq=MAX(seq,?) WHERE name=?',(seq[0],name))
+                for item in extras:con.execute(item[0])
+            if con.execute('PRAGMA foreign_key_check').fetchall():raise RuntimeError('8.6.0 migration foreign key check failed')
+            con.commit();print('[DATABASE] Anonymous Separation migration complete. Backup: '+str(backup),flush=True)
+        con.execute('PRAGMA foreign_keys=ON')
+        with con:
+            con.execute('CREATE TABLE IF NOT EXISTS legacy_guest_jobs860(job_id TEXT PRIMARY KEY,user_id INTEGER NOT NULL)')
+            con.execute('PRAGMA defer_foreign_keys=ON')
+            # Historical users are retained as disabled archival records so their
+            # chat/payment/audit foreign keys are not silently destroyed.
+            rows=con.execute("SELECT separation_id,user_id,client_request_id FROM separations WHERE user_id IN (SELECT user_id FROM users WHERE status='Guest')").fetchall()
+            for sid,uid,key in rows:
+                job=key.removeprefix('job:')
+                # A financially linked old record must retain its audited owner.
+                if con.execute('SELECT 1 FROM payments WHERE separation_id=?',(sid,)).fetchone():continue
+                con.execute('INSERT OR IGNORE INTO legacy_guest_jobs860 VALUES(?,?)',(job,uid))
+                con.execute('UPDATE diagnostic_logs SET user_id=NULL,session_id=NULL WHERE separation_id=?',(sid,))
+                con.execute('UPDATE separations SET user_id=NULL,subscription_id=NULL,session_id=NULL WHERE separation_id=?',(sid,))
+                con.execute('UPDATE tasks800 SET user_id=NULL WHERE job_id=?',(job,))
+            con.execute("UPDATE sessions SET revoked_at=COALESCE(revoked_at,?) WHERE user_id IN (SELECT user_id FROM users WHERE status='Guest')",(_utc760(),))
+            con.execute("UPDATE users SET is_blocked=1 WHERE status='Guest'")
+            if con.execute('PRAGMA foreign_key_check').fetchall():raise RuntimeError('8.6.0 legacy result migration failed')
     except BaseException:con.rollback();raise
     finally:con.close()
-migrate_users850()
+migrate_anonymous860()
 
-def guest850(uid=None):
-    if uid is None:uid=session.get('user_id')
-    if uid is None:return False
-    with db_connection() as db:r=db.execute('SELECT status FROM users WHERE user_id=?',(uid,)).fetchone()
-    return bool(r and r['status']=='Guest')
+_user_id_before860=current_user_id
+def current_user_id():
+    if anonymous_path860(request.path) and not session_is_active760():return None
+    return _user_id_before860()
 
-_active_before850=session_is_active760
-def session_is_active760():
-    if guest850():
-        with db_connection() as db:
-            r=db.execute('SELECT s.revoked_at,u.is_blocked,s.login_key FROM sessions s JOIN users u ON u.user_id=s.user_id WHERE s.session_id=? AND s.user_id=?',(session.get('session_id'),session.get('user_id'))).fetchone()
-            if not r or r['revoked_at'] or r['is_blocked'] or not r['login_key']:return False
-            db.execute('UPDATE sessions SET expires_at=? WHERE session_id=?',('9999-12-31T23:59:59.999Z',session['session_id']))
-        return True
-    return _active_before850()
-
-@app.route('/api/auth/guest',methods=['POST'])
-def create_guest850():
-    auth_request_data()
-    if session_is_active760():return current_user()
-    with db_connection() as db:
-        uid=db.execute("INSERT INTO users(name,status,max_active_sessions) VALUES('Guest','Guest',1)").lastrowid
-        db.execute('UPDATE users SET name=? WHERE user_id=?',('Guest №'+str(uid),uid))
-    start_session760(uid)
-    with db_connection() as db:db.execute('UPDATE sessions SET expires_at=? WHERE session_id=?',('9999-12-31T23:59:59.999Z',session['session_id']))
-    print('Guest №'+str(uid)+' created',flush=True)
-    return current_user()
-
-_guest_lock850=threading.RLock()
-def unfinished850(uid,exclude=None):
-    with db_connection() as db:rows=db.execute("SELECT client_request_id FROM separations WHERE user_id=? AND status IN ('running','queued','pending')",(uid,)).fetchall()
-    for row in rows:
-        key=(row['client_request_id'] or '').removeprefix('job:')
-        if key==exclude:continue
-        if jobs.get(key,{}).get('status') not in ('done','error','aborted','interrupted'):return key
-    return None
-
-_separate_before850=app.view_functions['separate'];_retry_before850=app.view_functions['retry800']
-def separate850():
-    uid=current_user_id()
-    if not guest850(uid):return _separate_before850()
-    with _guest_lock850:
-        if unfinished850(uid):return jsonify(error='Guest already has a task queued or processing. Wait for it to finish.',code=409),409
-        return _separate_before850()
-def retry850(job_id):
-    uid=current_user_id()
-    if not guest850(uid):return _retry_before850(job_id)
-    with _guest_lock850:
-        if unfinished850(uid,job_id):return jsonify(error='Guest already has a task queued or processing.',code=409),409
-        return _retry_before850(job_id)
-app.view_functions['separate']=separate850;app.view_functions['retry800']=retry850
-
-def merge_guest850(source,target):
-    if source==target or not guest850(source):return
-    with _guest_lock850, db_connection() as db:
-        db.execute('BEGIN IMMEDIATE');db.execute('PRAGMA defer_foreign_keys=ON')
-        # These accounts cannot own paid grants before registration.
-        if db.execute('SELECT 1 FROM payments WHERE user_id=?',(source,)).fetchone():abort(409,description='Guest has payment records; contact support.')
-        for table in ('subscriptions','separations','projects','usage_events','diagnostic_logs','tasks800','chat_messages830','access_events820','tokens','admin_grants820'):
-            db.execute('UPDATE '+table+' SET user_id=? WHERE user_id=?',(target,source))
-        db.execute('UPDATE sessions SET revoked_at=COALESCE(revoked_at,?) WHERE user_id=?',(_utc760(),source))
-        db.execute('UPDATE users SET is_blocked=1,name=? WHERE user_id=?',('Guest №'+str(source)+' → ID '+str(target),source))
-        if db.execute('PRAGMA foreign_key_check').fetchall():raise RuntimeError('Guest transfer validation failed')
-        write_log(db,target,'guest.claimed','Guest №'+str(source)+' → ID '+str(target))
-    for key,job in list(jobs.items()):
-        if job.get('user_id')==source:job['user_id']=target
-    for metric in _metrics800.values():
-        if metric.get('user_id')==source:metric['user_id']=target
-
-_result_access_before850=result_access760
+_access_before860=result_access760
 def result_access760(row):
-    if guest850(row['user_id']):return False,False
-    return _result_access_before850(row)
-_apply_before850=app.view_functions['apply_token820']
-def apply_token850(job_id):
-    if guest850(current_user_id()):return jsonify(error='Sign in or register to get the full result.',code=403),403
-    return _apply_before850(job_id)
-app.view_functions['apply_token820']=apply_token850
+    if row['user_id'] is None:return False,False
+    return _access_before860(row)
 
-_validate_before850=_validate_user790
-def _validate_user790(data):
-    copy=dict(data);status=copy.pop('status',None);result=_validate_before850(copy) if copy else {}
-    if not copy and 'status' not in data:abort(400,description='No changes.')
-    if 'status' in data:
-        if status not in ('Guest','Client','OneTime','Subscription'):abort(400,description='Invalid user status.')
-        result['status']=status
+def parse_jobs860(value):
+    if not isinstance(value,list) or len(value)>100:abort(400,description='Invalid Separation list.')
+    result=[]
+    for key in value:
+        if not isinstance(key,str) or not re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}',key):abort(400,description='Invalid Separation ID.')
+        if key not in result:result.append(key)
     return result
 
-_summary_before850=_access_summary820
-def _access_summary820(uid):
-    data=_summary_before850(uid)
+def claim_jobs860(uid,keys):
+    keys=parse_jobs860(keys);claimed=[]
     with db_connection() as db:
-        row=db.execute('SELECT status FROM users WHERE user_id=?',(uid,)).fetchone()
-        if row and row['status']!='Guest':
-            value=data.get('access_status') or 'Client'
-            db.execute('UPDATE users SET status=? WHERE user_id=?',(value,uid))
+        db.execute('BEGIN IMMEDIATE');db.execute('PRAGMA defer_foreign_keys=ON')
+        for key in keys:
+            row=db.execute('SELECT * FROM separations WHERE client_request_id=?',('job:'+key,)).fetchone()
+            if not row or row['files_deleted_at'] or (row['delete_after'] and row['delete_after']<=_utc760()):continue
+            if row['user_id'] is not None:
+                if row['user_id']==uid:claimed.append(key)
+                continue
+            db.execute('UPDATE separations SET user_id=?,session_id=? WHERE separation_id=? AND user_id IS NULL',(uid,session.get('session_id'),row['separation_id']))
+            db.execute('UPDATE diagnostic_logs SET user_id=? WHERE separation_id=? AND user_id IS NULL',(uid,row['separation_id']))
+            db.execute('UPDATE tasks800 SET user_id=? WHERE job_id=? AND user_id IS NULL',(uid,key))
+            claimed.append(key);write_log(db,uid,'separation.claimed','Separation assigned to account',sid=row['separation_id'])
+        if db.execute('PRAGMA foreign_key_check').fetchall():raise RuntimeError('Separation claim validation failed')
+    with _queue_condition800:
+        for key in claimed:
+            if key in jobs:jobs[key]['user_id']=uid
+            if key in _metrics800:
+                _metrics800[key]['user_id']=uid
+                if '_spec' in _metrics800[key]:_metrics800[key]['_spec']['uid']=uid
+    return claimed
+
+def complete_account_login860(uid,keys):
+    previous=dict(session)
+    try:
+        start_session760(uid)
+        claim_jobs860(uid,keys)
+    except BaseException:
+        new_sid=session.get('session_id')
+        if new_sid and new_sid!=previous.get('session_id'):
+            with db_connection() as db:db.execute('UPDATE sessions SET revoked_at=COALESCE(revoked_at,?) WHERE session_id=?',(_utc760(),new_sid))
+        session.clear();session.update(previous)
+        raise
+
+@app.route('/api/separations/claim',methods=['POST'])
+def claim_separations860():
+    uid=current_user_id();data=auth_request_data()
+    return jsonify(claimed=claim_jobs860(uid,data.get('job_ids',[])))
+
+@app.route('/api/separations/legacy-guest',methods=['POST'])
+def legacy_guest860():
+    data=auth_request_data();key=str(data.get('previous_key') or '')
+    if not re.fullmatch(r'[A-Za-z0-9_-]{11}',key):return jsonify(separations=[])
+    with db_connection() as db:
+        rows=db.execute("SELECT s.client_request_id,s.source_name,s.finished_at FROM sessions k JOIN users u ON u.user_id=k.user_id JOIN legacy_guest_jobs860 l ON l.user_id=u.user_id JOIN separations s ON s.client_request_id='job:'||l.job_id WHERE k.login_key=? AND u.status='Guest' AND s.user_id IS NULL AND s.files_deleted_at IS NULL AND (s.delete_after IS NULL OR s.delete_after>?) ORDER BY s.created_at",(key,_utc760())).fetchall()
+    return jsonify(separations=[dict(job_id=r[0].removeprefix('job:'),source=r[1],finished_at=r[2]) for r in rows])
+
+_latest_before860=app.view_functions['latest_result801']
+def latest860():
+    uid=current_user_id()
+    if uid is not None:return _latest_before860()
+    keys=parse_jobs860([x for x in request.args.get('job_ids','').split(',') if x]);rows=[]
+    with db_connection() as db:
+        for key in keys:
+            r=db.execute("SELECT * FROM separations WHERE client_request_id=? AND user_id IS NULL AND status='completed' AND files_deleted_at IS NULL AND (delete_after IS NULL OR delete_after>?)",('job:'+key,_utc760())).fetchone()
+            if r:rows.append(dict(r))
+    if not rows:return jsonify(error='No completed separation result is available.'),404
+    r=max(rows,key=lambda r:(r['finished_at'] or '',r['separation_id']))
+    return jsonify(job_id=r['client_request_id'].removeprefix('job:'),source=r['source_name'],separation_id=r['separation_id'],finished_at=r['finished_at'],delete_after=r['delete_after'])
+app.view_functions['latest_result801']=latest860
+
+_summary_before860=_access_summary820
+def _access_summary820(uid):
+    data=_summary_before860(uid)
+    with db_connection() as db:db.execute("UPDATE users SET status=? WHERE user_id=? AND status<>'Guest'",(data.get('access_status') or 'Client',uid))
     return data
 
-_current_before850=current_user
+_current_before860=current_user
 def current_user():
-    _access_summary820(current_user_id())
-    return _current_before850()
+    _access_summary820(current_user_id());return _current_before860()
 app.view_functions['current_user']=current_user
 
-# Give every admin view the same guest label without inventing an email.
-_state_before850=app.view_functions['admin_state']
-@admin_required
-def admin_state850():
-    with db_connection() as db:
-        db.execute("UPDATE users SET status='Client' WHERE status IN ('OneTime','Subscription') AND EXISTS(SELECT 1 FROM tokens t WHERE t.user_id=users.user_id) AND NOT EXISTS(SELECT 1 FROM tokens t WHERE t.user_id=users.user_id AND t.status='active' AND (t.expires_at IS NULL OR julianday(t.expires_at)>julianday('now')))")
-    response=_state_before850();data=response.get_json();users={u['user_id']:u for u in data['users']}
-    for key in ('users','sessions','separations','tokens','subscriptions'):
-        for item in data.get(key,[]):
-            uid=item.get('user_id');u=users.get(uid)
-            if u is None and uid is not None:
-                with db_connection() as db:r=db.execute('SELECT status,name FROM users WHERE user_id=?',(uid,)).fetchone()
-                u=dict(r) if r else {}
-            item['display_name']=('Guest №'+str(uid)) if (u or {}).get('status')=='Guest' else item.get('email') or (u or {}).get('name') or 'ID '+str(uid)
-    return jsonify(data)
-app.view_functions['admin_state']=admin_state850
-_threads_before850=app.view_functions['chat_admin_threads830']
-@admin_required
-def chat_threads850():
-    response=_threads_before850();data=response.get_json()
-    with db_connection() as db:labels={r['user_id']:('Guest №'+str(r['user_id']) if r['status']=='Guest' else r['email'] or r['name']) for r in db.execute('SELECT user_id,status,email,name FROM users')}
-    for item in data['threads']:item['display_name']=labels.get(item['user_id'],'ID '+str(item['user_id']))
-    return jsonify(data)
-app.view_functions['chat_admin_threads830']=chat_threads850
-_queue_before850=_queue_info801
-def _queue_info801():
-    data=_queue_before850()
-    if _active800:
-        uid=jobs.get(_active800,{}).get('user_id')
-        if guest850(uid):data['active_username']='Guest №'+str(uid)
-    return data
+_validate_before860=_validate_user790
+def _validate_user790(data):
+    rest=dict(data);status=rest.pop('status',None);result=_validate_before860(rest) if rest else {}
+    if 'status' in data:
+        if status not in ('Client','OneTime','Subscription'):abort(400,description='Invalid account status.')
+        result['status']=status
+    if not result:abort(400,description='No changes.')
+    return result
 
 
 if __name__ == "__main__":
