@@ -21,7 +21,7 @@ window.mynusLogTime801=function(text){return String(text).replace(/\b\d{4}-\d{2}
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 8.5.0 |  Sep-without-reg</title>
+  <title>MyNus 8.6.0 |  noGuestID</title>
 
 
  <style>
@@ -5539,6 +5539,7 @@ function configureMynusServer(value){
  const url=new URL(value);if(!['https:','http:'].includes(url.protocol)||url.username||url.password||url.pathname!=='/'||url.search||url.hash)throw Error('Enter a server origin, for example https://mynus.matmodelator.com');
  mynusServerBase=url.origin;localStorage.setItem('mynusServerBase',mynusServerBase);
  mynusSessionToken=localStorage.getItem('mynusSessionToken:'+mynusServerBase)||'';
+ mynusAuthEpoch760++;mynusLoggedOut760=!mynusSessionToken;mynusIsGuest860=!mynusSessionToken;accountEvent860();
 }
 function showMynusRequestFailure(path, code, details) {
  const name=path==='/separate'?'Separation':path.startsWith('/api/auth/')||path.startsWith('/api/account/')?'Account':'Server';
@@ -5553,72 +5554,82 @@ function showMynusRequestFailure(path, code, details) {
 let mynusAuthEpoch760=0;
 const mynusRequests760=new Set();
 let mynusLoggedOut760=!mynusSessionToken;
-let mynusGuest850=false,guestPromise850=null;
-async function ensureIdentity850(){
- if(guestPromise850)return guestPromise850;
- guestPromise850=(async()=>{
-  if(mynusSessionToken){const r=await mynusFetch('/api/current-user',{headers:{'X-MyNus-Background':'1'},cache:'no-store'});if(r.ok){const u=await r.json();mynusGuest850=u.status==='Guest';return u;}}
-  const r=await mynusFetch('/api/auth/guest',{method:'POST',headers:{'Content-Type':'application/json','X-MyNus-Background':'1'},body:'{}'});
-  const u=await r.json();if(!r.ok)throw Error(u.error||'Unable to create a guest session.');mynusGuest850=u.status==='Guest';return u;
- })().finally(()=>guestPromise850=null);
- return guestPromise850;
-}
-
+let mynusIsGuest860=!mynusSessionToken;
+function guestJobsKey860(){return 'mynusGuestSeparations860:'+mynusServerBase;}
+function pendingKey860(){return 'mynusPendingResult860:'+mynusServerBase;}
+function guestJobs860(){try{const value=JSON.parse(localStorage.getItem(guestJobsKey860())||'[]');return Array.isArray(value)?value.filter(v=>v&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(v.job_id)).slice(-100):[];}catch{return [];}}
+function rememberGuest860(value){const all=guestJobs860(),i=all.findIndex(v=>v.job_id===value.job_id);if(i>=0)all[i]={...all[i],...value};else all.push(value);localStorage.setItem(guestJobsKey860(),JSON.stringify(all.slice(-100)));}
+function guestIds860(){return guestJobs860().map(v=>v.job_id);}
+try{const previous=localStorage.getItem(pendingKey860());if(previous&&!localStorage.getItem(pendingKey860())){localStorage.setItem(pendingKey860(),previous);const value=JSON.parse(previous);if(value?.job_id)rememberGuest860(value);}}catch{}
+function anonymousRequest860(path){return path==='/separate'||path==='/api/component-versions'||path.startsWith('/api/separations/latest')||/^\/(?:progress|abort|preview)\//.test(path)||/^\/api\/separations\/[0-9a-f-]{36}\/(?:preview|retry)(?:$|\?)/.test(path);}
+function accountEvent860(){window.dispatchEvent(new CustomEvent('mynus-session-change',{detail:{authenticated:!mynusLoggedOut760,guest:mynusIsGuest860}}));}
 function detachServer760(){
- mynusAuthEpoch760++;mynusLoggedOut760=true;mynusSessionToken='';
+ mynusAuthEpoch760++;mynusLoggedOut760=true;mynusIsGuest860=true;mynusSessionToken='';
  localStorage.removeItem('mynusSessionToken:'+mynusServerBase);
- for(const controller of mynusRequests760)controller.abort();mynusRequests760.clear();
- window.dispatchEvent(new CustomEvent('mynus-session-change',{detail:{authenticated:false}}));
+ accountEvent860();
+}
+async function recoverLegacy860(key){
+ try{const r=await mynusNativeFetch(mynusServerBase+'/api/separations/legacy-guest',{method:'POST',headers:{'Content-Type':'application/json','X-MyNus-Background':'1'},body:JSON.stringify({previous_key:key}),credentials:'omit'});if(!r.ok)return;const data=await r.json();for(const value of data.separations||[])rememberGuest860(value);const last=data.separations?.at(-1);if(last&&!localStorage.getItem(pendingKey860()))localStorage.setItem(pendingKey860(),JSON.stringify(last));}catch{}
+}
+async function ensureSeparationMode860(){
+ if(mynusSessionToken){const r=await mynusFetch('/api/current-user',{headers:{'X-MyNus-Background':'1'},cache:'no-store'});if(r.ok)return r.json();}
+ const r=await mynusFetch('/api/component-versions',{headers:{'X-MyNus-Background':'1'},cache:'no-store',signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error('Server unavailable.');return null;
 }
 async function mynusFetch(input,options={}){
  const raw=typeof input==='string'?input:input instanceof URL?input.href:null;
- let path=raw;
- if(raw&&raw.startsWith(mynusServerBase+'/'))path=raw.slice(mynusServerBase.length);
+ let path=raw;if(raw&&raw.startsWith(mynusServerBase+'/'))path=raw.slice(mynusServerBase.length);
  if(!path||!isMynusServerPath(path))return mynusNativeFetch(input,options);
- if(guestPromise850&&/^\/api\/auth\/(?:login|register)(?:$|\?)/.test(path))await guestPromise850.catch(()=>{});
- const authPath=/^\/api\/auth\/(?:login|register|register-code|guest)(?:$|\?)/.test(path);
- const logout=path==='/api/auth/logout';
- const explicitAccount=path==='/api/current-user';
- if(mynusLoggedOut760&&!authPath&&!logout&&!explicitAccount){
-   const error=new Error('Sign in or register to use server functions.');error.httpStatus=401;error.mynusReported=true;
-   if(!path.startsWith('/debug/'))showMynusRequestFailure(path,401,error.message);
-   throw error;
+ const {mynusRetry860=false,...requestOptions}=options;
+ const authPath=/^\/api\/auth\/(?:login|register|register-code)(?:$|\?)/.test(path),transition=/^\/api\/auth\/(?:login|register)(?:$|\?)/.test(path);
+ const logout=path==='/api/auth/logout',explicitAccount=path==='/api/current-user';
+ if(mynusLoggedOut760&&!authPath&&!logout&&!explicitAccount&&!anonymousRequest860(path)){
+  const error=new Error('Sign in to use this account feature.');error.httpStatus=401;error.mynusReported=true;throw error;
  }
- const headers=new Headers(options.headers||{});
- if(window.mynusDesktopFiles)headers.set('X-MyNus-Client','WebView2');
- const outgoingToken=mynusSessionToken;
- if(outgoingToken&&/^[A-Za-z0-9_-]{11}$/.test(outgoingToken))headers.set('Authorization','Bearer '+outgoingToken);
- // Disconnect immediately; keep only the captured credential for the revoke request.
- if(logout)detachServer760();
- const epoch=mynusAuthEpoch760;
- const controller=new AbortController();
- if(!logout)mynusRequests760.add(controller);
- const signal=options.signal?AbortSignal.any([options.signal,controller.signal]):controller.signal;
+ const headers=new Headers(requestOptions.headers||{});if(window.mynusDesktopFiles)headers.set('X-MyNus-Client','WebView2');
+ const outgoingToken=mynusSessionToken,epoch=mynusAuthEpoch760;
+ if(outgoingToken)headers.set('Authorization','Bearer '+outgoingToken);
+ if(transition&&typeof requestOptions.body==='string'){
+  try{const data=JSON.parse(requestOptions.body);data.job_ids=guestIds860();requestOptions.body=JSON.stringify(data);}catch{}
+ }
+ const method=(requestOptions.method||'GET').toUpperCase();
  const reportFailure=path!=='/api/current-user'&&!path.startsWith('/debug/')&&headers.get('X-MyNus-Background')!=='1';
- if(!logout&&headers.get('X-MyNus-Background')!=='1')window.dispatchEvent(new CustomEvent('mynus-server-request',{detail:{path}}));
- let response;
+ if(!logout&&headers.get('X-MyNus-Background')!=='1'&&outgoingToken)window.dispatchEvent(new CustomEvent('mynus-server-request',{detail:{path}}));
+ const stale=()=>epoch!==mynusAuthEpoch760||outgoingToken!==mynusSessionToken;
  try{
-   response=await mynusNativeFetch(mynusServerBase+path,{...options,headers,signal,credentials:mynusServerBase===location.origin?'same-origin':'omit'});
-   window.dispatchEvent(new CustomEvent('mynus-server-availability',{detail:{reachable:true}}));
-   if(!response.ok&&reportFailure){let data={};try{data=await response.clone().json();}catch(_){}response.mynusFailureMessage=showMynusRequestFailure(path,response.status,data.details||data.error||data.message||response.statusText);}
-   if(epoch!==mynusAuthEpoch760&&!logout)throw new DOMException('Server session changed.','AbortError');
-   if(response.status===401&&!authPath&&!logout&&!explicitAccount&&!mynusLoggedOut760)detachServer760();
-   // Only a successful, current login/register response may establish a session.
-   if(response.ok&&(authPath||explicitAccount)&&path!=='/api/auth/register-code'){
-     if(path==='/api/auth/guest'||explicitAccount){const identity=await response.clone().json();mynusGuest850=identity.status==='Guest';}else mynusGuest850=false;
-     const token=response.headers.get('X-MyNus-Session');
-     if(token){mynusSessionToken=token;mynusLoggedOut760=false;localStorage.setItem('mynusSessionToken:'+mynusServerBase,token);window.dispatchEvent(new CustomEvent('mynus-session-change',{detail:{authenticated:true,guest:mynusGuest850}}));}
+  const response=await mynusNativeFetch(mynusServerBase+path,{...requestOptions,headers,credentials:mynusServerBase===location.origin?'same-origin':'omit'});
+  window.dispatchEvent(new CustomEvent('mynus-server-availability',{detail:{reachable:true}}));
+  if(stale()&&!transition&&!logout){
+   if(method==='GET'&&!mynusRetry860)return mynusFetch(input,{...options,mynusRetry860:true});
+   if(path!=='/separate')throw new DOMException('An outdated session response was ignored.','AbortError');
+  }
+  if(response.ok&&transition){
+   const token=response.headers.get('X-MyNus-Session');if(!token)throw Error('The server did not return an account session.');
+   mynusAuthEpoch760++;mynusSessionToken=token;mynusLoggedOut760=false;mynusIsGuest860=false;localStorage.setItem('mynusSessionToken:'+mynusServerBase,token);accountEvent860();
+  }else if(response.ok&&explicitAccount){
+   const user=await response.clone().json();
+   if(stale()){if(!mynusRetry860)return mynusFetch(input,{...options,mynusRetry860:true});throw new DOMException('An outdated account response was ignored.','AbortError');}
+   if(user.status==='Guest'){
+    await recoverLegacy860(outgoingToken);if(!stale())detachServer760();return new Response(JSON.stringify({error:'Sign in to your account.',code:401}),{status:401,headers:{'Content-Type':'application/json'}});
    }
-   if(response.ok&&explicitAccount){mynusLoggedOut760=false;window.dispatchEvent(new CustomEvent('mynus-session-change',{detail:{authenticated:true,guest:mynusGuest850}}));}
-   if(response.status===401&&explicitAccount&&!mynusLoggedOut760)detachServer760();
-   return response;
+   if(!stale()){mynusLoggedOut760=false;mynusIsGuest860=false;accountEvent860();}
+  }else if(response.status===401&&!authPath&&!logout&&!stale()&&outgoingToken){
+   await recoverLegacy860(outgoingToken);if(!stale())detachServer760();
+   if(stale()&&mynusSessionToken&&method==='GET'&&!mynusRetry860)return mynusFetch(input,{...options,mynusRetry860:true});
+   if(anonymousRequest860(path)&&!mynusRetry860)return mynusFetch(input,{...options,mynusRetry860:true});
+  }
+  if(response.ok&&logout&&!stale())detachServer760();
+  if(response.ok&&path==='/separate'&&!outgoingToken){
+   const value=await response.clone().json();if(value.job_id){rememberGuest860({job_id:value.job_id,created_at:new Date().toISOString()});if(mynusSessionToken)await mynusFetch('/api/separations/claim',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({job_ids:[value.job_id]})});}
+  }
+  if(!response.ok&&reportFailure&&!stale()){let data={};try{data=await response.clone().json();}catch{}if(!stale())response.mynusFailureMessage=showMynusRequestFailure(path,response.status,data.details||data.error||data.message||response.statusText);else if(method==='GET'&&!mynusRetry860)return mynusFetch(input,{...options,mynusRetry860:true});}
+  return response;
  }catch(error){
-   if(error.name!=='AbortError')window.dispatchEvent(new CustomEvent('mynus-server-availability',{detail:{reachable:false}}));
-   if(reportFailure&&error.name!=='AbortError'&&!error.mynusReported){error.message=showMynusRequestFailure(path,'NETWORK');error.mynusReported=true;error.httpStatus='NETWORK';}
-   throw error;
- }finally{mynusRequests760.delete(controller);}
+  if(stale()&&method==='GET'&&!mynusRetry860)return mynusFetch(input,{...options,mynusRetry860:true});
+  if(error.name!=='AbortError'&&!stale())window.dispatchEvent(new CustomEvent('mynus-server-availability',{detail:{reachable:false}}));
+  if(reportFailure&&error.name!=='AbortError'&&!error.mynusReported&&!stale()){error.message=showMynusRequestFailure(path,'NETWORK');error.mynusReported=true;error.httpStatus='NETWORK';}
+  throw error;
+ }
 }
-
 
 
 (function installLocalConsole(){
@@ -7212,7 +7223,7 @@ async function waitForSeparation(jobId, run = activeSeparation) {
     } catch (error) {
       if (run.abortPromise) await run.abortPromise;
       if (run.aborted) throw separationAbortedError();
-      if (mynusLoggedOut760 || error.name==="AbortError" || error.httpStatus===401 || ++failures >= 3) throw error;
+      if (error.name==="AbortError" || error.httpStatus===401 || ++failures >= 3) throw error;
       await sleep(500);
       continue;
     }
@@ -7250,7 +7261,7 @@ updateSplitButton();
 
 
 async function startSeparation(restoreRequest = null, resumeJob760 = null) {
-    if(!activeSeparation){try{await ensureIdentity850();}catch(error){status.textContent='Cannot start Separation: '+error.message;progressWrap.style.display='block';return;}}
+    if(!activeSeparation){try{await ensureSeparationMode860();}catch(error){status.textContent='Cannot start Separation: '+error.message;progressWrap.style.display='block';return;}}
     if (activeSeparation) {
       await abortCurrentSeparation();
       return;
@@ -7383,7 +7394,7 @@ async function startSeparation(restoreRequest = null, resumeJob760 = null) {
 
       if (!jobId) throw new Error("Server did not return job_id");
       run.jobId = jobId;
-      sessionStorage.setItem("mynusPendingResult760",JSON.stringify({job_id:jobId,source:run.sourceName799}));
+      localStorage.setItem(pendingKey860(),JSON.stringify({job_id:jobId,source:run.sourceName799}));
       if (run.abortRequested) await abortCurrentSeparation(run);
       if (run.aborted) throw separationAbortedError();
 
@@ -7820,7 +7831,7 @@ studio.style.display =
 
       if (run.restore) await restoreMynusSnapshot(run.restore);
       await fitEntireProjectTimeline();
-      run.succeeded = true;sessionStorage.removeItem("mynusPendingResult760");window.dispatchEvent(new Event("mynus-result-state"));
+      run.succeeded = true;localStorage.removeItem(pendingKey860());window.dispatchEvent(new Event("mynus-result-state"));
 
       // Разделение завершено. Предлагаем создать Project для полной работы Karaoke.
       newProjectPromptDialog?.classList.add("open");
@@ -7829,9 +7840,10 @@ studio.style.display =
 
 
     catch (error) {
-      if (mynusLoggedOut760 || error.name==="AbortError") {
-        studio.style.display=run.previousStudioDisplay;
-        status.textContent="Server operation paused. Local project remains available. Sign in to retrieve the server result.";status.className="progress-status info";
+      if(error.name==='ResultClosed860'){
+        studio.style.display=run.previousStudioDisplay;status.textContent='Result window closed. Use Retrieve Last to open the preview again.';status.className='progress-status info';
+      }else if(error.name==='AbortError'){
+        studio.style.display=run.previousStudioDisplay;status.textContent=run.serverFinished?'Result remains available. Use Retrieve Last to open it again.':run.jobId?'Waiting stopped. The server task has not been cancelled.':'Operation cancelled before processing started.';status.className='progress-status info';
       } else if (error.name === "SeparationAborted") {
         newProjectPromptDialog?.classList.remove("open");
         studio.style.display = run.previousStudioDisplay;
@@ -7839,7 +7851,7 @@ studio.style.display =
         status.className = "progress-status info";
       } else {
         // При потере polling стараемся остановить job, а не оставить его без UI.
-        if (run.jobId && !run.serverFinished && !run.aborted && !mynusLoggedOut760) {
+        if (run.jobId && !run.serverFinished && !run.aborted) {
           await abortCurrentSeparation(run);
         }
         if(!error.mynusReported)console.error(error);
@@ -21659,7 +21671,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "8.5.0",
+    version: "8.6.0",
     duration: Number(duration)||0,
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
@@ -22579,7 +22591,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "8.5.0";
+const MYNUS_CLIENT_VERSION = "8.6.0";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -24034,7 +24046,7 @@ document.addEventListener("click", event => {
 <button id="mnLoginButton" type="button">Account</button>
 <dialog id="mnLoginDialog">
   <form id="mnLoginForm">
-    <strong id="mnAuthTitle">MyNus — REG / LOG</strong>
+    <strong id="mnAuthTitle">Guest</strong>
     <section id="mnAccount" hidden aria-label="Account">
       <div id="mnAccountMenu">
         <button id="mnOpenProfile" type="button">Profile</button>
@@ -24070,6 +24082,8 @@ document.addEventListener("click", event => {
       </section>
       <section id="mnPaymentsPanel" hidden aria-label="Payments">
         <p id="mnPaymentSummary">Loading payment details…</p>
+        <label for="mnTokenType">Token type</label>
+        <select id="mnTokenType" aria-label="Token type"><option value="OneTime">OneTime</option><option value="Subscription">Subscription</option></select>
         <button type="button" id="mnConfirmToken780">Подтвердить оплату</button>
         <button type="button" id="mnCheckToken780">Проверить токен</button>
         <div id="mnTokens780" aria-live="polite"></div>
@@ -24082,8 +24096,8 @@ document.addEventListener("click", event => {
     </section>
 
     <div id="mnLoginMethods">
-      <button type="button" id="mnLogMode" class="selected">LOG</button>
-      <button type="button" id="mnRegMode">REG</button>
+      <button type="button" id="mnLogMode" class="selected">Sign in</button>
+      <button type="button" id="mnRegMode">Sign up</button>
     </div>
     <label id="mnAuthEmailLabel">Email <input id="mnAuthEmail" type="email" autocomplete="email" maxlength="254" required></label>
     <div id="mnRegFields" hidden>
@@ -24251,7 +24265,7 @@ document.addEventListener("click", event => {
   function showPayments(){accountMenu.hidden=true;profilePanel.hidden=true;paymentsPanel.hidden=false;accountHeading840();message.textContent='';accountStatus('mnPaymentNotice','');loadPayments();}
   document.getElementById('mnOpenProfile').onclick=showProfile;
   document.getElementById('mnOpenPayments').onclick=showPayments;
-  window.mynusOpenPayments820=async()=>{if(mynusGuest850){openAuthDialog();email.focus();return;}if(!accountChecked)await checkAccountOnDemand();if(!authenticated){openAuthDialog();return;}showPayments();openAccountDropdown();dialog.style.setProperty('z-index','30020','important');await refreshTokens780();};
+  window.mynusOpenPayments820=async()=>{if(mynusIsGuest860){openAuthDialog();email.focus();return;}if(!accountChecked)await checkAccountOnDemand();if(!authenticated){openAuthDialog();return;}showPayments();openAccountDropdown();dialog.style.setProperty('z-index','30020','important');await refreshTokens780();};
   document.getElementById('mnProfileBack').onclick=showAccountMenu;
   document.getElementById('mnProfileToPayments').onclick=showPayments;
   document.getElementById('mnPaymentsToProfile').onclick=showProfile;
@@ -24324,7 +24338,7 @@ document.addEventListener("click", event => {
     try {
       await api(registration ? '/api/auth/register' : '/api/auth/login', {email:email.value, code:code.value});
       window.mynusLocalConsole.event('account-in','Account signed in: '+email.value.trim());
-      accountChecked=false;await checkAccountOnDemand();setBusy(false);showAccountMenu();openAccountDropdown();
+      accountChecked=false;await checkAccountOnDemand();setBusy(false);if(authenticated){showAccountMenu();openAccountDropdown();}else throw Error('Unable to load the signed-in account. Try opening Account again.');
     } catch (error) {message.textContent = error.message; setBusy(false);}
   };
   document.getElementById('mnLogout').onclick = async () => {
@@ -24343,7 +24357,7 @@ document.addEventListener("click", event => {
   function resetAccount760(){
     authenticated=false;accountUser=null;accountRequest=null;accountChecked=false;
     open.textContent='Account';open.title='Sign in or register';
-    document.getElementById('mnAuthTitle').textContent='Account';
+    document.getElementById('mnAuthTitle').textContent='Guest';
     document.getElementById('mnAccount').hidden=true;
     document.getElementById('mnLogout').hidden=true;
     document.getElementById('mnLoginMethods').hidden=false;document.getElementById('mnLoginMethods').style.display='';
@@ -24351,10 +24365,10 @@ document.addEventListener("click", event => {
     mode(false);setBusy(false);
   }
   window.addEventListener('mynus-session-change',event=>{
-    if(event.detail.guest){if(authenticated)resetAccount760();return;}if(!event.detail.authenticated)resetAccount760();
+    if(!event.detail.authenticated)resetAccount760();
     else if(!authenticated&&!busy)void checkAccountOnDemand(true);
   });
-  window.addEventListener('mynus-open-signin784',()=>{resetAccount760();openAuthDialog();email.focus();});
+  window.addEventListener('mynus-open-signin784',async()=>{if(mynusSessionToken&&!authenticated)await checkAccountOnDemand(true);if(authenticated){showAccountMenu();openAccountDropdown();return;}openAuthDialog();email.focus();});
 
   let accountChecked = false;
   let accountCheckPromise = null;
@@ -24367,12 +24381,12 @@ document.addEventListener("click", event => {
       if (response.status === 401) return;
       if (!response.ok) throw new Error('Unable to verify login');
       if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('Open MyNus at http://127.0.2.1:5000 and check the server version.');
-      const user = await response.json(); if(user.status==='Guest'){mynusGuest850=true;accountUser=user;resetAccount760();document.getElementById('mnAuthTitle').textContent='Guest №'+user.user_id;return;} authenticated = true; accountUser = user;
+      const authenticatedBefore860=authenticated;const user = await response.json(); if(user.status==='Guest')return;authenticated = true; accountUser = user;
       email.value = user.email || ''; open.textContent = 'Account';
       open.title = 'Open account';
       open.setAttribute('aria-label', 'Account: ' + (user.name || user.email || user.user_id));
       accountHeading840();
-      showAccountMenu();
+      if(!authenticatedBefore860)showAccountMenu();
       if(dialog.open)openAccountDropdown();
       document.getElementById('mnLoginMethods').hidden = true;
       document.getElementById('mnLoginMethods').style.display = 'none';
@@ -25668,16 +25682,16 @@ for(const id of ['lyricsUndoBtn','lyricsRedoBtn'])document.getElementById(id).ad
  document.getElementById('dbTrack').addEventListener('input',()=>{
   if(!dbDialog.hidden&&dbSnapshot)document.getElementById('dbTitle').textContent='Check Lyrics вЂ” '+(document.getElementById('dbTrack').value.trim()||'Untitled')+' вЂ” '+dbTime(dbSnapshot.seconds);
  });
- const resume=document.createElement('button');resume.type='button';resume.textContent='Retrieve Last';resume.title='Retrieve the latest separation result.';resume.hidden=mynusLoggedOut760;
+ const resume=document.createElement('button');resume.type='button';resume.textContent='Retrieve Last';resume.title='Retrieve the latest separation result.';resume.hidden=false;
  document.getElementById('splitBtn').after(resume);
- const state=()=>{resume.hidden=mynusLoggedOut760;};window.addEventListener('mynus-session-change',state);
+ const state=()=>{resume.hidden=false;};window.addEventListener('mynus-session-change',state);
  async function retrieveSelected801(pending){
   if(activeSeparation){report799('A server operation is already running.');return;}
   report799('Retrieving the existing server result…');
   try{const result=await startSeparation({sourceName:pending.source||pending.source_name||'Selected song'},pending.job_id);if(result?.succeeded)report799('Server result retrieved successfully.');else console.warn(status.textContent);}catch(error){report799('Retrieve Last failed: '+error.message,true);}
 
  }
- resume.onclick=async()=>{resume.disabled=true;try{const response=await mynusFetch('/api/separations/latest',{cache:'no-store'});const pending=await response.json();if(!response.ok)throw Error(pending.error||'No completed result is available.');await retrieveSelected801(pending);}catch(error){report799(error.message,true);}finally{resume.disabled=false;}};
+ resume.onclick=async()=>{resume.disabled=true;try{const response=await mynusFetch('/api/separations/latest'+(mynusIsGuest860?'?job_ids='+encodeURIComponent(guestIds860().join(',')):''),{cache:'no-store'});const pending=await response.json();if(!response.ok)throw Error(pending.error||'No completed result is available.');await retrieveSelected801(pending);}catch(error){report799(error.message,true);}finally{resume.disabled=false;}};
  for(const [label,path,kind] of [['Sessions','/api/account/sessions','sessions'],['Results','/api/separations','results']]){
   const button=document.createElement('button');button.type='button';button.textContent=label;
   document.getElementById('mnAccountMenu').appendChild(button);
@@ -25694,7 +25708,7 @@ for(const id of ['lyricsUndoBtn','lyricsRedoBtn'])document.getElementById(id).ad
       if(active&&item.session_id!==data.current_session_id){const end=document.createElement('button');end.textContent='Sign out';end.onclick=async()=>{const r=await mynusFetch('/api/account/sessions/revoke',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:item.session_id})});if(r.ok){end.remove();row.append(' В· Closed');}};row.append(end);}
      }else{
       row.textContent='#'+item.separation_id+' В· '+(item.source_name||'Track')+' В· '+(item.files_deleted_at?'Files deleted':item.status)+(item.delete_after?' · Удаление: '+mynusTime801(item.delete_after):'');
-      if(item.status==='completed'&&!item.files_deleted_at){const get=document.createElement('button');get.textContent='Retrieve';get.onclick=()=>{sessionStorage.setItem('mynusPendingResult760',JSON.stringify({job_id:item.client_request_id.replace(/^job:/,''),source:item.source_name,separation_id:item.separation_id}));window.dispatchEvent(new Event('mynus-result-state'));document.getElementById('mnLoginDialog').close();box.remove();retrieveSelected801({job_id:item.client_request_id.replace(/^job:/,''),source:item.source_name,separation_id:item.separation_id});};row.append(get);}
+      if(item.status==='completed'&&!item.files_deleted_at){const get=document.createElement('button');get.textContent='Retrieve';get.onclick=()=>{localStorage.setItem(pendingKey860(),JSON.stringify({job_id:item.client_request_id.replace(/^job:/,''),source:item.source_name,separation_id:item.separation_id}));window.dispatchEvent(new Event('mynus-result-state'));document.getElementById('mnLoginDialog').close();box.remove();retrieveSelected801({job_id:item.client_request_id.replace(/^job:/,''),source:item.source_name,separation_id:item.separation_id});};row.append(get);}
      }
      box.append(row);
     }
@@ -25879,8 +25893,8 @@ async function refreshTokens780(){
  const confirm=document.getElementById('mnConfirmToken780'),check=document.getElementById('mnCheckToken780');
  confirm.onclick=async()=>{
   confirm.disabled=true;
-  try{const response=await mynusFetch('/api/account/tokens/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});const data=await response.json();if(!response.ok)throw Error(data.error||'Ошибка подтверждения');await refreshTokens780();console.info('Тестовое подтверждение: токен № '+data.token.token_id+' · '+data.token.type+' · '+data.token.status);}
-  catch(e){document.getElementById('mnTokens780').textContent=e.message;}finally{confirm.disabled=false;}
+  try{const response=await mynusFetch('/api/account/tokens/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:document.getElementById('mnTokenType').value})});const data=await response.json();if(!response.ok)throw Error(data.error||'Ошибка подтверждения');await refreshTokens780();console.info('Тестовое подтверждение: токен № '+data.token.token_id+' · '+data.token.type+' · '+data.token.status);}
+  catch(e){document.getElementById('mnTokens780').textContent=e.message;console.error('Token confirmation: '+e.message);}finally{confirm.disabled=false;}
  };
  check.onclick=()=>refreshTokens780().catch(e=>document.getElementById('mnTokens780').textContent=e.message);
  document.getElementById('mnOpenPayments').addEventListener('click',()=>check.onclick());
@@ -25968,17 +25982,17 @@ async function mountPreview780(box,jobId){
  const instruction='To enable ServerMode, connect to the Internet and sign up or sign in.';
  let signedIn=false,reachable=false,lastMode=null,lastGuest850=null;
  const notice=document.getElementById('mnConsoleNotice');
- function connected(){return signedIn&&reachable&&navigator.onLine!==false;}
+ function connected(){return reachable&&navigator.onLine!==false;}
  function footer(){if(notice){const text=connected()?'Server '+mynusServerBase:'Out of server';if(notice.textContent!==text)notice.textContent=text;}}
  function render(){
   const mode=connected()?'ServerMode':'LocalMode';
   footer();
-  if(mode===lastMode&&lastGuest850===mynusGuest850)return;lastGuest850=mynusGuest850;
+  if(mode===lastMode&&lastGuest850===mynusIsGuest860)return;lastGuest850=mynusIsGuest860;
   lastMode=mode;
-  const serverText850=mynusGuest850?server.replace('Signed in','Guest'):server;document.title=mode==='ServerMode'?serverText850:local+' · '+instruction;
-  console.info('Mode: '+mode+' · '+(mode==='ServerMode'?(mynusGuest850?'Guest · Server features enabled':'Signed in · Server features enabled'):'Local features enabled · Server features disabled'));
+  const serverText850=mynusIsGuest860?server.replace('Signed in','Preview access'):server;document.title=mode==='ServerMode'?serverText850:local+' · '+instruction;
+  console.info('Mode: '+mode+' · '+(mode==='ServerMode'?(mynusIsGuest860?'Preview access · Server features enabled':'Signed in · Server features enabled'):'Local features enabled · Server features disabled'));
   window.dispatchEvent(new CustomEvent('mynus-mode-change784',{detail:{mode}}));
-  if(window.mynusNativeFiles?.available())window.mynusNativeFiles.request('app-mode',{mode,identity:mynusGuest850?'Guest':'Client'}).catch(error=>console.warn('Window mode label:',error.message));
+  if(window.mynusNativeFiles?.available())window.mynusNativeFiles.request('app-mode',{mode,identity:mynusIsGuest860?'Anonymous':'Client'}).catch(error=>console.warn('Window mode label:',error.message));
   const fallback=document.getElementById('mynusModeBar784');
   if(fallback){if(window.mynusUpdateHeaderInfo7915)window.mynusUpdateHeaderInfo7915(mode==='ServerMode'?serverText850:local,mode!=='ServerMode');else{fallback.firstChild.textContent=(mode==='ServerMode'?serverText850:local);fallback.lastChild.hidden=mode==='ServerMode';}}
  }
@@ -28839,14 +28853,20 @@ function align(){const input=document.getElementById('selectFileBtn');if(!input)
 </style><script>function paymentSummary820(data){const sub=data.subscription;return 'Plan: '+(sub&&sub.status==='active'?sub.plan_name:'No active plan')+'\nStatus: '+(data.access_status==='Subscription'?'Active subscription':data.access_status==='OneTime'?'Active OneTime token':'No access');}
 function accessNotice820(text,error=false){const message=String(text);status.textContent=message;status.className='progress-status '+(error?'error':'info');console[error?'warn':'info'](message);}
 async function waitForPaidResult760(data,run){
- sessionStorage.setItem('mynusPendingResult760',JSON.stringify({job_id:run.jobId,separation_id:data.separation_id,source:run.sourceName799||currentSourceAudioName||currentOriginalFile?.name||null}));
+ localStorage.setItem(pendingKey860(),JSON.stringify({job_id:run.jobId,separation_id:data.separation_id,source:run.sourceName799||currentSourceAudioName||currentOriginalFile?.name||null}));
  const box=document.createElement('section');box.className='result-access760 result-ready820';box.setAttribute('role','dialog');box.setAttribute('aria-label','Separation result');
  const head=document.createElement('h2');head.textContent='Separation #'+data.separation_id+' is ready';const intro=document.createElement('p');intro.className='ready-intro820';intro.textContent='Listen to the preview.';box.append(head,intro);document.body.append(box);
  const cleanupPreview=await mountPreview780(box,run.jobId);box.querySelector?.('.result-preview780 > button')?.click?.();
  const message=document.createElement('p');message.className='ready-access820';message.setAttribute('role','status');const expiry=document.createElement('p');expiry.className='ready-expiry820';expiry.textContent='Deletion: '+(data.delete_after?mynusTime801(data.delete_after)+' — Israel time':'Not scheduled');
  const footer=document.createElement('div');footer.className='ready-actions820';const use=document.createElement('button'),account=document.createElement('button'),close=document.createElement('button');use.textContent='Use Token';use.title='Apply token to this separation result.';account.textContent='Account / Payments';account.title='Check access status.';close.textContent='Close';close.title='Close this window. The result remains available in Results until deletion.';footer.append(use,account,close);box.append(message,expiry,footer);
+ function resultDownloadInfo860(guest){
+  return 'To download the full result:\n1. Open Account / Payments.'+
+   (guest?'\n2. Sign in to your account or sign up, then open Payments.\n3. Get a OneTime token or activate a Subscription.\n4. Return to this window and click Use Token.':'\n2. Get a OneTime token or activate a Subscription.\n3. Return to this window and click Use Token.')+
+   '\n\nResults are stored for 100 hours after processing. The deletion time is shown below. No need to run Separation again.';
+ }
  let alive=true,busy=false;
 async function refresh(){
+ if(mynusIsGuest860){if(alive){data.download_allowed=false;use.textContent='Use Token';use.title='Apply token to this separation result.';message.style.whiteSpace='pre-line';message.textContent=resultDownloadInfo860(true);message.classList.remove('available');}return;}
  try{
   const response=await mynusFetch('/api/account/tokens',{cache:'no-store'});
   const tokens=await response.json();
@@ -28864,13 +28884,14 @@ async function refresh(){
   );
 
   data.download_allowed=!!paid;
-  use.textContent=mynusGuest850?'Sign in / Register':paid?'Download':'Use Token';
+  use.textContent=paid?'Download':'Use Token';
   use.title=paid?'Download this result again. No additional token required.':
    'Apply token to this separation result.';
-  message.textContent=mynusGuest850?'Sign in or register to get the full result. Your Separation will be kept.':paid?
+  message.style.whiteSpace='pre-line';
+  message.textContent=paid?
    'Access granted. Download this result again until deletion.':
    available?'Access available. Choose Use Token to download this result.':
-   'No active token. Open Account / Payments to view access.';
+   resultDownloadInfo860(false);
   message.classList.toggle('available',!!(paid||available));
  }catch(e){
   if(alive)message.textContent=e.message;
@@ -28893,23 +28914,21 @@ async function refresh(){
 
   function sessionChanged(event){
    if(event.detail.authenticated){void refresh();return;}
-   if(!event.detail.authenticated){
-    finish(new DOMException('Signed out.','AbortError'));
-   }
+   void refresh();
   }
 
   window.addEventListener('mynus-session-change',sessionChanged);
 
   close.onclick=()=>{
    if(!busy)finish(new DOMException(
-    'Result remains available in Results until deletion.',
-    'AbortError'
+    'Result remains available until deletion.',
+    'ResultClosed860'
    ));
   };
 
   use.onclick=async()=>{
    if(busy)return;
-   if(mynusGuest850){window.dispatchEvent(new Event('mynus-open-signin784'));return;}
+   if(mynusIsGuest860){window.dispatchEvent(new Event('mynus-open-signin784'));return;}
 
    if(data.download_allowed){
     finish();
@@ -29200,7 +29219,7 @@ html[data-chat-admin830="1"] .mynus-chat830[data-online=true] .chat-user830{colo
 #mnLoginDialog.mnAccountDropdown input,#mnLoginDialog.mnAccountDropdown select{background:#fff!important;color:#222!important;border-color:#ccc}#mnLoginDialog.mnAccountDropdown .mnAccountStatus.success{background:transparent!important;color:#227348!important}#mnLoginDialog.mnAccountDropdown .mnAccountStatus.error{color:#b42318!important}#accountTitle{overflow-wrap:anywhere}
 </style>
 <style>
-/* 8.5.0 gain faders share the complete meter lane. */
+/* 8.6.0 gain faders share the complete meter lane. */
 .gain850{--thumb850:#f13f3f;accent-color:var(--thumb850)}
 .gain850::-webkit-slider-thumb{background:var(--thumb850)!important;border:1px solid #111!important;box-shadow:0 0 0 1px #ddd9!important}
 .gain850::-moz-range-thumb{background:var(--thumb850)!important;border:1px solid #111!important}
@@ -29245,7 +29264,7 @@ html[data-chat-admin830="1"] .mynus-chat830[data-online=true] .chat-user830{colo
  // Input gain remains available in the existing track menu, not as a duplicate column.
  const inputSettings=document.createElement('label');inputSettings.className='input-level850';const text=document.createElement('span');text.textContent='Microphone input';const clone=document.createElement('input');clone.type='range';clone.min=0;clone.max=100;clone.value=lyricsFullScreenMicRange.value;clone.title='Microphone input gain before mixing.';const output=document.createElement('output');output.textContent=clone.value+'%';inputSettings.append(text,clone,output);document.getElementById('lyricsFullScreenTracksMenu').append(inputSettings);clone.oninput=()=>{lyricsFullScreenMicRange.value=clone.value;lyricsFullScreenMicRange.dispatchEvent(new Event('input',{bubbles:true}));output.textContent=clone.value+'%';};decorate(clone);
  let last=0;function frame(now){if(now-last>50){last=now;enhance();for(const i of document.querySelectorAll('.gain850'))paint(i);const values=window.mynusMeterDb850||{},db=Math.max(values.L??-Infinity,values.R??-Infinity),fill=Math.max(0,Math.min(1,(db+48)/54));lane.querySelector('.master-cover850').style.height=(100-fill*100)+'%';}requestAnimationFrame(frame);}requestAnimationFrame(frame);
- queueMicrotask(()=>{if(navigator.onLine!==false)void ensureIdentity850().catch(()=>{});});
+ queueMicrotask(()=>{if(navigator.onLine!==false)void ensureSeparationMode860().catch(()=>{});});
 })();
 </script>
 
