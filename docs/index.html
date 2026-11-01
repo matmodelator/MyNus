@@ -2,7 +2,10 @@
 <!DOCTYPE html>
 <html lang="en">
 
-<head><script>function faderColour861(position){
+<head><script>function panColour862(p){p=Math.max(0,Math.min(1,Number(p)||0));return 'rgb('+[38,190,110].map((v,i)=>Math.round(v+([48,105,235][i]-v)*p)).join(',')+')';}
+function isPan862(input){return input.closest('.pan')||/pan/i.test(input.getAttribute('aria-label')||'')||/pan/i.test(input.id||'')||input.min==='-100'&&input.max==='100';}
+</script>
+<script>function faderColour861(position){
  const stops=[[0,[140,32,204]],[.2,[36,92,255]],[.4,[0,203,212]],[.6,[73,202,72]],[.78,[245,222,56]],[.89,[255,152,48]],[1,[255,34,34]]];
  const p=Math.max(0,Math.min(1,Number(position)||0));let n=1;while(n<stops.length-1&&p>stops[n][0])n++;
  const [a,ca]=stops[n-1],[b,cb]=stops[n],t=(p-a)/(b-a);return 'rgb('+ca.map((v,i)=>Math.round(v+(cb[i]-v)*t)).join(',')+')';
@@ -27,7 +30,7 @@ window.mynusLogTime801=function(text){return String(text).replace(/\b\d{4}-\d{2}
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 8.6.1 |  OneREC</title>
+  <title>MyNus 8.6.2 |  REC&PLAY</title>
 
 
  <style>
@@ -16009,7 +16012,7 @@ function renderLyricsFullScreenTracksMenu() {
     const state = lyricsFullScreenTrackState[stemId] || cloneLyricsFullScreenSourceState(stemId);
     lyricsFullScreenTrackState[stemId] = state;
     const row = document.createElement("div");
-    row.className = "lyrics-fullscreen-track-row";
+    row.className = "lyrics-fullscreen-track-row";row.dataset.trackId=stemId;
 
     const solo = document.createElement("button");
     solo.type = "button";
@@ -16087,7 +16090,7 @@ function renderLyricsFullScreenTracksMenu() {
 
 // Работа со Structure в Lyrics Editor.
 function refreshLyricsFullScreenFxWindow(stemId, win) {
-  const state = lyricsFullScreenTrackState[stemId];
+  const state = micFxState862(stemId);
   if (!state || !win) return;
   win.querySelectorAll("[data-fsfx]").forEach(input => {
     const key = input.dataset.fsfx;
@@ -16119,10 +16122,10 @@ function openLyricsFullScreenFxWindow(stemId, anchorRect) {
     win.addEventListener("input", event => {
       const input = event.target.closest("[data-fsfx]");
       if (!input) return;
-      const state = lyricsFullScreenTrackState[stemId];
+      const state = micFxState862(stemId);
       if (!state) return;
       const key = input.dataset.fsfx;
-      state[key] = input.type === "checkbox" ? input.checked : Number(input.value);
+      state[key] = input.type === "checkbox" ? input.checked : Number(input.value);if(stemId==='microphone'&&micMode862==='input')state.bypass=false;
       const out = win.querySelector(`[data-fsfx-value="${key}"]`);
       if (out) out.textContent = String(state[key]);
       applyLyricsFullScreenTrackFxNodes();
@@ -21675,7 +21678,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "8.6.1",
+    version: "8.6.2",
     duration: Number(duration)||0,
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
@@ -21787,8 +21790,8 @@ async function localImportProject(file, options = {}) {
   }
   const names=m.project.track_names||m.project.sequencer?.trackNames7920||Object.fromEntries(Object.entries(m.media).filter(([,v])=>typeof v.name==='string').map(([id,v])=>[id,v.name]));
   m.project.track_names={...names};m.project.sequencer={...m.project.sequencer,trackNames7920:{...names}};
-  const record={id:crypto.randomUUID(),name:String(m.name||file.name),project:m.project,lyrics:m.lyrics,media,filePath:file.mynusNativePath||''};
-  if(entries.has('playlist.json'))record.playlist7913=JSON.parse(new TextDecoder().decode(entries.get('playlist.json')));
+  const record={...await projectIdentity862(file),name:String(m.name||file.name),project:m.project,lyrics:m.lyrics,media,filePath:file.mynusNativePath||''};
+
   if(options.remember!==false)await localRemember(record);return record;
 }
 function localChooseProject() {
@@ -21810,10 +21813,7 @@ async function localOpenProject() {
 }
 
   async function localWriteProjectArchive(entries) {
-    if(entries.some(([name])=>name==='Project.json')) {
-      entries=entries.filter(([name])=>name!=='playlist.json');
-      entries.push(['playlist.json',new Blob([JSON.stringify(await playlistDocument7913(),null,2)],{type:'application/json'})]);
-    }
+    entries=entries.filter(([name])=>name!=='playlist.json');
     const encoder = new TextEncoder();
     const parts = [];
     const directory = [];
@@ -22595,7 +22595,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "8.6.1";
+const MYNUS_CLIENT_VERSION = "8.6.2";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -25772,7 +25772,7 @@ for(const id of ['lyricsUndoBtn','lyricsRedoBtn'])document.getElementById(id).ad
    try{ensureMixAudioGraph();await mixAudioContext.resume();setupMeters();}catch(e){next.getTracks().forEach(t=>t.stop());throw e;}
    releaseInput();stream=next;source=mixAudioContext.createMediaStreamSource(stream);
    inputGain=mixAudioContext.createGain();micAnalyser=mixAudioContext.createAnalyser();micAnalyser.fftSize=1024;
-   monitorGain=mixAudioContext.createGain();source.connect(inputGain);inputGain.connect(micAnalyser);inputGain.connect(monitorGain);
+   monitorGain=mixAudioContext.createGain();source.connect(inputGain);const processedInput=prepareMicInput862(inputGain);processedInput.connect(micAnalyser);processedInput.connect(monitorGain);
    monitorGain.connect(stemGainNodes.microphone);gain();monitorState();
    stream.getAudioTracks()[0].addEventListener('ended',()=>{if(stream===next){releaseInput();say('Input disconnected. Select another microphone.',true);}});
    try{localStorage.setItem('mynus_microphone_device',selected);}catch(_){}
@@ -25782,7 +25782,7 @@ for(const id of ['lyricsUndoBtn','lyricsRedoBtn'])document.getElementById(id).ad
  }
  function releaseInput(){
   if((masterRecording||masterRecordArmed)&&(rec780.target==='microphone'))stopMasterRecording();
-  const old=stream;stream=null;old?.getTracks().forEach(t=>t.stop());
+  const old=stream;stream=null;old?.getTracks().forEach(t=>t.stop());disposeMicInput862();
   [source,inputGain,monitorGain,micAnalyser].forEach(n=>{try{n?.disconnect();}catch(_){}});
   source=inputGain=monitorGain=micAnalyser=null;monitoring=false;
   enable.textContent='Microphone: Off';monitor.disabled=true;monitorState();
@@ -25798,7 +25798,7 @@ for(const id of ['lyricsUndoBtn','lyricsRedoBtn'])document.getElementById(id).ad
  $('micRecord770').onclick=()=>startMasterRecording('microphone');
  $('micStopRecord770').onclick=()=>stopMasterRecording();
  function reset(){generation++;releaseInput();created=false;$('microphoneTrackRow').style.display='none';$('fxTargetMicrophoneBtn').disabled=true;$('micCreate770').disabled=false;if(fxTarget==='microphone')setFxTarget('vocals');}
- window.mynusMicrophone770={reset,enable:turnOn,input:()=>inputGain,enabled:()=>!!stream,monitorOn:()=>{monitoring=true;monitorState();},monitorOff:()=>{monitoring=false;monitorState();}};
+ window.mynusMicrophone770={reset,enable:turnOn,input:()=>micInputGraph862?.fx.output||inputGain,enabled:()=>!!stream,monitorOn:()=>{monitoring=true;monitorState();},monitorOff:()=>{monitoring=false;monitorState();}};
  // Playback and project restore can construct the graph without enabling input.
  const oldEnsure=ensureMixAudioGraph;
  ensureMixAudioGraph=function(){oldEnsure();setupMeters();};
@@ -27488,7 +27488,7 @@ function normalizePlaylist7912(raw){
 }
 function directTransition7912(raw,id,entryKey=null){
  const state=normalizePlaylist7912(raw),selected=state.entries7912.find(e=>e.key===entryKey);
- if(selected?.position===0)return state;
+ if(selected?.position===0||(!entryKey&&state.entries7912.some(e=>e.position===0&&e.id===id)))return state;
  state.entries7912=state.entries7912.map(e=>({...e,position:e.position<=0?e.position-1:e.position}));
  state.entries7912.push({key:crypto.randomUUID(),id,position:0});
  return normalizePlaylist7912(state);
@@ -27885,9 +27885,14 @@ const projectRestoreBefore7913=restoreProjectSequencerState;
 restoreProjectSequencerState=function(saved){const result=projectRestoreBefore7913(saved);if(mixAudioContext){for(const id of [...stemIds,'master'])applyFxSettings(id);}return result;};
 
 async function confirmPlaylistExit7913(){
- const answer=await dialog7913('Save Playlist','Save the session playlist to autoplaylist.json before exiting?', [['save','Save'],['discard',"Don't Save"],['cancel','Cancel']]);
- if(answer==='cancel')return false;if(answer==='save'){try{if(!await jsonSave7913(await playlistDocument7913(),true))return false;}catch(error){report7911('Playlist save failed: '+error.message,true);await dialog7913('Playlist',error.message);return false;}}
- return true;
+ try{
+  const doc=!playlistPicked862?(await readAutoPlaylist862()||await playlistDocument7913()):await playlistDocument7913();
+  await jsonSave7913(doc,true);
+  const answer=await dialog7913('Save Playlist','The automatic playlist has been saved. Save a separate playlist JSON too?', [['save','Save Playlist'],['skip','Close'],['cancel','Cancel']]);
+  if(answer==='cancel')return false;
+  if(answer==='save'&&!await jsonSave7913(doc))return false;
+  return true;
+ }catch(error){report7911('Playlist save failed: '+error.message,true);await dialog7913('Playlist',error.message);return false;}
 }
 window.mynusConfirmPlaylistExit7913=confirmPlaylistExit7913;
 window.chrome?.webview?.addEventListener('message',async event=>{
@@ -27897,13 +27902,7 @@ window.chrome?.webview?.addEventListener('message',async event=>{
 // Browser fallback offers its standard leave warning; the desktop host owns reliable close/save.
 window.addEventListener('beforeunload',event=>{if(window.mynusPlaylistDesktop7913||playlistExitApproved7913)return;event.preventDefault();event.returnValue='';});
 async function startPlaylistSession7913(){
- let doc=null;
- try{
-  if(window.mynusPlaylistDesktop7913){const loaded=await window.mynusNativeFiles.request('playlist-auto-open');if(loaded.text)doc=JSON.parse(loaded.text);}
-  else doc=await localDbAction('state','readonly',store=>store.get('autoplaylist7913'));
-  if(doc)await restorePlaylist7913(doc,{startup:true});
-  else {const state=await localPlaylistState();state.entries7912=state.entries7912.filter(e=>e.position>=0);await localPlaylistWrite(state);await refreshFullScreenPlaylist();}
- }catch(error){report7911('Session playlist could not be restored: '+error.message,true);}
+ await localPlaylistWrite(normalizePlaylist7912({entries7912:[]}));await refreshFullScreenPlaylist();
 }
 playlistSessionReady7913=startPlaylistSession7913();
 
@@ -29100,9 +29099,9 @@ html[data-chat-admin830="1"] .mynus-chat830[data-online=true] .chat-user830{colo
 </style>
 <script>
 (()=>{
- function paint(input){const p=(Number(input.value)-Number(input.min||0))/(Number(input.max||100)-Number(input.min||0));input.style.setProperty('--thumb850',faderColour861(p));const value=(input.closest('.meter-frame7911')||input.parentElement).querySelector('.gain-value850');if(value)value.textContent=input.value;}
+ function paint(input){const p=(Number(input.value)-Number(input.min||0))/(Number(input.max||100)-Number(input.min||0));input.style.setProperty('--thumb850',isPan862(input)?panColour862(p):faderColour861(p));const value=(input.closest('.meter-frame7911')||input.parentElement).querySelector('.gain-value850');if(value)value.textContent=input.value;}
  function decorate(input){if(input.dataset.gain850)return;input.dataset.gain850='1';input.classList.add('gain850');input.addEventListener('input',()=>paint(input));paint(input);}
- function enhance(){for(const input of document.querySelectorAll('.volume-row input[type=range],.lyrics-fullscreen-track-control input[type=range],.level793,#lyricsFullScreenVolumeRange,#lyricsFullScreenMicRange'))decorate(input);}
+ function enhance(){for(const input of document.querySelectorAll('.volume-row input[type=range],.lyrics-fullscreen-track-control input[type=range],.level793,#panControl,#lyricsFullScreenVolumeRange,#lyricsFullScreenMicRange'))decorate(input);}
  enhance();new MutationObserver(enhance).observe(document.body,{childList:true,subtree:true});
  // Remove duplicate meter/fader columns while retaining existing anchor geometry.
  const mic=document.querySelector('.fs-meter770.mic'),stereo=document.querySelector('.fs-stereo780');
@@ -29165,6 +29164,7 @@ async function confirmMicrophone861(){
   const card=document.createElement('div');card.className='export-dialog-card';const title=document.createElement('h3');title.textContent='Replace microphone recording?';
   const text=document.createElement('p');text.textContent='Starting a new recording will replace the existing microphone recording. Save it first if you want to keep it.';
   const actions=document.createElement('div');actions.className='export-format-grid';
+  const save=document.createElement('button');save.type='button';save.textContent='Save Voice';save.title='Save the existing microphone recording before replacing it';save.onclick=async()=>{const buttons=[...actions.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);try{await withOperation7914('Save Voice',saveVoice7911);}catch(error){text.textContent=error.message;report7911(error.message,true);}finally{buttons.forEach(b=>b.disabled=false);}};actions.append(save);
   for(const [label,value]of [['Record',true],['Cancel',false]]){const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=()=>{overlay.remove();resolve(value);};actions.append(b);}
   card.append(title,text,actions);overlay.append(card);document.body.append(overlay);actions.lastElementChild.focus();
  });
@@ -29187,17 +29187,45 @@ async function continueWithoutProject861(){
 }
 function defaultMix861(){return {instrumental:{volume:1,pan:0,muted:false},microphone:{volume:1,pan:0,muted:false},master:{volume:1,pan:0,muted:false}};}
 function captureMix861(){return {instrumental:{...lyricsFullScreenTrackState.other},microphone:{...lyricsFullScreenTrackState.microphone},master:{volume:lyricsFullScreenMasterLevel,pan:fxSettings.master?.pan||0,muted:false}};}
+let renderingAudio861=false;
 async function renderTracks861(snapshot,ids,{master=true}={}){
+ if(renderingAudio861)throw Error('Audio rendering is already running. Wait for it to finish.');
  const valid=ids.filter(id=>snapshot.buffers[id]);if(!valid.length)throw Error('No audio tracks available.');
- const rate=snapshot.buffers[valid[0]].sampleRate,ctx=new OfflineAudioContext(2,Math.max(1,Math.ceil(snapshot.seconds*rate)),rate);
- const bus=ctx.createGain();bus.gain.value=master?snapshot.masterLevel:1;bus.connect(ctx.destination);
- for(const id of valid){const state=snapshot.states[id]||{},src=ctx.createBufferSource(),input=snapshot.buffers[id],crop=snapshot.crops[id],silences=snapshot.silences[id]||[];
-  const masked=ctx.createBuffer(input.numberOfChannels,input.length,input.sampleRate);
-  for(let ch=0;ch<input.numberOfChannels;ch++){const d=masked.getChannelData(ch);d.set(input.getChannelData(ch));if(crop?.in>0)d.fill(0,0,Math.min(d.length,Math.ceil(crop.in*input.sampleRate)));if(crop?.out!=null)d.fill(0,Math.max(0,Math.floor(crop.out*input.sampleRate)));for(const [a,b]of silences)d.fill(0,Math.max(0,Math.floor(a*input.sampleRate)),Math.min(d.length,Math.ceil(b*input.sampleRate)));}
-  src.buffer=masked;const gain=ctx.createGain();gain.gain.value=state.volume??1;src.connect(gain);
-  const fx=createExportFxChain(gain,ctx,id);applyExportFxSettings({...defaultFxSettings,...state},fx);fx.output.connect(bus);src.start(0);await saveYield7911();
- }
- return saveWait7911(ctx.startRendering(),'Rendering audio');
+ renderingAudio861=true;
+ try{
+  const rate=snapshot.buffers[valid[0]].sampleRate,ctx=new OfflineAudioContext(2,Math.max(1,Math.ceil(snapshot.seconds*rate)),rate);
+  const bus=ctx.createGain();bus.gain.value=master?snapshot.masterLevel:1;bus.connect(ctx.destination);
+  for(const id of valid){
+   const state={...defaultFxSettings,...snapshot.states[id]},src=ctx.createBufferSource(),input=snapshot.buffers[id],crop=snapshot.crops[id],silences=snapshot.silences[id]||[];
+   // Reuse immutable source PCM unless an actual crop/silence mask is needed.
+   if(crop?.in>0||(crop?.out!=null&&crop.out<input.duration)||silences.length){
+    const masked=ctx.createBuffer(input.numberOfChannels,input.length,input.sampleRate);
+    for(let ch=0;ch<input.numberOfChannels;ch++){const d=masked.getChannelData(ch);d.set(input.getChannelData(ch));if(crop?.in>0)d.fill(0,0,Math.min(d.length,Math.ceil(crop.in*input.sampleRate)));if(crop?.out!=null)d.fill(0,Math.max(0,Math.floor(crop.out*input.sampleRate)));for(const [a,b]of silences)d.fill(0,Math.max(0,Math.floor(a*input.sampleRate)),Math.min(d.length,Math.ceil(b*input.sampleRate)));}
+    src.buffer=masked;
+   }else src.buffer=input;
+   const gain=ctx.createGain();gain.gain.value=state.volume??1;src.connect(gain);
+   if(state.bypass){gain.connect(bus);}else{
+    const fx=createExportFxChain(gain,ctx,id);applyExportFxSettings(state,fx);
+    // Disabled wet branches must not keep convolvers / feedback loops in the render path.
+    if(!state.reverbOn)fx.reverbWet.disconnect();
+    if(!state.delayOn){fx.delayWet.disconnect();fx.delayFeedback.disconnect();}
+    fx.output.connect(bus);
+   }
+   src.start(0);await saveYield7911();
+  }
+  const seconds=ctx.length/ctx.sampleRate;
+  // Progress is driven by rendered audio time. A long song has no fixed 120 s deadline.
+  for(let at=10;at<seconds;at+=10){
+   ctx.suspend(at).then(()=>{
+    window.mynusOperationProgress7914?.(ctx.currentTime,seconds,'Rendering audio');
+    return ctx.resume();
+   }).catch(()=>{});
+  }
+  window.mynusOperationProgress7914?.(0,seconds,'Rendering audio');
+  const result=await ctx.startRendering();
+  window.mynusOperationProgress7914?.(seconds,seconds,'Rendering audio');
+  return result;
+ }finally{renderingAudio861=false;}
 }
 async function renderInstrumental861(snapshot){
  // All source stems except Vocal; generated voice effects and microphone are not source stems.
@@ -29207,7 +29235,7 @@ async function renderInstrumental861(snapshot){
  return renderTracks861(snapshot,ids,{master:false});
 }
 async function renderMaster861(){
- const snap=fullSongSnapshot7911();const ids=stemIds.filter(id=>snap.buffers[id]&&enabledInSnapshot7911(id,snap));
+ const snap=fullSongSnapshot7911();const ids=(standalone861?['other','microphone']:stemIds).filter(id=>snap.buffers[id]&&enabledInSnapshot7911(id,snap));
  return renderTracks861(snap,ids);
 }
 const loadSource861=loadProjectById;
@@ -29246,11 +29274,12 @@ renderLyricsFullScreenTracksMenu=function(){
  menuBefore861();
  const rows=[...lyricsFullScreenTracksMenu.querySelectorAll('.lyrics-fullscreen-track-row')];
  if(standalone861)rows.forEach((row,i)=>{const id=stemIds[i];row.hidden=!['other','microphone'].includes(id);if(id==='other'){const name=row.querySelector('.lyrics-fullscreen-track-name-open');name.firstChild.textContent='Instrumental ';}});
+ if(!standalone861){rows.forEach((row,i)=>{row.hidden=!(stemTrackIsAvailable(stemIds[i])||(['microphone','pitchCorrection','harmonizer'].includes(stemIds[i])&&existsUi796(stemIds[i])));});if(micInputSettings861){micInputSettings861.hidden=!existsUi796('microphone');lyricsFullScreenTracksMenu.append(micInputSettings861);}return;}
  const row=document.createElement('div');row.className='lyrics-fullscreen-track-row master-control861';
- const name=document.createElement('button');name.type='button';name.textContent='Master';name.title='Master mix level';name.className='lyrics-fullscreen-track-name-open';
+ const name=document.createElement('button');name.type='button';name.textContent='MyNus';name.title='MyNus mix level';name.className='lyrics-fullscreen-track-name-open';
  const control=document.createElement('label');control.className='lyrics-fullscreen-track-control level';control.textContent='Level ';
- const range=document.createElement('input');range.type='range';range.min=0;range.max=100;range.value=String(Math.round(lyricsFullScreenMasterLevel*100));range.title='Master mix level';
- range.oninput=()=>{lyricsFullScreenVolumeRange.value=range.value;lyricsFullScreenVolumeRange.dispatchEvent(new Event('input',{bubbles:true}));};control.append(range);const blank=document.createElement('span'),mute=document.createElement('button');mute.type='button';mute.textContent='Mute';mute.title='Mute the master mix';let previous=1;mute.onclick=()=>{if(lyricsFullScreenMasterLevel>0){previous=lyricsFullScreenMasterLevel;range.value='0';}else range.value=String(previous*100);range.dispatchEvent(new Event('input',{bubbles:true}));mute.classList.toggle('active',lyricsFullScreenMasterLevel===0);};const secondary=document.createElement('div');secondary.className='lyrics-fullscreen-track-secondary';secondary.append(control);row.append(blank,name,mute,secondary);lyricsFullScreenTracksMenu.append(row);if(micInputSettings861)lyricsFullScreenTracksMenu.append(micInputSettings861);if(standalone861){const inst=rows[stemIds.indexOf('other')],mic=rows[stemIds.indexOf('microphone')];if(inst&&mic)mic.before(inst);}
+ const range=document.createElement('input');range.type='range';range.min=0;range.max=100;range.value=String(Math.round(lyricsFullScreenMasterLevel*100));range.title='MyNus mix level';
+ range.oninput=()=>{lyricsFullScreenVolumeRange.value=range.value;lyricsFullScreenVolumeRange.dispatchEvent(new Event('input',{bubbles:true}));};control.append(range);const blank=document.createElement('span'),mute=document.createElement('button');mute.type='button';mute.textContent='Mute';mute.title='Mute the MyNus mix';let previous=1;mute.onclick=()=>{if(lyricsFullScreenMasterLevel>0){previous=lyricsFullScreenMasterLevel;range.value='0';}else range.value=String(previous*100);range.dispatchEvent(new Event('input',{bubbles:true}));mute.classList.toggle('active',lyricsFullScreenMasterLevel===0);};const secondary=document.createElement('div');secondary.className='lyrics-fullscreen-track-secondary';secondary.append(control);row.append(blank,name,mute,secondary);lyricsFullScreenTracksMenu.append(row);if(micInputSettings861){micInputSettings861.hidden=false;lyricsFullScreenTracksMenu.append(micInputSettings861);}if(standalone861){const inst=rows[stemIds.indexOf('other')],mic=rows[stemIds.indexOf('microphone')];if(inst&&mic)mic.before(inst);}
 };
 function layoutFullscreen861(){
  const view=lyricsFullScreenView,stereo=view.querySelector('.fs-stereo780');if(!stereo)return;
@@ -29269,6 +29298,7 @@ saveMynus7911=function(){return withOperation7914('Save MyNus',async()=>{
  const mix=standalone861?captureMix861():defaultMix861();
  // Source-stem settings are baked into Instrumental, but its own Mix stays separate.
  if(!standalone861){mix.microphone={...snapshot.states.microphone};mix.master.volume=snapshot.masterLevel;}
+ mix.input=cloneSerializable(micInput862,{});
  const manifest={format:'MyNus Karaoke',format_version:4,project,lyrics:snapshot.lyrics,structure:snapshot.lyrics.structure||[],sequencer:{},mix,
   master:{file:'Instrumental.wav',mime_type:'audio/wav'},microphone:microphone?{file:'Microphone.wav',mime_type:'audio/wav'}:null};
  const entries=[['Karaoke.json',new Blob([JSON.stringify(manifest,null,2)],{type:'application/json'})],['Instrumental.wav',audio]];
@@ -29277,7 +29307,7 @@ saveMynus7911=function(){return withOperation7914('Save MyNus',async()=>{
  });};
 const previewBefore861=previewBuffer7914;
 previewBuffer7914=async function(kind){if(kind==='mix')return renderMaster861();if(kind==='backing')return renderInstrumental861(fullSongSnapshot7911());return processedVoice7911();};
-saveAudio7911=function(){return withOperation7914('Save Audio',async()=>{download7911(await saveWav7911(await renderMaster861()),projectSafeName()+'_Master.wav');report7911('Save Audio: Master mix saved');});};
+saveAudio7911=function(){return withOperation7914('Save Audio',async()=>{download7911(await saveWav7911(await renderMaster861()),projectSafeName()+(standalone861?'_MyNus.wav':'_Master.wav'));report7911('Save Audio: '+(standalone861?'MyNus':'Master')+' mix saved');});};
 // Project source remains the existing tracks. Window navigation never loads another source.
 window.mynusFullscreen861={get standalone(){return standalone861;},colour:faderColour861,renderInstrumental:renderInstrumental861,renderMaster:renderMaster861};
 layoutFullscreen861();
@@ -29308,5 +29338,106 @@ startMasterRecording=function(target='master'){
  return sharedRecordStart861(target);
 };
 </script>
+
+<script>
+/* 8.6.2: independent playlist, stable project identity and two microphone stages. */
+let playlistPicked862=false,playlistPicking862=null,micMode862='voice';
+let micInput862={...defaultFxSettings,volume:1,pan:0,muted:false,bypass:true},micInputGraph862=null;
+const projectIdentityCache862=new WeakMap();
+async function projectIdentity862(file){
+ if(projectIdentityCache862.has(file))return projectIdentityCache862.get(file);
+ const path=String(file.mynusNativePath||file.webkitRelativePath||'').replace(/\\/g,'/').normalize('NFC').toLocaleLowerCase();
+ const digest=[...new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer()))].map(v=>v.toString(16).padStart(2,'0')).join('');
+ const signature=file.name.normalize('NFC')+'|'+digest;
+ const records=await localDbAction('projects','readonly',store=>store.getAll()),all=new Map(records.map(r=>[r.id,r]));for(const [id,r]of localProjectMemory)all.set(id,r);
+ const current=(await localPlaylistState()).current;
+ const matches=[...all.values()].filter(r=>path?(r.sourceIdentity862?.path===path||String(r.filePath||'').replace(/\\/g,'/').normalize('NFC').toLocaleLowerCase()===path||r.source7912?.files?.some(f=>String(f.path||'').replace(/\\/g,'/').normalize('NFC').toLocaleLowerCase()===path)):r.sourceIdentity862?.signature===signature);
+ const match=path?(matches.find(r=>r.id===current)||matches[0]):(matches.find(r=>!r.sourceIdentity862?.path)||(matches.length===1?matches[0]:null));
+ const identity={id:match?.id||crypto.randomUUID(),sourceIdentity862:{path:path||match?.sourceIdentity862?.path||'',signature}};projectIdentityCache862.set(file,identity);return identity;
+}
+async function readAutoPlaylist862(){
+ if(window.mynusPlaylistDesktop7913){const r=await window.mynusNativeFiles.request('playlist-auto-open');return r.text?validPlaylist7913(JSON.parse(r.text)):null;}
+ const doc=await localDbAction('state','readonly',store=>store.get('autoplaylist7913'));return doc?validPlaylist7913(doc):null;
+}
+async function ensurePlaylistChoice862(){
+ if(playlistPicked862)return;if(playlistPicking862)return playlistPicking862;
+ playlistPicking862=(async()=>{
+  await playlistSessionReady7913;
+  const current=duration>0?(activeProjectId||(await localPlaylistState()).current):null;
+  for(;;){
+   const choice=await dialog7913('Playlist','Choose a playlist for this karaoke session.',[['auto','Restore automatic'],['file','Load Playlist'],['empty','Start empty']]);
+   if(choice==='file'){const doc=await jsonOpen7913();if(!doc)continue;await restorePlaylist7913(doc);}
+   else if(choice==='auto'){const doc=await readAutoPlaylist862();if(doc)await restorePlaylist7913(doc,{startup:true});else await localPlaylistWrite(normalizePlaylist7912({entries7912:[]}));}
+   else await localPlaylistWrite(normalizePlaylist7912({entries7912:[]}));
+   if(current){try{await markProjectInUse(current);}catch(_){}}
+   playlistPicked862=true;await refreshFullScreenPlaylist();return;
+  }
+ })().finally(()=>playlistPicking862=null);return playlistPicking862;
+}
+const navBefore862=navigateSong7912;
+navigateSong7912=async function(options={}){await ensurePlaylistChoice862();return navBefore862(options);};
+const loadBefore862=loadProjectById;
+loadProjectById=async function(id){
+ const record=await localRecord(id);if(record.karaoke800||isKaraokeUiMode())await ensurePlaylistChoice862();
+ const result=await loadBefore862(id);if(result===false)return false;
+ micMode862='voice';micInput862={...defaultFxSettings,volume:1,pan:0,muted:false,bypass:true,...(record.karaoke800?.mix861?.input||record.project?.sequencer?.micInput862||{})};
+ applyMicInput862();renderLyricsFullScreenTracksMenu();return result;
+};
+const uiBefore862=setUiMode;
+setUiMode=function(next){const result=uiBefore862(next);
+ if(next===UI_MODE.KARAOKE){if(compact7916){compact7916.hidden=true;compact7916.classList.remove('timing-pair7917');}void ensurePlaylistChoice862().catch(e=>report7911(e.message,true));}
+ return result;
+};
+function micFxState862(id){return id==='microphone'&&micMode862==='input'?micInput862:lyricsFullScreenTrackState[id];}
+function applyMicInput862(){
+ lyricsFullScreenMicRange.value=String(Math.round((micInput862.volume??1)*100));lyricsFullScreenMicRange.dispatchEvent(new Event('input',{bubbles:true}));
+ const graph=micInputGraph862;if(!graph)return;
+ graph.pre.gain.value=micInput862.muted?0:1;applyExportFxSettings({...defaultFxSettings,...micInput862},graph.fx);
+}
+function prepareMicInput862(raw){
+ disposeMicInput862();
+ const pre=mixAudioContext.createGain();pre.gain.value=micInput862.muted?0:1;raw.connect(pre);
+ const fx=createExportFxChain(pre,mixAudioContext,'microphone');micInputGraph862={raw,pre,fx};applyMicInput862();return fx.output;
+}
+function disposeMicInput862(){
+ const g=micInputGraph862;micInputGraph862=null;if(!g)return;
+ try{g.raw.disconnect(g.pre);}catch(_){}
+ for(const node of [g.pre,...Object.values(g.fx).flat()])try{node?.disconnect?.();}catch(_){}
+}
+const trackFxBefore862=applyLyricsFullScreenTrackFxNodes;
+applyLyricsFullScreenTrackFxNodes=function(){const result=trackFxBefore862();applyMicInput862();return result;};
+const stateBefore862=projectStateJson;
+projectStateJson=function(){const result=stateBefore862();result.sequencer.micInput862=cloneSerializable(micInput862,{});return result;};
+const mixBefore862=captureMix861;
+captureMix861=function(){return {...mixBefore862(),input:cloneSerializable(micInput862,{})};};
+const menuBefore862=renderLyricsFullScreenTracksMenu;
+renderLyricsFullScreenTracksMenu=function(){
+ menuBefore862();lyricsFullScreenTracksMenu.querySelectorAll('.input-level850').forEach(n=>n.remove());
+ const row=lyricsFullScreenTracksMenu.querySelector('[data-track-id="microphone"]');if(!row||row.hidden)return;
+ const name=row.querySelector('.lyrics-fullscreen-track-name-open'),wrap=document.createElement('div');wrap.className='mic-heading862';name.replaceWith(wrap);wrap.append(name);
+ const selector=document.createElement('select');selector.className='mic-stage862';selector.title='Choose voice playback or microphone input before recording';selector.add(new Option('Voice','voice'));selector.add(new Option('Input','input'));selector.value=micMode862;
+ selector.onchange=()=>{micMode862=selector.value;renderLyricsFullScreenTracksMenu();const win=lyricsFullScreenFxWindows.get('microphone');if(win&&!win.hidden){refreshLyricsFullScreenFxWindow('microphone',win);const title=win.querySelector('.lyrics-fullscreen-popup-title');if(title)title.textContent='Microphone '+(micMode862==='input'?'Input':'Voice')+' FX';}};wrap.append(selector);
+ name.onclick=e=>{e.stopPropagation();openLyricsFullScreenFxWindow('microphone',name.getBoundingClientRect());const win=lyricsFullScreenFxWindows.get('microphone');const title=win?.querySelector('.lyrics-fullscreen-popup-title');if(title)title.textContent='Microphone '+(micMode862==='input'?'Input':'Voice')+' FX';};
+ const secondary=row.querySelector('.lyrics-fullscreen-track-secondary');secondary.replaceChildren();
+ const state=micFxState862('microphone');
+ function update(){if(micMode862==='input')applyMicInput862();else{applyMix();applyLyricsFullScreenTrackFxNodes();}}
+ for(const [kind,label,min,max,value]of [['pan','Pan',-100,100,state.pan||0],['level','Level',0,100,Math.round((state.volume??1)*100)]]){
+  const control=document.createElement('label');control.className='lyrics-fullscreen-track-control '+kind;
+  const text=document.createElement('span');text.textContent=label;const left=document.createElement('span');left.textContent=kind==='pan'?'L':'0';const right=document.createElement('span');right.textContent=kind==='pan'?'R':'100';
+  const range=document.createElement('input');range.type='range';range.min=min;range.max=max;range.value=value;range.title='Microphone '+micMode862+' '+label.toLowerCase();range.oninput=()=>{if(kind==='pan'){state.pan=Number(range.value);if(micMode862==='input')state.bypass=false;}else state.volume=Number(range.value)/100;update();};control.append(text,left,range,right);secondary.append(control);
+ }
+ const oldMute=row.querySelector('.lyrics-fullscreen-track-mute');if(oldMute){const mute=oldMute.cloneNode(true);oldMute.replaceWith(mute);mute.classList.toggle('active',!!state.muted);mute.onclick=e=>{e.stopPropagation();state.muted=!state.muted;mute.classList.toggle('active',state.muted);update();};}
+ const solo=row.querySelector('.lyrics-fullscreen-track-solo');if(solo)solo.hidden=micMode862==='input';
+};
+window.mynusFeatures862={ensurePlaylist:ensurePlaylistChoice862,identity:projectIdentity862,micState:()=>micInput862,micMode:()=>micMode862};
+
+const openPairBefore862=openEditorsFromKaraoke7917;
+openEditorsFromKaraoke7917=function(){if(!fullLyricsAvailable7917()&&compact7916&&!compact7916.hidden){compact7916.hidden=true;return;}return openPairBefore862();};
+
+</script>
+<style>.mic-heading862{display:flex;align-items:center;justify-content:center;gap:10px;min-width:0}.mic-heading862 .lyrics-fullscreen-track-name-open{width:auto}.mic-stage862{background:#222;color:#fff;border:1px solid #777;border-radius:4px;padding:3px 6px;font:12px Arial}
+
+.rec-confirm861 .export-format-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.rec-confirm861 .export-format-grid button{min-width:0}
+</style>
 </body>
 </html>
