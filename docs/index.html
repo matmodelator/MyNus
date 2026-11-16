@@ -1,8 +1,23 @@
-
+﻿
 <!DOCTYPE html>
 <html lang="en">
 
-<head><script>function panColour862(p){p=Math.max(0,Math.min(1,Number(p)||0));return 'rgb('+[38,190,110].map((v,i)=>Math.round(v+([48,105,235][i]-v)*p)).join(',')+')';}
+<head><script>
+window.addEventListener('keydown',event=>{
+ if(typeof isKaraokeUiMode!=='function'||!isKaraokeUiMode())return;
+ if(event.key==='Enter'&&event.target?.id==='lyricsFullScreenTrackName'){event.preventDefault();event.stopImmediatePropagation();event.target.click();return;}
+ if(event.code==='PageUp'||event.code==='PageDown'){event.preventDefault();event.stopImmediatePropagation();return;}
+ if(event.code!=='Space'&&event.code!=='Backspace')return;
+ if(isTypingTarget(event.target)||modalOpen799())return;
+ event.preventDefault();event.stopImmediatePropagation();if(event.repeat)return;
+ let action;if(event.code==='Backspace')action=stopFullscreen863;
+ else if(event.ctrlKey&&!event.altKey)action=()=>startFullscreenRec861(false,true);
+ else if(event.altKey&&!event.ctrlKey)action=()=>startFullscreenRec861(true,true);
+ else if(!event.ctrlKey&&!event.altKey&&!event.metaKey)action=()=>karaokeFinishedDialog.classList.contains('open')?runKaraokeFinishAction('again'):pauseFullscreen863();
+ if(action)Promise.resolve(action()).catch(e=>report7911(e.message,true));
+},true);
+</script>
+<script>function panColour862(p){p=Math.max(0,Math.min(1,Number(p)||0));return 'rgb('+[38,190,110].map((v,i)=>Math.round(v+([48,105,235][i]-v)*p)).join(',')+')';}
 function isPan862(input){return input.closest('.pan')||/pan/i.test(input.getAttribute('aria-label')||'')||/pan/i.test(input.id||'')||input.min==='-100'&&input.max==='100';}
 </script>
 <script>function faderColour861(position){
@@ -30,7 +45,7 @@ window.mynusLogTime801=function(text){return String(text).replace(/\b\d{4}-\d{2}
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 8.6.2 |  REC&PLAY</title>
+  <title>MyNus 8.6.3 |  FinalTune</title>
 
 
  <style>
@@ -7043,6 +7058,11 @@ async function selectRecentAudioEntry(entry) {
       if(permission!=='granted')throw Error('The selected audio file is unavailable.');
       file=await entry.handle.getFile();
     }finally{if(desktop)await window.mynusNativeFiles.request('recent-read-end').catch(()=>{});}
+    if(isKaraokeUiMode()){
+      closeRecentAudioMenu();
+      const parsed=await parseFiles7912([file]);if(!parsed.records.length)throw Error(parsed.errors.join('\n')||'No supported track in Recent.');
+      if(await navigateSong7912({record:parsed.records[0],kind:'direct'}))closeRecentAudioMenu();return;
+    }
     clearProjectState();
     audioFile.value = "";
     recentSelectedAudioFile = file;
@@ -7053,6 +7073,7 @@ async function selectRecentAudioEntry(entry) {
 
 // Открытие, закрытие и обновление элемента интерфейса.
 async function openRecentAudioMenu(event) {
+  const anchor=event.target?.closest?.('#lyricsFullScreenTrackName')||fileName;
   event.preventDefault();
   if (!recentAudioMenu) return;
   let entries;
@@ -7085,7 +7106,7 @@ async function openRecentAudioMenu(event) {
     };
     renderEntries();
   }
-  const rect = fileName.getBoundingClientRect();
+  const rect = anchor.getBoundingClientRect();
   const menuWidth = Math.min(520, Math.max(280, rect.width));
   recentAudioMenu.style.width = `${menuWidth}px`;
   recentAudioMenu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - menuWidth - 8))}px`;
@@ -16247,32 +16268,8 @@ lyricsFullScreenBackTransportBtn?.addEventListener("click", event => {
   event.stopPropagation();
   startBtn?.click();
 });
-lyricsFullScreenStopBtn?.addEventListener("click", event => {
-  event.stopPropagation();
-
-  // STOP в Full Screen означает: закончить песню прямо сейчас.
-  // Stop Sequencer здесь намеренно не используется, потому что он возвращает позицию в 0.
-  pauseAll();
-
-  const endTime = Math.max(
-    0,
-    getProjectPlaybackEnd()
-  );
-
-  syncAllTo(endTime);
-  updatePlayheads();
-  updateMasterCursor();
-  updateTimeDisplay();
-  syncScrollTo(getTimelineWidth());
-
-  karaokeFinishTriggered = true;
-  openKaraokeFinishedDialog();
-});
-lyricsFullScreenPauseBtn?.addEventListener("click", event => {
-  event.stopPropagation();
-  if (isPlaying) pauseAll(); else playCurrentMode();
-  updateLyricsTransportButtons();
-});
+lyricsFullScreenStopBtn?.addEventListener("click", event => {event.stopPropagation();stopFullscreen863().catch(e=>report7911(e.message,true));});
+lyricsFullScreenPauseBtn?.addEventListener("click", event => {event.stopPropagation();pauseFullscreen863().catch(e=>report7911(e.message,true));});
 
 window.addEventListener("resize", () => {
   closeLyricsFullScreenMenus();
@@ -21678,7 +21675,7 @@ function projectLyricsJson() {
 // Сохранение текущего Project и связанных данных.
 function projectStateJson() {
   return {
-    version: "8.6.2",
+    version: "8.6.3",
     duration: Number(duration)||0,
     tonic: currentSourceTonic,
     source_tonic: currentSourceTonic,
@@ -22595,7 +22592,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "8.6.2";
+const MYNUS_CLIENT_VERSION = "8.6.3";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -27332,7 +27329,7 @@ function refreshFullscreenRec861(){
  const active=masterRecording||masterRecordArmed,busy=active||rec780.busy||fullscreenRecPreparing861;
  const b=document.getElementById('lyricsFullScreenRecBtn');b?.classList.toggle('recording7911',active);
  b?.setAttribute('aria-pressed',String(active));b?.setAttribute('aria-busy',String(rec780.busy||fullscreenRecPreparing861));
- if(b)b.title=active?'Stop Microphone recording':'Record Microphone from the beginning; replaces the previous take';
+ if(b)b.title='Record from the cursor. Press again to restart from the same position.';
  for(const id of ['postLoadAudio7911','postPreview7911','postSaveMynus7911','postSaveAudio7911','postSaveVoice7911']){
   const button=document.getElementById(id);if(button)button.disabled=busy||(id==='postSaveAudio7911'&&!(duration>0))||(id==='postSaveVoice7911'&&!waveformData.microphone);
  }
@@ -27629,14 +27626,14 @@ async function navigateSong7912({entryKey=null,record=null,kind='direct',autopla
    if(songDirty7912()){const choice=await confirmReload7912(record.name);if(choice==='cancel')return false;if(choice==='save')await saveBeforeReload7912(record);}
    record=await freshRecord7912(record,{required:true});if(!record)return false;
   }else if(entry)record=await freshRecord7912(record);
-  const next=kind==='reload'?beforeState:kind==='next'?nextTransition7912(beforeState,entryKey):directTransition7912(beforeState,record.id,entryKey);
+  const next=kind==='reload'?beforeState:kind==='next'?nextTransition7912(beforeState,entryKey):kind==='previous'?previousTransition863(beforeState,entryKey):directTransition7912(beforeState,record.id,entryKey);
   oldCurrent=beforeState.current?await localRecord(beforeState.current):null;
   await localRemember(record);provisional=true;
   report7911('Loading: '+record.name);
   if(await loadProjectById(record.id)===false)throw Error('Song loading did not complete.');
   await localPlaylistWrite(next);committed=true;await refreshFullScreenPlaylist();postPlayLoadAnotherPending=false;
   console.info('Playlist committed:',next.entries7912.map(e=>({id:e.id,position:e.position})));
-  closeKaraokeFinishedDialog();lyricsFullScreenPlaylistMenu.hidden=!(entryKey&&kind!=='next');karaokeFinishTriggered=false;
+  closeKaraokeFinishedDialog();lyricsFullScreenPlaylistMenu.hidden=!(entryKey&&kind!=='next'&&kind!=='previous');karaokeFinishTriggered=false;
   cleanSong7912=songFingerprint7912();
   report7911((kind==='reload'?'Reloaded source: ':'Loaded: ')+record.name);
   if(autoplay){try{await playCurrentMode();}catch(error){report7911('Loaded, but playback could not start: '+error.message,true);}}return true;
@@ -28615,7 +28612,7 @@ renderTrackNames7920();
 
 </script>
 <style>.app-menu-dialog800{max-width:560px;min-width:300px;border:0;border-radius:10px;padding:22px}.app-menu-dialog800 button{margin-top:18px;float:right}.app-menu-dialog800::backdrop{background:#0005}.app-menu800{position:fixed;z-index:999999;background:white;box-shadow:0 3px 15px #0005;padding:5px}.app-menu800 button{display:block;width:100%;font-weight:bold;text-align:left}</style><script>(function(){
- const descriptions={Update:'Update checks for a newer version of MyNus. Updates are not connected in this release. Microsoft Store installations will use Store updates.',Upgrade:'Upgrade changes the application level: Basic, Advanced or Pro. Purchasing is not connected in this release.',Help:'MyNus Help\n\nOpen audio and use SPLIT for Separation. Server access requires sign-in.\nProjects preserve editable tracks. MyNus saves karaoke.\nKeys ? lists keyboard shortcuts. Console shows operation messages.\nSeparation supports audio up to 10 minutes. One server task runs at a time; other tasks are queued.'};
+ const descriptions={Update:'Checking for application updates.',Upgrade:'Upgrade changes the application level: Basic, Advanced or Pro. Purchasing is not connected in this release.',Help:'MyNus Help\n\nOpen audio and use SPLIT for Separation. Server access requires sign-in.\nProjects preserve editable tracks. MyNus saves karaoke.\nKeys ? lists keyboard shortcuts. Console shows operation messages.\nSeparation supports audio up to 10 minutes. One server task runs at a time; other tasks are queued.'};
 async function showAbout841(exeVersion841,anchor850){return (async()=>{
  const exeVersion=exeVersion841||"Browser";
  const old=document.getElementById('mynusAbout830');if(old){old.close();return;}
@@ -28643,6 +28640,7 @@ async function showAbout841(exeVersion841,anchor850){return (async()=>{
 })();
 }
  async function openMenu800(action,exeVersion,anchor850){
+ if(action==='Update'&&window.mynusShowUpdate)return window.mynusShowUpdate(anchor850);
  if(action==='About')return showAbout841(exeVersion,anchor850);
  const existing=document.querySelector('dialog[data-menu-action840="'+action+'"]');if(existing){existing.close();return;}
   const box=document.createElement('dialog');box.className='app-menu-dialog800';box.dataset.menuAction840=action;const title=document.createElement('h3');title.textContent=action;box.append(title);const content=document.createElement('div');content.style.whiteSpace='pre-wrap';box.append(content);
@@ -28678,7 +28676,7 @@ async function showAbout841(exeVersion841,anchor850){return (async()=>{
  setting.onclick=()=>{const opening=settings.hidden;closeChildren850();settings.hidden=!opening;if(opening)position850(settings,menu);};
  const size=document.createElement('button');size.type='button';size.textContent='Screen Size';size.title='Preview MyNus at another screen size.';size.dataset.action841='Screen Size';settings.append(size);
  size.onclick=()=>{if(!window.mynusDesktopHeader){void openMenu800('Screen Size',exeVersion841,settings);return;}const a=settings.getBoundingClientRect(),w=340,x=a.right+6+w<=innerWidth?a.right+6:Math.max(6,a.left-w-6);window.chrome.webview.postMessage({type:'mynus-menu-command841',action:'Screen Size',x,y:a.top});};
- const hints={Update:'View information about application updates.',Upgrade:'View Basic, Advanced and Pro upgrade information.',License:'View the server-assigned application licence.',Server:'View the configured server address.',About:'View the current EXE, HTML, server and admin versions.',Help:'Read MyNus usage instructions.'};
+ const hints={Update:'Check for a newer version of MyNus.',Upgrade:'View Basic, Advanced and Pro upgrade information.',License:'View the server-assigned application licence.',Server:'View the configured server address.',About:'View the current EXE, HTML, server and admin versions.',Help:'Read MyNus usage instructions.'};
  for(const action of ['Update','Upgrade','License','Server','About','Help']){
   const item=document.createElement('button');item.type='button';item.textContent=action;item.title=hints[action];item.dataset.action841=action;
   if(action==='License'||action==='About')item.style.cssText='border-top:1px solid #dce0e7;margin-top:5px;padding-top:12px';
@@ -29162,7 +29160,7 @@ async function confirmMicrophone861(){
  return new Promise(resolve=>{
   const overlay=document.createElement('div');overlay.className='export-dialog open rec-confirm861';
   const card=document.createElement('div');card.className='export-dialog-card';const title=document.createElement('h3');title.textContent='Replace microphone recording?';
-  const text=document.createElement('p');text.textContent='Starting a new recording will replace the existing microphone recording. Save it first if you want to keep it.';
+  const text=document.createElement('p');text.textContent='A new recording replaces only the recorded section of the microphone track. Audio before the start point is kept. Save Voice first to keep a separate copy.';
   const actions=document.createElement('div');actions.className='export-format-grid';
   const save=document.createElement('button');save.type='button';save.textContent='Save Voice';save.title='Save the existing microphone recording before replacing it';save.onclick=async()=>{const buttons=[...actions.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);try{await withOperation7914('Save Voice',saveVoice7911);}catch(error){text.textContent=error.message;report7911(error.message,true);}finally{buttons.forEach(b=>b.disabled=false);}};actions.append(save);
   for(const [label,value]of [['Record',true],['Cancel',false]]){const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=()=>{overlay.remove();resolve(value);};actions.append(b);}
@@ -29314,23 +29312,38 @@ layoutFullscreen861();
 
 
 
-async function startFullscreenRec861(){
- if(masterRecording||masterRecordArmed)return stopMasterRecording();
+const recCursor863={start:null,epoch:-1};
+async function startFullscreenRec861(fromBeginning=false,forceCurrent=false){
  if(fullscreenRecPreparing861||rec780.busy||calibration799.busy)return;
  if(!(duration>0))throw Error('Load a song before recording.');
  fullscreenRecPreparing861=true;refreshFullscreenRec861();
+ const active=masterRecording||masterRecordArmed,current=getCurrentTime();
+ const start=fromBeginning?0:active&&!forceCurrent&&recCursor863.epoch===rec780.epoch?recCursor863.start:current;
  try{
-  if(waveformData.microphone&&!await confirmMicrophone861())return;
-  pauseAll();disableRepeat799();loopEnabled=false;
-  rec780.replaceWhole861=true;rec780.fullscreen861=true;rec780.startingFullscreen861=true;
-  try{await recordZeroUi796('microphone');}finally{rec780.startingFullscreen861=false;}
+  if(!active&&waveformData.microphone&&!await confirmMicrophone861())return;
+  if(start>=getProjectPlaybackEnd()-.001)throw Error('Move the cursor before the end of the song, or press Alt + Space to record from the beginning.');
+  pauseInternal799();if(active)await stopMasterRecording();disableRepeat799();loopEnabled=false;
+  await createTrackUi796('microphone');
+  recCursor863.start=start;recCursor863.epoch=rec780.epoch;rec780.replaceWhole861=false;rec780.fullscreen861=true;rec780.startingFullscreen861=true;
+  syncAllTo(start);const selection=hasSelection,trimStart=getProjectTrimStart;hasSelection=()=>false;if(fromBeginning)getProjectTrimStart=()=>0;
+  window.recordFromCursor7910=true;
+  try{await startMasterRecording('microphone');}finally{hasSelection=selection;getProjectTrimStart=trimStart;window.recordFromCursor7910=false;rec780.startingFullscreen861=false;}
+  rec780.punch799={a:start,b:getProjectPlaybackEnd()};
   if(!masterRecording&&!masterRecordArmed){
-   rec780.replaceWhole861=false;rec780.fullscreen861=false;
-   const error=window.mynusMicError7913;if(error){showMicError7913(error);throw error;}
-   throw Error('Microphone recording could not be started.');
+   rec780.fullscreen861=false;const error=window.mynusMicError7913;
+   if(error){showMicError7913(error);throw error;}throw Error('Microphone recording could not be started.');
   }
-  karaokeTake7911.last=null;report7911('REC started: Microphone · shared sequencer recorder');
- }finally{if(!masterRecording&&!masterRecordArmed){rec780.replaceWhole861=false;rec780.fullscreen861=false;}fullscreenRecPreparing861=false;refreshFullscreenRec861();}
+  karaokeTake7911.last=null;report7911('REC started: Microphone from '+formatTime(start));
+ }finally{if(!masterRecording&&!masterRecordArmed)rec780.fullscreen861=false;fullscreenRecPreparing861=false;refreshFullscreenRec861();}
+}
+async function pauseFullscreen863(){
+ if(isPlaying)pauseInternal799();else{karaokeFinishTriggered=false;closeKaraokeFinishedDialog();await playCurrentMode();}
+ updateLyricsTransportButtons();
+}
+async function stopFullscreen863(){
+ const cursor=getCurrentTime();pauseInternal799();if(masterRecording||masterRecordArmed)await stopMasterRecording();
+ syncAllTo(cursor);updatePlayheads();updateMasterCursor();updateTimeDisplay();updateLyricsMasterCounter();updateLyricsStructurePlayhead();updateLyricsTransportButtons();
+ recCursor863.start=null;closeKaraokeFinishedDialog();
 }
 const sharedRecordStart861=startMasterRecording;
 startMasterRecording=function(target='master'){
@@ -29439,5 +29452,75 @@ openEditorsFromKaraoke7917=function(){if(!fullLyricsAvailable7917()&&compact7916
 
 .rec-confirm861 .export-format-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.rec-confirm861 .export-format-grid button{min-width:0}
 </style>
+
+<script>
+function previousTransition863(raw,entryKey){
+ const state=normalizePlaylist7912(raw),selected=state.entries7912.find(e=>e.key===entryKey&&e.position===-1);
+ if(!selected)throw Error('There is no previous playlist track.');
+ state.entries7912=state.entries7912.map(e=>({...e,position:e.position+1}));return normalizePlaylist7912(state);
+}
+async function previousTrack863(){
+ const state=await localPlaylistState(),entry=state.entries7912.find(e=>e.position===-1);if(!entry)return;
+ return navigateSong7912({entryKey:entry.key,kind:'previous'});
+}
+function tooltips863(){
+ const tips={karaokeNextProjectBtn:'Load the next playlist track and decrease every playlist number by one.',postPreviousTrack863:'Load the previous playlist track and increase every playlist number by one.',karaokeLoadAnotherBtn:'Open a project file as the current playlist track.',karaokePlayAgainBtn:'Play the current track from the beginning without reloading its file.',karaokeLoadFileBtn:'Open a MyNus file as the current playlist track.',postSaveMynus7911:'Save Instrumental, Microphone, Mix, lyrics and timings as a MyNus file.',karaokeLoadExternalBtn:'Open a karaoke file or a matching pair of karaoke files.',postSaveVoice7911:'Save the current processed voice recording as a WAV file.',postLoadAudio7911:'Open an audio file as the current playlist track.',postSaveAudio7911:'Save the current audible mix as a single WAV file.',postPreview7911:'Listen to Instrumental, Voice or their combined mix.',karaokeFinishedCancelBtn:'Close Post Play and keep the current track.',karaokeSaveCurrentProjectFlag:'Save the current project before loading another track.',lyricsFullScreenRecBtn:'Record from the cursor. Press again to restart from the same position.',lyricsFullScreenPauseBtn:'Pause playback and recording. Press again to continue.',lyricsFullScreenStopBtn:'Stop playback and recording without moving the cursor.',lyricsFullScreenPlayBtn:'Start or resume playback.',lyricsFullScreenBackTransportBtn:'Move the cursor to the beginning of the track.',lyricsFullScreenMixerBtn7915:'Adjust track levels, pan and effects.',lyricsFullScreenKeysBtn:'Show keyboard shortcuts for karaoke.',lyricsFullScreenTrackName:'Open the Recent files list.'};
+ for(const [id,title]of Object.entries(tips)){const control=document.getElementById(id);if(control)control.title=title;}
+ const close=karaokeFinishedDialog.querySelector('.postplay-close7915');if(close)close.title='Close Post Play without changing the current track.';
+ const checkbox=karaokeSaveCurrentProjectFlag?.closest('label');if(checkbox)checkbox.title=tips.karaokeSaveCurrentProjectFlag;
+ if(autoButton7914)autoButton7914.title='Enable or disable automatic playback of the next track after the countdown.';
+ if(autoCounter7914)autoCounter7914.title='Time remaining until the next playlist track starts.';
+ if(karaokeFinishedMessage)karaokeFinishedMessage.title='Current track or operation status.';
+ for(const b of previewPanel7914?.querySelectorAll('[data-preview7914]')||[]){b.title={backing:'Listen to the accompaniment without the recorded voice.',voice:'Listen to the processed recorded voice without accompaniment.',mix:'Listen to accompaniment and voice together with the current Mix.'}[b.dataset.preview7914];}
+ const audio=document.getElementById('preview7911');if(audio)audio.title='Play, pause or seek within the selected preview.';
+ [...document.querySelectorAll('.fs-stereo780 .fs-meter770')].forEach((host,i)=>{host.title=i===0?'Adjust the left output channel level.':'Adjust the right output channel level.';host.querySelectorAll('input,button').forEach(c=>c.title=host.title);});
+}
+(()=>{
+ const grid=document.querySelector('.post-grid7914'),previous=button7911('postPreviousTrack863','Previous Track','Load the previous playlist track.',previousTrack863);
+ const cells=[['karaokeNextProjectBtn','Next Track'],['postPreviousTrack863','Previous Track'],['karaokeLoadAnotherBtn','Load Project'],['karaokePlayAgainBtn','Play Again'],['karaokeLoadFileBtn','Load MyNus'],['postSaveMynus7911','Save MyNus'],['karaokeLoadExternalBtn','Load Karaoke'],['postSaveVoice7911','Save Voice'],['postLoadAudio7911','Load Audio'],['postSaveAudio7911','Save Audio']];
+ grid.append(previous);
+ for(const [id,label]of cells){const button=document.getElementById(id);button.textContent=label;grid.append(button);}
+ const label=karaokeSaveCurrentProjectFlag.closest('label'),line=document.createElement('div');line.className='post-preview-line863';label.before(line);line.append(label,document.getElementById('postPreview7911'));
+ const keys=document.getElementById('lyricsFullScreenKeysMenu');for(const row of [...keys.children]){const label=row.querySelector('span')?.textContent?.trim();if(label==='Page Up'||label==='Page Down')row.remove();else if(label==='Ctrl + Space')row.lastElementChild.textContent='Record Microphone from the current position';else if(label==='Alt + Space')row.lastElementChild.textContent='Record Microphone from the beginning';}
+ lyricsFullScreenTrackName.tabIndex=0;lyricsFullScreenTrackName.setAttribute('role','button');lyricsFullScreenTrackName.setAttribute('aria-label','Recent files');
+ lyricsFullScreenTrackName.addEventListener('pointerdown',e=>e.stopPropagation());
+ lyricsFullScreenTrackName.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();if(recentAudioMenu.classList.contains('open'))closeRecentAudioMenu();else openRecentAudioMenu(e);});
+ lyricsFullScreenTrackName.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();lyricsFullScreenTrackName.click();}});
+ tooltips863();
+})();
+const resetPostBefore863=resetKaraokeFinishedButtons;
+resetKaraokeFinishedButtons=function(){const result=resetPostBefore863();const b=document.getElementById('postPreviousTrack863');if(b)b.disabled=!karaokePlaylistSnapshot.some(e=>e.position===-1)||playlistTransitionLocked;tooltips863();return result;};
+const updateAutoBefore863=updateAutoPlay7914;updateAutoPlay7914=function(){const result=updateAutoBefore863();tooltips863();return result;};
+window.mynusFeatures863={previous:previousTrack863,previousTransition:previousTransition863,rec:startFullscreenRec861,pause:pauseFullscreen863,stop:stopFullscreen863};
+
+</script>
+<style>/* The complete pan rail is colored; the native white remainder is removed. */
+input.gain850[data-pan863],.lyrics-fullscreen-track-control.pan input,#panControl{appearance:none;-webkit-appearance:none;background:transparent;accent-color:transparent}
+input.gain850[data-pan863]::-webkit-slider-runnable-track,.lyrics-fullscreen-track-control.pan input::-webkit-slider-runnable-track,#panControl::-webkit-slider-runnable-track{height:6px;background:linear-gradient(to right,rgb(38,190,110),rgb(48,105,235));border:0;border-radius:3px}
+input.gain850[data-pan863]::-webkit-slider-thumb,.lyrics-fullscreen-track-control.pan input::-webkit-slider-thumb,#panControl::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:13px;height:18px;background:var(--thumb850,#279cbb);border:1px solid #ccc;border-radius:2px;margin-top:-6px}
+input.gain850[data-pan863]::-moz-range-track,.lyrics-fullscreen-track-control.pan input::-moz-range-track,#panControl::-moz-range-track{height:6px;background:linear-gradient(to right,rgb(38,190,110),rgb(48,105,235));border:0;border-radius:3px}
+input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control.pan input::-moz-range-progress,#panControl::-moz-range-progress{background:transparent}
+.post-preview-line863{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}.post-preview-line863 label{margin:0!important;min-width:0}.post-preview-line863 button{flex:none;padding:8px 12px}
+#lyricsFullScreenTrackName{cursor:pointer}#lyricsFullScreenTrackName:hover{text-decoration:underline;text-underline-offset:4px}#recentAudioMenu{z-index:110100!important}
+</style>
+<script>
+(function () {
+ 'use strict';
+ const endpoint='https://matmodelator.com/downloads/mynus/latest.json';
+ let latest=null,checking=null,lastError='',installing=false;
+ const current=MYNUS_CLIENT_VERSION;
+ function compare(a,b){const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return Math.sign(d);}return 0;}
+ function valid(v){return /^\d+\.\d+\.\d+$/.test(v?.version||'')&&v?.installer?.url?.startsWith('https://matmodelator.com/downloads/mynus/')&&/^[a-f0-9]{64}$/i.test(v?.installer?.sha256||'');}
+ function mark(){const item=document.querySelector('[data-action841="Update"]');if(item){const available=latest&&compare(latest.version,current)>0;item.textContent=available?'Update · '+latest.version:'Update';item.title=available?'MyNus '+latest.version+' is available.':'Check for a newer version of MyNus.';}}
+ async function check(){if(checking)return checking;checking=(async()=>{try{const fetcher=typeof mynusNativeFetch==='function'?mynusNativeFetch:fetch;const r=await fetcher(endpoint,{cache:'no-store',signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error('The update service is unavailable ('+r.status+').');const value=await r.json();if(!valid(value))throw Error('The update information is invalid.');latest=value;lastError='';mark();return value;}catch(e){lastError=e.name==='TimeoutError'?'The update check timed out.':e.message;throw e;}finally{checking=null;}})();return checking;}
+ async function show(anchor){const old=document.querySelector('dialog[data-menu-action840="Update"]');if(old?.open){old.close();return;}old?.remove();const box=document.createElement('dialog');box.className='app-menu-dialog800';box.dataset.menuAction840='Update';const title=document.createElement('h3');title.textContent='MyNus Update';const text=document.createElement('p');text.style.whiteSpace='pre-line';text.textContent='Checking for updates…';const install=document.createElement('button');install.textContent='Download & Install';install.hidden=true;install.title='Download the installer. Your projects and settings are preserved.';const close=document.createElement('button');close.textContent='Close';close.title='Close update information.';close.onclick=()=>box.close();box.append(title,text,install,close);box.addEventListener('close',()=>box.remove());document.body.append(box);box.show();window.mynusPositionCascade850?.(box,anchor);try{const data=await check();if(!box.open)return;const newer=compare(data.version,current)>0;text.textContent='Installed: '+current+'\nLatest: '+data.version+'\n\n'+(newer?'A new version of MyNus is available.':'MyNus is up to date.')+(data.notes?'\n\n'+data.notes:'');install.hidden=!newer;install.onclick=()=>{if(installing)return;if(!window.mynusDesktopUpdates){text.textContent+='\n\nDownload MyNus Setup from matmodelator.com.';const a=document.createElement('a');a.href=data.installer.url;a.textContent='Download MyNus Setup';a.download='MyNusSetup.exe';box.append(a);install.disabled=true;return;}installing=true;install.disabled=true;window.chrome.webview.postMessage({type:'mynus-install-update'});};}catch(e){if(box.open)text.textContent='Unable to check for updates.\n'+lastError+'\nTry again later.';}}
+ window.mynusShowUpdate=show;
+ window.chrome?.webview?.addEventListener('message',event=>{if(event.data?.type!=='mynus-update-status')return;const d=event.data;const box=document.querySelector('dialog[data-menu-action840="Update"]');if(box)box.querySelector('p').textContent=d.message;installing=false;if(box)box.querySelector('button').disabled=false;console[d.error?'warn':'info'](d.message);});
+ // One quiet check per launch: network failure never blocks local work or floods the console.
+ setTimeout(()=>check().then(data=>{if(compare(data.version,current)>0){console.info('MyNus '+data.version+' is available. Open MyNus → Update.');const toast=document.createElement('div');toast.style.cssText='position:fixed;right:18px;bottom:18px;padding:12px 18px;background:#fff;color:#222;border:1px solid #ccd3df;border-radius:9px;box-shadow:0 4px 18px #0003;z-index:50000;font:14px Segoe UI';const button=document.createElement('button');button.textContent='MyNus '+data.version+' is available';button.onclick=()=>{toast.remove();void show();};const close=document.createElement('button');close.textContent='×';close.title='Dismiss update notification.';close.onclick=()=>toast.remove();toast.append(button,close);document.body.append(toast);}}).catch(()=>{}),5000);
+ window.mynusUpdateTests={compare,valid};
+})();
+
+</script>
 </body>
 </html>
