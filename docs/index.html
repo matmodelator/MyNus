@@ -45,7 +45,7 @@ window.mynusLogTime801=function(text){return String(text).replace(/\b\d{4}-\d{2}
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>Save Video 9.0.3 |  Video Track&Hide</title>
+  <title> Filtr Fix 9.0.5 |  Video Track&Hide</title>
 
 
  <style>
@@ -5367,14 +5367,15 @@ canvas,.master-timeline-inner,.playhead,.master-cursor{cursor:pointer}.playhead,
           <details id="karaokeVideoMenu">
             <summary>Video</summary>
             <div class="karaoke-video-options">
-              <button type="button" id="karaokeVideoLoad">Load Video</button>
+              <button type="button" id="karaokeVideoLoad" title="Choose a video file, or drag an MP4 or MOV onto the Karaoke screen.">Load Video</button>
               <input type="file" id="karaokeVideoFile" accept=".mp4,.mov,video/mp4,video/quicktime" hidden>
               <button type="button" id="karaokeVideoRemove" hidden>Remove</button>
               <label>Video volume <input id="karaokeVideoVolume" type="range" min="0" max="100" value="100"></label>
               <label>Offset (s) <input id="karaokeVideoOffset" type="number" step="0.01" value="0"></label>
               <label><input id="karaokeVideoLoop" type="checkbox"> Loop</label>
-              <label title="Ctrl+L"><input type="checkbox" id="karaokeVideoHideLyrics" aria-keyshortcuts="Control+L"> Hide Lyrics</label>
-              <label title="Ctrl+A"><input type="checkbox" id="karaokeVideoHideAll" aria-keyshortcuts="Control+A" disabled> Hide All</label>
+              <button type="button" id="karaokeVideoHideLyrics" title="Shift+Win" aria-pressed="false">Hide Lyrics</button>
+              <button type="button" id="karaokeVideoHideControls" title="Shift+Ctrl" aria-pressed="false">Hide Controls</button>
+              <button type="button" id="karaokeVideoHideAll" title="Shift+Alt" aria-pressed="false" disabled>Hide All</button>
               <button type="button" id="karaokeVideoExport" disabled>Export MP4</button>
               <button type="button" id="karaokeVideoCancelExport" hidden>Cancel Export</button>
               <output id="karaokeVideoStatus" aria-live="polite" hidden></output>
@@ -5393,6 +5394,9 @@ canvas,.master-timeline-inner,.playhead,.master-cursor{cursor:pointer}.playhead,
             <div><span>Space</span><span>Play / Pause</span></div>
             <div><span>Ctrl + A</span><span>Toggle video-only view</span></div>
             <div><span>Ctrl + L</span><span>Show / Hide Lyrics</span></div>
+            <div><span>Shift + Win</span><span>Show / Hide Lyrics</span></div>
+            <div><span>Shift + Ctrl</span><span>Show / Hide Controls</span></div>
+            <div><span>Shift + Alt</span><span>Toggle video-only view</span></div>
             <div><span>Tab</span><span>Lyrics Editor</span></div>
             <div><span>Esc</span><span>Sequencer</span></div>
             <div><span>Backspace</span><span>Close all Full Screen windows</span></div>
@@ -29601,22 +29605,23 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
   #karaokeVideoLyricsToggle[aria-pressed="true"] {
     text-decoration: line-through;
   }
-  #lyricsEditorDialog.karaoke-video-only {
+  #lyricsEditorDialog.karaoke-clean-view {
     z-index: 2147483647 !important;
     background: #000;
   }
-  #lyricsEditorDialog.karaoke-video-only > .karaoke-fullscreen-mode {
+  #lyricsEditorDialog.karaoke-clean-view > .karaoke-fullscreen-mode {
     inset: 0 !important;
     width: 100vw !important;
     height: 100vh !important;
     border: 0;
     box-shadow: none;
   }
-  #lyricsEditorDialog.karaoke-video-only > .karaoke-fullscreen-mode > :not(#lyricsFullScreenView),
-  #lyricsEditorDialog.karaoke-video-only #lyricsFullScreenView > :not(#karaokeVideoFrame) {
+  #lyricsEditorDialog.karaoke-clean-view > .karaoke-fullscreen-mode > :not(#lyricsFullScreenView),
+  #lyricsEditorDialog.karaoke-clean-view #lyricsFullScreenView > :not(#karaokeVideoFrame, .lyrics-fullscreen-lines),
+  #lyricsEditorDialog.karaoke-video-only #lyricsFullScreenView > .lyrics-fullscreen-lines {
     display: none !important;
   }
-  #lyricsEditorDialog.karaoke-video-only #lyricsFullScreenView {
+  #lyricsEditorDialog.karaoke-clean-view #lyricsFullScreenView {
     inset: 0 !important;
     background: #000;
   }
@@ -29690,6 +29695,7 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
   const hideLyrics = byId("karaokeVideoHideLyrics");
   const lyricsToggle = byId("karaokeVideoLyricsToggle");
   const hideAll = byId("karaokeVideoHideAll");
+  const hideControls = byId("karaokeVideoHideControls");
   const exportButton = byId("karaokeVideoExport");
   const cancelExport = byId("karaokeVideoCancelExport");
   const view = byId("lyricsFullScreenView");
@@ -29697,11 +29703,21 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
   const strip = byId("karaokeVideoOverlay");
   let structureDuration = 0;
   let exportJob = null;
+  let lyricsHidden = false;
+  let presentation = "normal";
 
-  function setVideoOnly(enabled) {
-    hideAll.checked = enabled;
-    lyricsEditorDialog.classList.toggle("karaoke-video-only", enabled);
-    if (enabled) menu.open = false;
+  function setPresentation(next) {
+    presentation = next;
+    lyricsEditorDialog.classList.toggle("karaoke-clean-view", next !== "normal");
+    lyricsEditorDialog.classList.toggle("karaoke-video-only", next === "video");
+    hideAll.setAttribute("aria-pressed", String(next === "video"));
+    hideControls.setAttribute("aria-pressed", String(next === "lyrics"));
+    if (next !== "normal") menu.open = false;
+  }
+
+  function togglePresentation(next) {
+    if (next === "video" && hideAll.disabled) return;
+    setPresentation(presentation === next ? "normal" : next);
   }
 
   function showStatus(message = "") {
@@ -29729,9 +29745,10 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
         remove.hidden = true;
         hideAll.disabled = true;
         updateExportButton();
-        setVideoOnly(false);
+        if (presentation === "video") setPresentation("normal");
       }
       showStatus(error.message || "Unable to play the selected video.");
+      if (isKaraokeUiMode() && presentation === "normal") menu.open = true;
     }
   });
 
@@ -29740,8 +29757,8 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
   function layoutStrip(songEnd = structureDuration) {
     structureDuration = Number(songEnd) || 0;
     const inKaraoke = isKaraokeUiMode();
-    if (!inKaraoke && lyricsEditorDialog.classList.contains("karaoke-video-only")) {
-      setVideoOnly(false);
+    if (!inKaraoke && presentation !== "normal") {
+      setPresentation("normal");
     }
     const mount = inKaraoke ? karaokeMount : masterMount;
     if (inKaraoke && mount.parentNode !== lyricsStructureTimeline) {
@@ -29768,6 +29785,24 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
     attachVideo(selected);
     menu.open = false;
   };
+  view.addEventListener("dragover", event => {
+    if (!isKaraokeUiMode() || !event.dataTransfer?.types.includes("Files")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+  }, true);
+  view.addEventListener("drop", event => {
+    if (!isKaraokeUiMode() || !event.dataTransfer?.types.includes("Files")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const selected = event.dataTransfer.files[0];
+    if (selected && /\.(?:mp4|mov)$/i.test(selected.name)) {
+      attachVideo(selected);
+    } else {
+      showStatus("Drop an MP4 or MOV video file.");
+      if (presentation === "normal") menu.open = true;
+    }
+  }, true);
   remove.onclick = () => {
     controller.clearVideo();
     remove.hidden = true;
@@ -29786,13 +29821,14 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
     updateExportButton();
   });
   function setLyricsHidden(hidden) {
-    hideLyrics.checked = hidden;
+    lyricsHidden = hidden;
     view.classList.toggle("karaoke-video-hide-lyrics", hidden);
+    hideLyrics.setAttribute("aria-pressed", String(hidden));
     lyricsToggle.setAttribute("aria-pressed", String(hidden));
   }
-  hideLyrics.onchange = () => setLyricsHidden(hideLyrics.checked);
-  lyricsToggle.onclick = () => setLyricsHidden(!hideLyrics.checked);
-  hideAll.onchange = () => setVideoOnly(hideAll.checked);
+  hideLyrics.onclick = lyricsToggle.onclick = () => setLyricsHidden(!lyricsHidden);
+  hideControls.onclick = () => togglePresentation("lyrics");
+  hideAll.onclick = () => togglePresentation("video");
   window.addEventListener("keydown", event => {
     if (!isKaraokeUiMode() || !event.ctrlKey || event.altKey || event.shiftKey
       || event.metaKey || event.isComposing) return;
@@ -29806,14 +29842,58 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
     event.preventDefault();
     event.stopImmediatePropagation();
     if (event.repeat) return;
-    if (toggleAll) setVideoOnly(!hideAll.checked);
-    else setLyricsHidden(!hideLyrics.checked);
+    if (toggleAll) togglePresentation("video");
+    else setLyricsHidden(!lyricsHidden);
   }, true);
+  const modifierActions = {
+    Meta: () => setLyricsHidden(!lyricsHidden),
+    Control: () => togglePresentation("lyrics"),
+    Alt: () => togglePresentation("video")
+  };
+  let pendingModifier = null;
+  let otherKeyUsed = false;
+  const modifierNames = new Set(["Shift", "Meta", "Control", "Alt"]);
+  window.addEventListener("keydown", event => {
+    if (!isKaraokeUiMode()) return;
+    if (!modifierNames.has(event.key)) {
+      if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) otherKeyUsed = true;
+      pendingModifier = null;
+      return;
+    }
+    const down = [
+      event.metaKey && "Meta", event.ctrlKey && "Control", event.altKey && "Alt"
+    ].filter(Boolean);
+    if (down.length > 1) {
+      otherKeyUsed = true;
+      pendingModifier = null;
+    } else if (event.shiftKey && down.length === 1 && !otherKeyUsed) {
+      pendingModifier = down[0];
+    }
+  }, true);
+  window.addEventListener("keyup", event => {
+    const action = pendingModifier;
+    if (action && (event.key === "Shift" || event.key === action)) {
+      pendingModifier = null;
+      otherKeyUsed = true;
+      if (isKaraokeUiMode()) {
+        event.preventDefault();
+        modifierActions[action]();
+      }
+    }
+    if (!event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      pendingModifier = null;
+      otherKeyUsed = false;
+    }
+  }, true);
+  window.addEventListener("blur", () => {
+    pendingModifier = null;
+    otherKeyUsed = false;
+  });
   view.addEventListener("click", event => {
-    if (hideAll.disabled || (event.target !== view
+    if ((hideAll.disabled && presentation === "normal") || (event.target !== view
       && !event.target.closest(".lyrics-fullscreen-lines"))) return;
     event.stopPropagation();
-    setVideoOnly(!hideAll.checked);
+    setPresentation(presentation === "normal" ? "video" : "normal");
   });
   menu.addEventListener("keydown", event => event.stopPropagation());
 
@@ -29843,7 +29923,11 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
           if (exportMode === "mix") return { buffer: await renderMaster861(), volume: 1 };
           return { buffer: sourceBuffer, volume: sourceLevel };
         },
-        onProgress(progress) {
+        onProgress(progress, stage) {
+          if (stage === "finalizing") {
+            showStatus("Preparing MP4 for seeking…");
+            return;
+          }
           const percent = Math.round(progress * 100);
           if (percent === lastPercent) return;
           lastPercent = percent;
@@ -29869,7 +29953,7 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
     remove.hidden = true;
     hideAll.disabled = true;
     updateExportButton();
-    if (lyricsEditorDialog.classList.contains("karaoke-video-only")) setVideoOnly(false);
+    if (presentation !== "normal") setPresentation("normal");
     showStatus();
   };
   window.restoreMynusKaraokeVideo = saved => {
