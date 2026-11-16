@@ -45,7 +45,7 @@ window.mynusLogTime801=function(text){return String(text).replace(/\b\d{4}-\d{2}
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 9.0.1 |  Video Track&Hide</title>
+  <title>MyNus 9.0.2 |  Video Track</title>
 
 
  <style>
@@ -17280,7 +17280,6 @@ function deleteSelectedLyricsStructure() {
 // Работа со Structure в Lyrics Editor.
 function renderLyricsStructureTimeline(songEnd) {
   if (!lyricsStructureTimeline) return;
-  window.layoutMynusKaraokeVideo?.(songEnd);
   lyricsStructureTimeline.innerHTML = "";
   const total = Math.max(0.001, Number(songEnd) || 0.001);
   const trimStart = Math.max(0, Math.min(getProjectTrimStart(), total));
@@ -17332,6 +17331,7 @@ function renderLyricsStructureTimeline(songEnd) {
 
     lyricsStructureTimeline.appendChild(tick);
   });
+  window.layoutMynusKaraokeVideo?.(songEnd);
 }
 
 // Работа со Structure в Lyrics Editor.
@@ -17836,6 +17836,7 @@ function updateLyricsStructurePlayhead(songEnd = null) {
 
 
 lyricsStructureTimeline?.addEventListener("click", event => {
+  if (event.target.closest("#karaokeVideoOverlay")) return;
   event.preventDefault();
   event.stopPropagation();
   closeLyricsStructureNameMenu();
@@ -29626,9 +29627,9 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
     overflow: hidden;
     pointer-events: none;
   }
-  #lyricsStructureTrack > .karaoke-video-overlay-clip {
+  #lyricsStructureTimeline > .karaoke-video-overlay-clip {
     inset: auto 0 1px;
-    height: 10px;
+    height: 12px;
   }
   #karaokeVideoOverlay {
     position: absolute;
@@ -29642,6 +29643,16 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
     cursor: grab;
   }
   #karaokeVideoOverlay:active { cursor: grabbing; }
+  #karaokeVideoOverlay::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0;
+    height: 6px;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to right, #e6f8ff 0 1px, transparent 1px var(--video-frame-spacing)
+    );
+  }
 </style>
 <script type="module">
   import { createKaraokeVideo } from "./video.js";
@@ -29679,7 +29690,7 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
     overlay: strip,
     getTimelineScale: () => {
       if (isKaraokeUiMode()) {
-        return structureDuration > 0 ? lyricsStructureTrack.clientWidth / structureDuration : 0;
+        return structureDuration > 0 ? lyricsStructureTimeline.clientWidth / structureDuration : 0;
       }
       return duration > 0 ? pixelsPerSecond : 0;
     },
@@ -29703,13 +29714,13 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
       setVideoOnly(false);
     }
     const mount = inKaraoke ? karaokeMount : masterMount;
-    if (inKaraoke && mount.parentNode !== lyricsStructureTrack) {
-      lyricsStructureTrack.appendChild(mount);
+    if (inKaraoke && mount.parentNode !== lyricsStructureTimeline) {
+      lyricsStructureTimeline.appendChild(mount);
     }
     if (strip.parentNode !== mount) mount.appendChild(strip);
     controller.renderTimelineOverlay();
   }
-  new ResizeObserver(() => layoutStrip()).observe(lyricsStructureTrack);
+  new ResizeObserver(() => layoutStrip()).observe(lyricsStructureTimeline);
   window.layoutMynusKaraokeVideo = layoutStrip;
 
   byId("karaokeVideoLoad").onclick = () => file.click();
