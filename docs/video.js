@@ -1,5 +1,5 @@
 /*
- * 9.0.3 Save Video 
+ * 9.0.5 Save Video fix
  */
 
 const VIDEO_DRIFT_SECONDS = 0.2;
@@ -37,6 +37,248 @@ function childBox(view, parent, type) {
     if (box.type === type) return box;
   }
   return null;
+}
+
+function mp4Box(type, ...parts) {
+  const header = new Uint8Array(8);
+  new DataView(header.buffer).setUint32(0, 8 + parts.reduce((sum, part) => sum + part.size, 0));
+  header.set(new TextEncoder().encode(type), 4);
+  return new Blob([header, ...parts]);
+}
+
+function mp4Table(type, rows, columns, version = 0) {
+  const bytes = new DataView(new ArrayBuffer(8 + rows.length * columns * 4));
+  bytes.setUint8(0, version);
+  bytes.setUint32(4, rows.length);
+  let pos = 8;
+  for (const row of rows) {
+    for (const value of row) {
+      bytes.setUint32(pos, value);
+      pos += 4;
+    }
+  }
+  return mp4Box(type, new Blob([bytes]));
+}
+
+function mp4Runs(values) {
+  const rows = [];
+  for (const value of values) {
+    const last = rows.at(-1);
+    if (last?.[1] === value) last[0]++;
+    else rows.push([1, value]);
+  }
+  return rows;
+}
+
+function mp4Duration(bytes, at, value) {
+  if (bytes.getUint8(0) === 1) bytes.setBigUint64(at, BigInt(value));
+  else bytes.setUint32(at, value);
+}
+
+function readRecorderFragment(data, fragmentStart, tracks, media) {
+  const root = { start: 0, end: data.byteLength };
+  for (const traf of childBoxes(data, root.start, root.end)) {
+    if (traf.type !== "traf") continue;
+    const runs = Array.from(childBoxes(data, traf.start, traf.end))
+      .filter(box => box.type === "trun" && data.getUint32(box.start + 4) > 0);
+    if (!runs.length) continue;
+    const header = childBox(data, traf, "tfhd");
+    const decodeTime = childBox(data, traf, "tfdt");
+    if (!header) throw new Error("The MP4 fragment has no track header.");
+    let pos = header.start;
+    const flags = data.getUint32(pos) & 0xffffff;
+    const track = tracks.get(data.getUint32(pos + 4));
+    if (!track) throw new Error("The MP4 fragment refers to an unknown track.");
+    pos += 8;
+    const base = flags & 1 ? Number(data.getBigUint64(pos)) : fragmentStart;
+    if (flags & 1) pos += 8;
+    if (flags & 2) pos += 4;
+    const duration = flags & 8 ? data.getUint32(pos) : track.defaults.duration;
+    if (flags & 8) pos += 4;
+    const size = flags & 16 ? data.getUint32(pos) : track.defaults.size;
+    if (flags & 16) pos += 4;
+    const sampleFlags = flags & 32 ? data.getUint32(pos) : track.defaults.flags;
+    if (decodeTime) {
+      const at = decodeTime.start;
+      const time = data.getUint8(at) === 1 ? Number(data.getBigUint64(at + 4)) : data.getUint32(at + 4);
+      if (!track.durations.length) track.start = time;
+      else if (time !== track.end) {
+        const corrected = track.durations.at(-1) + time - track.end;
+        if (corrected <= 0) throw new Error("The MP4 fragment timestamps overlap.");
+        track.durations[track.durations.length - 1] = corrected;
+      }
+      track.end = time;
+    }
+    let dataOffset = base;
+    for (const run of runs) {
+      const version = data.getUint8(run.start);
+      const fields = data.getUint32(run.start) & 0xffffff;
+      const count = data.getUint32(run.start + 4);
+      pos = run.start + 8;
+      if (fields & 1) {
+        dataOffset = base + data.getInt32(pos);
+        pos += 4;
+      }
+      const firstFlags = fields & 4 ? data.getUint32(pos) : sampleFlags;
+      if (fields & 4) pos += 4;
+      let runSize = 0;
+      for (let i = 0; i < count; i++) {
+        const ticks = fields & 0x100 ? data.getUint32(pos) : duration;
+        if (fields & 0x100) pos += 4;
+        const bytes = fields & 0x200 ? data.getUint32(pos) : size;
+        if (fields & 0x200) pos += 4;
+        const status = fields & 0x400 ? data.getUint32(pos) : i === 0 ? firstFlags : sampleFlags;
+        if (fields & 0x400) pos += 4;
+        let composition = 0;
+        if (fields & 0x800) {
+          composition = version === 1 ? data.getInt32(pos) : data.getUint32(pos);
+          pos += 4;
+        }
+        if (pos > run.end || !bytes) throw new Error("The MP4 contains an invalid sample.");
+        track.durations.push(ticks);
+        track.sizes.push(bytes);
+        track.composition.push(composition);
+        if (!(status & 0x10000)) track.sync.push([track.sizes.length]);
+        track.end += ticks;
+        runSize += bytes;
+      }
+      track.chunks.push({ offset: media.size, count });
+      media.parts.push({ start: dataOffset, end: dataOffset + runSize });
+      media.size += runSize;
+      dataOffset += runSize;
+    }
+  }
+}
+
+export async function finalizeKaraokeMp4(recording, signal) {
+  let fileType;
+  let movie;
+  let fragmented = false;
+  const tracks = new Map();
+  const media = { parts: [], size: 0 };
+  const payloads = [];
+  for (let pos = 0; recording.size - pos >= 8;) {
+    signal?.throwIfAborted();
+    const header = new DataView(await recording.slice(pos, pos + 16).arrayBuffer());
+    const box = readBox(header, pos, recording.size);
+    if (!box) throw new Error("The MP4 encoder produced an invalid container.");
+    const boxStart = pos;
+    pos = box.end;
+    if (box.type === "ftyp") fileType = recording.slice(boxStart, box.end);
+    if (box.type === "mdat") payloads.push(box);
+    if (box.type === "moov") {
+      movie = new DataView(await recording.slice(box.start, box.end).arrayBuffer());
+      const root = { start: 0, end: movie.byteLength };
+      const extension = childBox(movie, root, "mvex");
+      if (!extension) continue;
+      for (const entry of childBoxes(movie, extension.start, extension.end)) {
+        if (entry.type !== "trex") continue;
+        const at = entry.start;
+        tracks.set(movie.getUint32(at + 4), {
+          defaults: { duration: movie.getUint32(at + 12), size: movie.getUint32(at + 16), flags: movie.getUint32(at + 20) },
+          start: 0, end: 0, durations: [], sizes: [], composition: [], sync: [], chunks: [],
+        });
+      }
+    }
+    if (box.type === "moof") {
+      fragmented = true;
+      const fragment = new DataView(await recording.slice(box.start, box.end).arrayBuffer());
+      readRecorderFragment(fragment, boxStart, tracks, media);
+    }
+  }
+  if (!fragmented && movie && fileType) return recording;
+  if (!fileType || !movie || !media.parts.length) throw new Error("The MP4 encoder returned no usable samples.");
+  const root = { start: 0, end: movie.byteLength };
+  const mvhd = childBox(movie, root, "mvhd");
+  const clock = new DataView(movie.buffer.slice(mvhd.start, mvhd.end));
+  const movieScaleAt = clock.getUint8(0) === 1 ? 20 : 12;
+  const movieScale = clock.getUint32(movieScaleAt);
+  let movieDuration = 0;
+  const copy = box => mp4Box(box.type, new Blob([movie.buffer.slice(box.start, box.end)]));
+  const replaceChildren = (box, replace) =>
+    mp4Box(box.type, ...Array.from(childBoxes(movie, box.start, box.end), replace).filter(Boolean));
+
+  function makeMovie(mediaStart) {
+    movieDuration = 0;
+    const newTracks = [];
+    for (const trak of childBoxes(movie, 0, movie.byteLength)) {
+      if (trak.type !== "trak") continue;
+      const tkhd = childBox(movie, trak, "tkhd");
+      const trackHeader = new DataView(movie.buffer.slice(tkhd.start, tkhd.end));
+      const trackIdAt = trackHeader.getUint8(0) === 1 ? 20 : 12;
+      const track = tracks.get(trackHeader.getUint32(trackIdAt));
+      if (!track?.sizes.length) continue;
+      const mdia = childBox(movie, trak, "mdia");
+      const mdhd = childBox(movie, mdia, "mdhd");
+      const mediaHeader = new DataView(movie.buffer.slice(mdhd.start, mdhd.end));
+      const rateAt = mediaHeader.getUint8(0) === 1 ? 20 : 12;
+      const scale = mediaHeader.getUint32(rateAt);
+      const duration = track.durations.reduce((sum, ticks) => sum + ticks, 0);
+      const trackDuration = Math.round(duration * movieScale / scale);
+      const delay = Math.round(track.start * movieScale / scale);
+      mp4Duration(mediaHeader, rateAt + 4, duration);
+      mp4Duration(trackHeader, trackIdAt + 8, delay + trackDuration);
+      movieDuration = Math.max(movieDuration, delay + trackDuration);
+
+      const stsc = [];
+      for (const [i, chunk] of track.chunks.entries()) {
+        if (stsc.at(-1)?.[1] !== chunk.count) stsc.push([i + 1, chunk.count, 1]);
+      }
+      const sizes = new DataView(new ArrayBuffer(12 + track.sizes.length * 4));
+      sizes.setUint32(8, track.sizes.length);
+      track.sizes.forEach((size, i) => sizes.setUint32(12 + i * 4, size));
+      const bigOffsets = media.size + mediaStart > 0xffffffff;
+      const offsets = track.chunks.map(chunk => {
+        const absolute = mediaStart + chunk.offset;
+        return bigOffsets ? [Math.floor(absolute / 2 ** 32), absolute >>> 0] : [absolute];
+      });
+      const sampleTables = [
+        mp4Table("stts", mp4Runs(track.durations), 2),
+        mp4Table("stsc", stsc, 3),
+        mp4Box("stsz", new Blob([sizes])),
+        mp4Table(bigOffsets ? "co64" : "stco", offsets, bigOffsets ? 2 : 1),
+      ];
+      if (track.sync.length < track.sizes.length) sampleTables.push(mp4Table("stss", track.sync, 1));
+      if (track.composition.some(Boolean)) {
+        sampleTables.push(mp4Table("ctts", mp4Runs(track.composition), 2, track.composition.some(value => value < 0) ? 1 : 0));
+      }
+      const newMedia = replaceChildren(mdia, entry => {
+        if (entry.type === "mdhd") return mp4Box("mdhd", new Blob([mediaHeader]));
+        if (entry.type !== "minf") return copy(entry);
+        return replaceChildren(entry, item => {
+          if (item.type !== "stbl") return copy(item);
+          return mp4Box("stbl", copy(childBox(movie, item, "stsd")), ...sampleTables);
+        });
+      });
+      const edits = delay ? mp4Box("edts", mp4Table("elst", [[delay, -1, 0x10000], [trackDuration, 0, 0x10000]], 3)) : null;
+      newTracks.push(mp4Box("trak", mp4Box("tkhd", new Blob([trackHeader])), ...(edits ? [edits] : []), newMedia));
+    }
+    mp4Duration(clock, movieScaleAt + 4, movieDuration);
+    return mp4Box("moov", mp4Box("mvhd", new Blob([clock])), ...newTracks);
+  }
+
+  const dataHeader = new Uint8Array(media.size + 8 > 0xffffffff ? 16 : 8);
+  const dataView = new DataView(dataHeader.buffer);
+  dataView.setUint32(0, dataHeader.length === 8 ? media.size + 8 : 1);
+  dataHeader.set([0x6d, 0x64, 0x61, 0x74], 4);
+  if (dataHeader.length === 16) dataView.setBigUint64(8, BigInt(media.size + 16));
+  const headerSize = fileType.size + dataHeader.length;
+  let info = makeMovie(0);
+  // Recompute chunk offsets once the final movie header layout is known.
+  let next = makeMovie(headerSize + info.size);
+  if (next.size !== info.size) next = makeMovie(headerSize + next.size);
+  info = next;
+  let payloadIndex = 0;
+  const parts = media.parts.map(part => {
+    if (part.start < payloads[payloadIndex]?.start) payloadIndex = 0;
+    while (payloads[payloadIndex]?.end <= part.start) payloadIndex++;
+    const payload = payloads[payloadIndex];
+    if (!payload || part.start < payload.start || part.end > payload.end) {
+      throw new Error("An MP4 sample points outside the encoded media.");
+    }
+    return recording.slice(part.start, part.end);
+  });
+  return new Blob([fileType, info, dataHeader, ...parts], { type: "video/mp4" });
 }
 
 async function readFrameTiming(file) {
@@ -497,7 +739,8 @@ export async function exportKaraokeMp4({
       events.abort();
     }
     if (!chunks.length) throw new Error("The MP4 encoder returned no video.");
-    return new Blob(chunks, { type: "video/mp4" });
+    onProgress?.(1, "finalizing");
+    return await finalizeKaraokeMp4(new Blob(chunks, { type: "video/mp4" }), signal);
   } finally {
     cancelAnimationFrame(frame);
     if (recorder && recorder.state !== "inactive") recorder.stop();
