@@ -1,4 +1,4 @@
-﻿
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -45,7 +45,7 @@ window.mynusLogTime801=function(text){return String(text).replace(/\b\d{4}-\d{2}
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 8.6.3 |  FinalTune</title>
+  <title>MyNus 9.0.1 |  Video Track&Hide</title>
 
 
  <style>
@@ -4725,6 +4725,9 @@ canvas,.master-timeline-inner,.playhead,.master-cursor{cursor:pointer}.playhead,
             class="master-cursor"
           ></div>
 
+          <div id="karaokeVideoMasterMount" class="karaoke-video-overlay-clip">
+            <div id="karaokeVideoOverlay" hidden></div>
+          </div>
         </div> <!-- masterTimelineInner -->
 
       </div> <!-- masterTimeline --> 
@@ -5349,6 +5352,7 @@ canvas,.master-timeline-inner,.playhead,.master-cursor{cursor:pointer}.playhead,
     </div>
 
     <div id="lyricsFullScreenView" class="lyrics-fullscreen-view" aria-hidden="true">
+      <video id="karaokeVideoFrame" preload="metadata" playsinline hidden></video>
       <div class="lyrics-fullscreen-topbar">
         <button type="button" id="lyricsFullScreenBackBtn" class="lyrics-fullscreen-back">Lyrics Editor</button>
         <div class="lyrics-fullscreen-title-stack">
@@ -5360,6 +5364,20 @@ canvas,.master-timeline-inner,.playhead,.master-cursor{cursor:pointer}.playhead,
         </div>
         <div class="lyrics-fullscreen-window-controls">
           <div class="lyrics-fullscreen-brand">MyNus</div>
+          <details id="karaokeVideoMenu">
+            <summary>Video</summary>
+            <div class="karaoke-video-options">
+              <button type="button" id="karaokeVideoLoad">Load Video</button>
+              <input type="file" id="karaokeVideoFile" accept=".mp4,video/mp4" hidden>
+              <button type="button" id="karaokeVideoRemove" hidden>Remove</button>
+              <label>Video volume <input id="karaokeVideoVolume" type="range" min="0" max="100" value="100"></label>
+              <label>Offset (s) <input id="karaokeVideoOffset" type="number" step="0.01" value="0"></label>
+              <label><input id="karaokeVideoLoop" type="checkbox"> Loop</label>
+              <label title="Ctrl+L"><input type="checkbox" id="karaokeVideoHideLyrics" aria-keyshortcuts="Control+L"> Hide Lyrics</label>
+              <label title="Ctrl+A"><input type="checkbox" id="karaokeVideoHideAll" aria-keyshortcuts="Control+A" disabled> Hide All</label>
+              <output id="karaokeVideoStatus" aria-live="polite" hidden></output>
+            </div>
+          </details>
           <button type="button" id="lyricsFullScreenWindowBtn" class="lyrics-fullscreen-window-btn" title="Window mode" aria-label="Switch to window mode">▫</button>
         </div>
       </div>
@@ -5371,6 +5389,8 @@ canvas,.master-timeline-inner,.playhead,.master-cursor{cursor:pointer}.playhead,
           <button type="button" id="lyricsFullScreenKeysBtn" class="lyrics-fullscreen-mini-btn">Keys?</button>
           <div id="lyricsFullScreenKeysMenu" class="lyrics-fullscreen-keys-menu" hidden>
             <div><span>Space</span><span>Play / Pause</span></div>
+            <div><span>Ctrl + A</span><span>Toggle video-only view</span></div>
+            <div><span>Ctrl + L</span><span>Show / Hide Lyrics</span></div>
             <div><span>Tab</span><span>Lyrics Editor</span></div>
             <div><span>Esc</span><span>Sequencer</span></div>
             <div><span>Backspace</span><span>Close all Full Screen windows</span></div>
@@ -7611,6 +7631,7 @@ async function startSeparation(restoreRequest = null, resumeJob760 = null) {
       // Сохраняем исходный пользовательский файл отдельно от технической Original-дорожки Project.
       currentOriginalFile =
         file;
+      window.resetMynusKaraokeVideo?.();
       currentOriginalTrackFile = file;
       currentSourceAudioName = file.name;
 
@@ -8977,6 +8998,7 @@ bindProjectFadeHandle(projectFadeOutHandle, "out");
 
 // Работа с Master/Mix и итоговым аудиосостоянием.
 function drawMasterTimeline() {
+  window.mynusKaraokeVideo?.renderTimelineOverlay();
 
   const width =
     getTimelineWidth();
@@ -14077,6 +14099,8 @@ function syncAllTo(
 
   }
 
+  window.mynusKaraokeVideo?.syncFromAudio(safeTime, isPlaying, { seek: true });
+
 }
 
 
@@ -14272,7 +14296,7 @@ masterTimelineInner.addEventListener(
   "pointerdown",
   event => {
 
-    if (event.target === masterCursor) {
+    if (event.target === masterCursor || event.target.closest("#karaokeVideoOverlay")) {
       return;
     }
 
@@ -16400,6 +16424,7 @@ function setUiMode(nextMode) {
 
   const lyricsOpen = isLyricsUiOpen();
   const karaokeOpen = isKaraokeUiMode();
+  window.mynusKaraokeVideo?.setActive(karaokeOpen);
 
   lyricsEditorDialog?.classList.toggle("open", lyricsOpen);
   lyricsEditorCard?.classList.toggle("karaoke-fullscreen-mode", karaokeOpen);
@@ -16433,6 +16458,7 @@ function setUiMode(nextMode) {
     if (karaokeOpen) updateLyricsFullScreenView(getCurrentTime());
     else updateLyricsEditorKaraoke(getCurrentTime());
   }
+  window.layoutMynusKaraokeVideo?.();
 }
 
 lyricsModeSwitchBtn?.addEventListener("click", () => setUiMode(UI_MODE.KARAOKE));
@@ -17254,6 +17280,7 @@ function deleteSelectedLyricsStructure() {
 // Работа со Structure в Lyrics Editor.
 function renderLyricsStructureTimeline(songEnd) {
   if (!lyricsStructureTimeline) return;
+  window.layoutMynusKaraokeVideo?.(songEnd);
   lyricsStructureTimeline.innerHTML = "";
   const total = Math.max(0.001, Number(songEnd) || 0.001);
   const trimStart = Math.max(0, Math.min(getProjectTrimStart(), total));
@@ -20172,7 +20199,7 @@ else {
 // Локальная функциональная операция этого блока.
 function startAnimation() {
 
-  stopAnimation();
+  stopAnimation({ pauseVideo: false });
 
 
   const update =
@@ -20195,6 +20222,7 @@ function startAnimation() {
 
       // Во время воспроизведения источником является аудиотранспорт; все три визуальных курсора используют одно значение.
       masterCursorTime = getCurrentTime();
+      window.mynusKaraokeVideo?.syncFromAudio(masterCursorTime, true);
 
       updatePlayheads();
 
@@ -20399,7 +20427,8 @@ function startAnimation() {
 
 
 // Управление транспортом и воспроизведением.
-function stopAnimation() {
+function stopAnimation({ pauseVideo = true } = {}) {
+  if (pauseVideo) window.mynusKaraokeVideo?.pause();
 
   if (
     animationFrame
@@ -22727,6 +22756,7 @@ function clearProjectState() {
   lyricsFullScreenPitchSemitones = 0;
   applyLyricsFullScreenPitch();
   try { originalAudio.pause(); } catch (_) {}
+  window.resetMynusKaraokeVideo?.();
   originalAudio.removeAttribute("src");
   originalAudio.load();
 
@@ -23130,6 +23160,7 @@ await reportProjectLoadTrace("PROJECT UI STATE", {
     await reportProjectLoadTrace("COMMAND", { command: "finish Project loader", function: "finishProjectLoader", parameters: {}, result: "calling" });
     await fitEntireProjectTimeline();
     await finishProjectLoader();
+    window.resetMynusKaraokeVideo?.();
     await reportProjectLoadTrace("LOAD FUNCTION SUCCESS", { command: "LOAD Project complete", function: "loadProjectById", parameters: { id, ui_mode_after_load: uiMode }, result: "success" });
 
     // uiMode остаётся точно таким, каким был до LOAD.
@@ -26891,7 +26922,7 @@ const collapsedObserver799=new MutationObserver(()=>refreshGroupEdit799());
 for(const id of inputIds797()){const row=trackRowUi796(id);if(row)collapsedObserver799.observe(row,{attributes:true,attributeFilter:['class','style']});}
 function timeAtPointer799(host,e){const rect=host.getBoundingClientRect();return Math.max(0,Math.min(duration,(e.clientX-rect.left)/pixelsPerSecond));}
 function timelineDouble799(e,host){
- if(e.target.closest('.edit-region797,.silence793,.project-fade-handle,.project-trim-handle'))return;
+ if(e.target.closest('.edit-region797,.silence793,.project-fade-handle,.project-trim-handle,#karaokeVideoOverlay'))return;
  const time=timeAtPointer799(host,e);e.preventDefault();e.stopImmediatePropagation();
  if(hasSelection()&&time>=fragmentStart&&time<=fragmentEnd){groupEdit799=true;excludedGroupEdits799.clear();refreshGroupEdit799();report799('Edit enabled for active, expanded Input tracks');}
  else {fragmentStart=fragmentEnd=null;groupEdit799=false;updateSelectionDisplay();updateSelectionButtons();report799('Selection cleared');}
@@ -26901,7 +26932,7 @@ for(const host of [...Object.values(timelines),masterTimelineInner].filter(Boole
 }
 // A click inside a selection seeks; only an edge drag resizes it.
 masterTimelineInner.addEventListener('pointerdown',e=>{
- if(e.button!==0||e.target.closest('.project-fade-handle,.project-trim-handle')||!hasSelection())return;
+ if(e.button!==0||e.target.closest('.project-fade-handle,.project-trim-handle,#karaokeVideoOverlay')||!hasSelection())return;
  const t=timeAtPointer799(masterTimelineInner,e),edge=8/pixelsPerSecond;
  if(t>fragmentStart+edge&&t<fragmentEnd-edge){e.preventDefault();e.stopImmediatePropagation();setGlobalCursorTime(t);}
 },true);
@@ -28112,7 +28143,15 @@ function setupMenuControls7915(){
   event.stopPropagation();const opening=lyricsFullScreenTracksMenu.hidden;closeLyricsFullScreenMenus();button.setAttribute('aria-expanded',String(opening));if(!opening)return;
   renderLyricsFullScreenTracksMenu();const rect=button.getBoundingClientRect();placeLyricsFullScreenMenu(lyricsFullScreenTracksMenu,rect.left,rect.top);
  };
- wrap.append(button);transport.after(wrap);
+ const lyricsToggle=document.createElement('button');
+ lyricsToggle.id='karaokeVideoLyricsToggle';
+ lyricsToggle.type='button';
+ lyricsToggle.className='lyrics-fullscreen-mini-btn';
+ lyricsToggle.textContent='ABC';
+ lyricsToggle.title='Hide lyrics';
+ lyricsToggle.setAttribute('aria-label','Hide lyrics');
+ lyricsToggle.setAttribute('aria-pressed','false');
+ wrap.append(button);transport.after(wrap,lyricsToggle);
  new MutationObserver(()=>button.setAttribute('aria-expanded',String(!lyricsFullScreenTracksMenu.hidden))).observe(lyricsFullScreenTracksMenu,{attributes:true,attributeFilter:['hidden']});
 }
 setupMenuControls7915();
@@ -29521,6 +29560,230 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
  window.mynusUpdateTests={compare,valid};
 })();
 
+</script>
+<style>
+  #karaokeVideoFrame {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+  }
+  #karaokeVideoFrame:not([hidden]) ~ .lyrics-fullscreen-lines {
+    text-shadow: 0 2px 4px #000, 0 0 12px #000;
+  }
+  #lyricsFullScreenView.karaoke-video-hide-lyrics > .lyrics-fullscreen-lines {
+    visibility: hidden;
+  }
+  #karaokeVideoLyricsToggle[aria-pressed="true"] {
+    text-decoration: line-through;
+  }
+  #lyricsEditorDialog.karaoke-video-only {
+    z-index: 2147483647 !important;
+    background: #000;
+  }
+  #lyricsEditorDialog.karaoke-video-only > .karaoke-fullscreen-mode {
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    border: 0;
+    box-shadow: none;
+  }
+  #lyricsEditorDialog.karaoke-video-only > .karaoke-fullscreen-mode > :not(#lyricsFullScreenView),
+  #lyricsEditorDialog.karaoke-video-only #lyricsFullScreenView > :not(#karaokeVideoFrame) {
+    display: none !important;
+  }
+  #lyricsEditorDialog.karaoke-video-only #lyricsFullScreenView {
+    inset: 0 !important;
+    background: #000;
+  }
+  #karaokeVideoMenu { position: relative; font: 13px "Segoe UI", sans-serif; }
+  #karaokeVideoMenu summary { cursor: pointer; padding: 5px 8px; }
+  .karaoke-video-options {
+    position: absolute;
+    z-index: 1;
+    top: 100%;
+    right: 0;
+    display: grid;
+    gap: 8px;
+    width: 214px;
+    padding: 10px;
+    border: 1px solid #606060;
+    border-radius: 6px;
+    background: #202020;
+    color: #fff;
+  }
+  .karaoke-video-options label { display: flex; align-items: center; gap: 8px; }
+  #karaokeVideoVolume { width: 100px; }
+  #karaokeVideoOffset { width: 88px; }
+  #karaokeVideoStatus { overflow-wrap: anywhere; }
+  .karaoke-video-overlay-clip {
+    position: absolute;
+    inset: auto 0 9px;
+    z-index: 5;
+    height: 12px;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  #lyricsStructureTrack > .karaoke-video-overlay-clip {
+    inset: auto 0 1px;
+    height: 10px;
+  }
+  #karaokeVideoOverlay {
+    position: absolute;
+    height: 100%;
+    box-sizing: border-box;
+    border: 1px solid #88d8ff;
+    border-radius: 3px;
+    background: rgb(66 171 255 / 45%);
+    pointer-events: auto;
+    touch-action: none;
+    cursor: grab;
+  }
+  #karaokeVideoOverlay:active { cursor: grabbing; }
+</style>
+<script type="module">
+  import { createKaraokeVideo } from "./video.js";
+
+  const byId = id => document.getElementById(id);
+  const video = byId("karaokeVideoFrame");
+  const menu = byId("karaokeVideoMenu");
+  const file = byId("karaokeVideoFile");
+  const remove = byId("karaokeVideoRemove");
+  const volume = byId("karaokeVideoVolume");
+  const offset = byId("karaokeVideoOffset");
+  const loop = byId("karaokeVideoLoop");
+  const status = byId("karaokeVideoStatus");
+  const hideLyrics = byId("karaokeVideoHideLyrics");
+  const lyricsToggle = byId("karaokeVideoLyricsToggle");
+  const hideAll = byId("karaokeVideoHideAll");
+  const view = byId("lyricsFullScreenView");
+  const masterMount = byId("karaokeVideoMasterMount");
+  const strip = byId("karaokeVideoOverlay");
+  let structureDuration = 0;
+
+  function setVideoOnly(enabled) {
+    hideAll.checked = enabled;
+    lyricsEditorDialog.classList.toggle("karaoke-video-only", enabled);
+    if (enabled) menu.open = false;
+  }
+
+  function showStatus(message = "") {
+    status.textContent = message;
+    status.hidden = !message;
+  }
+
+  const controller = createKaraokeVideo({
+    video,
+    overlay: strip,
+    getTimelineScale: () => {
+      if (isKaraokeUiMode()) {
+        return structureDuration > 0 ? lyricsStructureTrack.clientWidth / structureDuration : 0;
+      }
+      return duration > 0 ? pixelsPerSecond : 0;
+    },
+    onOffsetChange: value => { offset.value = String(Math.round(value * 100) / 100); },
+    onError(error) {
+      if (!video.hasAttribute("src")) {
+        remove.hidden = true;
+        hideAll.disabled = true;
+        setVideoOnly(false);
+      }
+      showStatus(error.message || "Unable to play the selected video.");
+    }
+  });
+
+  const karaokeMount = document.createElement("div");
+  karaokeMount.className = "karaoke-video-overlay-clip";
+  function layoutStrip(songEnd = structureDuration) {
+    structureDuration = Number(songEnd) || 0;
+    const inKaraoke = isKaraokeUiMode();
+    if (!inKaraoke && lyricsEditorDialog.classList.contains("karaoke-video-only")) {
+      setVideoOnly(false);
+    }
+    const mount = inKaraoke ? karaokeMount : masterMount;
+    if (inKaraoke && mount.parentNode !== lyricsStructureTrack) {
+      lyricsStructureTrack.appendChild(mount);
+    }
+    if (strip.parentNode !== mount) mount.appendChild(strip);
+    controller.renderTimelineOverlay();
+  }
+  new ResizeObserver(() => layoutStrip()).observe(lyricsStructureTrack);
+  window.layoutMynusKaraokeVideo = layoutStrip;
+
+  byId("karaokeVideoLoad").onclick = () => file.click();
+  file.onchange = () => {
+    const selected = file.files[0];
+    file.value = "";
+    if (!selected) return;
+    showStatus(selected.name);
+    remove.hidden = false;
+    hideAll.disabled = true;
+    controller.loadVideo(selected);
+    menu.open = false;
+  };
+  remove.onclick = () => {
+    controller.clearVideo();
+    remove.hidden = true;
+    hideAll.disabled = true;
+    showStatus();
+  };
+  volume.oninput = () => controller.setVolume(volume.valueAsNumber / 100);
+  offset.onchange = () => {
+    if (Number.isFinite(offset.valueAsNumber)) controller.setOffset(offset.valueAsNumber);
+  };
+  loop.onchange = () => controller.setLoop(loop.checked);
+  hideAll.disabled = true;
+  video.addEventListener("loadedmetadata", () => {
+    hideAll.disabled = video.videoWidth === 0;
+  });
+  function setLyricsHidden(hidden) {
+    hideLyrics.checked = hidden;
+    view.classList.toggle("karaoke-video-hide-lyrics", hidden);
+    lyricsToggle.setAttribute("aria-pressed", String(hidden));
+  }
+  hideLyrics.onchange = () => setLyricsHidden(hideLyrics.checked);
+  lyricsToggle.onclick = () => setLyricsHidden(!hideLyrics.checked);
+  hideAll.onchange = () => setVideoOnly(hideAll.checked);
+  window.addEventListener("keydown", event => {
+    if (!isKaraokeUiMode() || !event.ctrlKey || event.altKey || event.shiftKey
+      || event.metaKey || event.isComposing) return;
+    const target = event.target;
+    if (target?.isContentEditable || target?.closest?.("input:not([type=checkbox]), textarea, select")) return;
+
+    const key = event.key.toLowerCase();
+    const toggleAll = key === "a" || event.code === "KeyA";
+    const toggleLyrics = key === "l" || event.code === "KeyL";
+    if (!(toggleAll && !hideAll.disabled) && !toggleLyrics) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (event.repeat) return;
+    if (toggleAll) setVideoOnly(!hideAll.checked);
+    else setLyricsHidden(!hideLyrics.checked);
+  }, true);
+  view.addEventListener("click", event => {
+    if (hideAll.disabled || (event.target !== view
+      && !event.target.closest(".lyrics-fullscreen-lines"))) return;
+    event.stopPropagation();
+    setVideoOnly(!hideAll.checked);
+  });
+  menu.addEventListener("keydown", event => event.stopPropagation());
+
+  window.resetMynusKaraokeVideo = () => {
+    controller.reset();
+    volume.value = "100";
+    offset.value = "0";
+    loop.checked = false;
+    remove.hidden = true;
+    hideAll.disabled = true;
+    if (lyricsEditorDialog.classList.contains("karaoke-video-only")) setVideoOnly(false);
+    showStatus();
+  };
+  window.mynusKaraokeVideo = controller;
+  layoutStrip(duration);
+  controller.setActive(isKaraokeUiMode());
+  controller.syncFromAudio(getCurrentTime(), isPlaying, { seek: true });
 </script>
 </body>
 </html>
