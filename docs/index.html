@@ -1,4 +1,4 @@
-
+﻿
 <!DOCTYPE html>
 <html lang="en">
 
@@ -45,7 +45,7 @@ window.mynusLogTime801=function(text){return String(text).replace(/\b\d{4}-\d{2}
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>  9.0.6 | Load Text</title>
+  <title>  9.0.7 | Decoder Text</title>
 
 
  <style>
@@ -5524,8 +5524,35 @@ canvas,.master-timeline-inner,.playhead,.master-cursor{cursor:pointer}.playhead,
         <span id="lyricsSaveNotice" style="min-width:150px; font-size:12px; text-align:right;"></span>
         <button type="button" id="cancelLyricsEditBtn">Cancel</button>
         
+        <select id="lyricsLoadEncoding" aria-label="Lyrics file encoding" title="Lyrics file encoding">
+          <option value="auto">Encoding: Auto</option>
+          <option value="utf-8">UTF-8</option>
+          <option value="utf-16le">UTF-16 LE</option>
+          <option value="utf-16be">UTF-16 BE</option>
+          <option value="utf-32le">UTF-32 LE</option>
+          <option value="utf-32be">UTF-32 BE</option>
+          <option value="windows-1251">Windows-1251</option>
+          <option value="koi8-r">KOI8-R</option>
+          <option value="koi8-u">KOI8-U</option>
+          <option value="ibm866">DOS Cyrillic (CP866)</option>
+          <option value="iso-8859-5">ISO-8859-5</option>
+          <option value="x-mac-cyrillic">Mac Cyrillic</option>
+          <option value="windows-1252">Windows-1252</option>
+          <option value="windows-1250">Windows-1250</option>
+          <option value="windows-1253">Windows-1253</option>
+          <option value="windows-1254">Windows-1254</option>
+          <option value="windows-1255">Windows-1255</option>
+          <option value="windows-1256">Windows-1256</option>
+          <option value="windows-1257">Windows-1257</option>
+          <option value="windows-1258">Windows-1258</option>
+          <option value="gb18030">GB18030</option>
+          <option value="big5">Big5</option>
+          <option value="shift_jis">Shift JIS</option>
+          <option value="euc-jp">EUC-JP</option>
+          <option value="euc-kr">EUC-KR</option>
+          <option value="other">Other encoding…</option>
+        </select>
         <button type="button" id="lyricsLoadBtn">Load</button>
-        <button type="button" id="lyricsPasteTextBtn">Paste Text</button>
         <button type="button" id="saveLyricsEditBtn">Save Project</button>
         <button type="button" id="lyricsSaveAsBtn">Save Lyrics</button>
       </div>
@@ -19275,66 +19302,47 @@ lyricsLoadBtn.addEventListener("click", () => {
   lyricsLoadInput.click();
 });
 
-function pastedLyricsDraft(text, referenceLines, songDuration) {
-  const lines = text.replace(/\uFEFF/g, "").split(/\r\n?|\n/)
-    .map(line => line.trim()).filter(Boolean);
-  if (!lines.length) return { lines: [], reusedTiming: false };
-  const reusedTiming = lines.length === referenceLines.length
-    && referenceLines.every(line => Number.isFinite(line.start) && Number.isFinite(line.end)
-      && line.start >= 0 && line.end > line.start);
-  const duration = Number.isFinite(songDuration) && songDuration > 0 ? songDuration : lines.length;
-  const timedLines = lines.map((line, index) => {
-    const original = reusedTiming ? referenceLines[index] : null;
-    const start = original?.start ?? index * duration / lines.length;
-    const end = original?.end ?? (index + 1) * duration / lines.length;
-    const words = line.split(/\s+/);
-    const originalWords = original?.words;
-    const normalizeWord = word => String(word).normalize("NFC").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
-    const reuseWords = originalWords?.length === words.length
-      && originalWords.every((word, index) => normalizeWord(word.word) === normalizeWord(words[index])
-        && Number.isFinite(word.start) && Number.isFinite(word.end) && word.end >= word.start);
-    return {
-      start,
-      end,
-      words: words.map((word, index) => reuseWords ? { ...originalWords[index], word } : {
-        word,
-        start: start + (end - start) * index / words.length,
-        end: start + (end - start) * (index + 1) / words.length
-      })
-    };
-  });
-  return { lines: timedLines, reusedTiming };
+function decodeUtf32(bytes, littleEndian) {
+  if (bytes.length % 4) throw new Error("Incomplete UTF-32 character.");
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let text = "";
+  for (let index = 0; index < bytes.length; index += 4) {
+    const point = view.getUint32(index, littleEndian);
+    if (index === 0 && point === 0xfeff) continue;
+    if (point > 0x10ffff || (point >= 0xd800 && point <= 0xdfff)) {
+      throw new Error("Invalid UTF-32 character.");
+    }
+    text += String.fromCodePoint(point);
+  }
+  return text;
 }
 
-const lyricsPasteDialog = document.getElementById("lyricsPasteTextDialog");
-const lyricsPasteInput = document.getElementById("lyricsPasteTextInput");
-const lyricsPasteError = document.getElementById("lyricsPasteTextError");
-document.getElementById("lyricsPasteTextBtn").onclick = () => {
-  lyricsPasteError.hidden = true;
-  lyricsPasteDialog.showModal();
-};
-document.getElementById("lyricsPasteTextCancel").onclick = () => lyricsPasteDialog.close();
-lyricsPasteDialog.addEventListener("keydown", event => event.stopPropagation());
-document.getElementById("lyricsPasteTextForm").onsubmit = event => {
-  event.preventDefault();
-  const reference = lyricsEditorDraft.length ? lyricsEditorDraft : karaokeLines;
-  const result = pastedLyricsDraft(lyricsPasteInput.value, reference, duration);
-  if (!result.lines.length) {
-    lyricsPasteError.textContent = "Paste at least one lyric line.";
-    lyricsPasteError.hidden = false;
-    return;
+function decodeLyricsText(buffer, encoding = "auto") {
+  const bytes = new Uint8Array(buffer);
+  const label = encoding.toLowerCase();
+  if (label === "utf-32le") return decodeUtf32(bytes, true);
+  if (label === "utf-32be") return decodeUtf32(bytes, false);
+  if (label !== "auto") {
+    return new TextDecoder(label, { fatal: true }).decode(bytes);
   }
-  pushLyricsHistory();
-  lyricsEditorDraft = result.lines;
-  lyricsEditorSelectedLine = 0;
-  lyricsPasteInput.value = "";
-  lyricsPasteDialog.close();
-  renderLyricsEditor();
-  updateLyricsUndoRedoButtons();
-  setLyricsEditorMessage(result.reusedTiming
-    ? "Text applied using the existing line timings."
-    : "Draft timings created. Use Set Start and Set End to sync with the audio.");
-};
+
+  const [first, second, third, fourth] = bytes;
+  if (first === 0xff && second === 0xfe && third === 0 && fourth === 0) {
+    return decodeUtf32(bytes, true);
+  }
+  if (first === 0 && second === 0 && third === 0xfe && fourth === 0xff) {
+    return decodeUtf32(bytes, false);
+  }
+  if (first === 0xff && second === 0xfe) return new TextDecoder("utf-16le", { fatal: true }).decode(bytes);
+  if (first === 0xfe && second === 0xff) return new TextDecoder("utf-16be", { fatal: true }).decode(bytes);
+  const utf8 = new TextDecoder("utf-8", { fatal: true });
+  if (first === 0xef && second === 0xbb && third === 0xbf) return utf8.decode(bytes);
+  try {
+    return utf8.decode(bytes);
+  } catch {
+    return new TextDecoder("windows-1251").decode(bytes);
+  }
+}
 
 lyricsLoadInput.addEventListener("change", async () => {
   const file =
@@ -19342,8 +19350,17 @@ lyricsLoadInput.addEventListener("change", async () => {
 
   if (!file) return;
 
-  const text =
-    await file.text();
+  let text;
+  try {
+    const encoding = document.getElementById("lyricsLoadEncoding").value;
+    const label = encoding === "other" ? window.prompt("Enter the file encoding name, for example ISO-8859-2.") : encoding;
+    if (label === null) return;
+    if (!label.trim()) throw new Error("Enter an encoding name or choose Auto.");
+    text = decodeLyricsText(await file.arrayBuffer(), label.trim());
+  } catch (error) {
+    setLyricsEditorError("Load: " + error.message);
+    return;
+  }
 
   const extension =
     file.name
@@ -28374,7 +28391,7 @@ function editLineText7916(line,text){
 }
 let compactUI7916=null;
 function openCompact7916(){
- if(lyricsEditorEditLineIndex>=0)leaveLyricsEdit();ensureBaseline7916();if(!compactUI7916){compactUI7916=makePanel7916('Edit Timing');compact7916=compactUI7916.overlay;button7916(compactUI7916.footer,'Check',openTimingReview7916);button7916(compactUI7916.footer,'Fix All',()=>timingChange7916(fixAllTimings7916));button7916(compactUI7916.footer,'Undo',()=>lyricsUndoBtn.click());button7916(compactUI7916.footer,'Redo',()=>lyricsRedoBtn.click());button7916(compactUI7916.footer,'Apply',applyLyrics7916);button7916(compactUI7916.footer,'Cancel',cancelCompact7916);}
+ if(lyricsEditorEditLineIndex>=0)leaveLyricsEdit();ensureBaseline7916();if(!compactUI7916){compactUI7916=makePanel7916('Edit Timing');compact7916=compactUI7916.overlay;button7916(compactUI7916.footer,'Check',openTimingReview7916);button7916(compactUI7916.footer,'Fix All',()=>timingChange7916(fixAllTimings7916));button7916(compactUI7916.footer,'Undo',()=>lyricsUndoBtn.click());button7916(compactUI7916.footer,'Redo',()=>lyricsRedoBtn.click());button7916(compactUI7916.footer,'Apply',applyLyrics7916);button7916(compactUI7916.footer,'Cancel',cancelCompact7916);button7916(compactUI7916.footer,'Paste Text',()=>window.mynusPasteLyrics?.());}
  compact7916.hidden=false;refreshCompact7916();
 }
 function cancelCompact7916(){
@@ -29768,6 +29785,67 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
   }
 </style>
 <script type="module">
+  function pastedLyricsDraft(text, referenceLines, songDuration) {
+    const lines = text.replace(/\uFEFF/g, "").split(/\r\n?|\n/)
+      .map(line => line.trim()).filter(Boolean);
+    if (!lines.length) return { lines: [], reusedTiming: false };
+    const reusedTiming = lines.length === referenceLines.length
+      && referenceLines.every(line => Number.isFinite(line.start) && Number.isFinite(line.end)
+        && line.start >= 0 && line.end > line.start);
+    const duration = Number.isFinite(songDuration) && songDuration > 0 ? songDuration : lines.length;
+    const timedLines = lines.map((line, index) => {
+      const original = reusedTiming ? referenceLines[index] : null;
+      const start = original?.start ?? index * duration / lines.length;
+      const end = original?.end ?? (index + 1) * duration / lines.length;
+      const words = line.split(/\s+/);
+      const originalWords = original?.words;
+      const normalizeWord = word => String(word).normalize("NFC").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+      const reuseWords = originalWords?.length === words.length
+        && originalWords.every((word, index) => normalizeWord(word.word) === normalizeWord(words[index])
+          && Number.isFinite(word.start) && Number.isFinite(word.end) && word.end >= word.start);
+      return {
+        start,
+        end,
+        words: words.map((word, index) => reuseWords ? { ...originalWords[index], word } : {
+          word,
+          start: start + (end - start) * index / words.length,
+          end: start + (end - start) * (index + 1) / words.length
+        })
+      };
+    });
+    return { lines: timedLines, reusedTiming };
+  }
+
+  const dialog = document.getElementById("lyricsPasteTextDialog");
+  const input = document.getElementById("lyricsPasteTextInput");
+  const error = document.getElementById("lyricsPasteTextError");
+  window.mynusPasteLyrics = () => {
+    error.hidden = true;
+    dialog.showModal();
+  };
+  document.getElementById("lyricsPasteTextCancel").onclick = () => dialog.close();
+  dialog.addEventListener("keydown", event => event.stopPropagation());
+  document.getElementById("lyricsPasteTextForm").onsubmit = event => {
+    event.preventDefault();
+    const reference = lyricsEditorDraft.length ? lyricsEditorDraft : karaokeLines;
+    const result = pastedLyricsDraft(input.value, reference, duration);
+    if (!result.lines.length) {
+      error.textContent = "Paste at least one lyric line.";
+      error.hidden = false;
+      return;
+    }
+    timingChange7916(() => {
+      lyricsEditorDraft = result.lines;
+      lyricsEditorSelectedLine = 0;
+    });
+    input.value = "";
+    dialog.close();
+    timingAction7917(result.reusedTiming
+      ? "Text pasted with the existing line timings. Click Apply to use it."
+      : "Draft timings created. Adjust them and click Apply.");
+  };
+</script>
+<script type="module">
   import { createKaraokeVideo, exportKaraokeMp4 } from "./video.js";
 
   const byId = id => document.getElementById(id);
@@ -29857,7 +29935,33 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
   new ResizeObserver(() => layoutStrip()).observe(lyricsStructureTimeline);
   window.layoutMynusKaraokeVideo = layoutStrip;
 
-  byId("karaokeVideoLoad").onclick = () => file.click();
+  const loadVideoButton = byId("karaokeVideoLoad");
+  loadVideoButton.onclick = async () => {
+    if (!window.mynusNativeVideoDialog) {
+      file.click();
+      return;
+    }
+    loadVideoButton.disabled = true;
+    let token;
+    try {
+      const selected = await window.mynusNativeFiles.request("video-open");
+      if (selected.cancelled) return;
+      token = selected.token;
+      showStatus("Loading " + selected.name + "…");
+      const response = await fetch(selected.url);
+      if (!response.ok) throw new Error("Unable to read the selected video.");
+      const contents = await response.blob();
+      if (!contents.size) throw new Error("The selected video file is empty.");
+      attachVideo(new File([contents], selected.name, { type: selected.mime }));
+      menu.open = false;
+    } catch (error) {
+      showStatus(error.message || "Unable to load the selected video.");
+      if (isKaraokeUiMode() && presentation === "normal") menu.open = true;
+    } finally {
+      if (token) await window.mynusNativeFiles.request("project-release", { token }).catch(console.warn);
+      loadVideoButton.disabled = false;
+    }
+  };
   function attachVideo(selected) {
     showStatus(selected.name);
     remove.hidden = false;
