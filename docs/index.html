@@ -45,7 +45,7 @@ window.mynusLogTime801=function(text){return String(text).replace(/\b\d{4}-\d{2}
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title> Filtr Fix 9.0.5 |  Video Track&Hide</title>
+  <title>  9.0.6 | Load Text</title>
 
 
  <style>
@@ -1802,6 +1802,19 @@ position: relative;
 
     .lyrics-editor-status { min-width: 0; color: #666; font-size: 11px; }
     .lyrics-editor-actions { display: flex; align-items: center; gap: 6px; }
+    #lyricsPasteTextDialog {
+      width: min(560px, calc(100vw - 40px));
+      box-sizing: border-box;
+      border: 1px solid #999;
+      border-radius: 8px;
+      padding: 18px;
+    }
+    #lyricsPasteTextDialog::backdrop { background: #0008; }
+    #lyricsPasteTextForm { display: grid; gap: 10px; }
+    #lyricsPasteTextTitle { margin: 0; font-size: 18px; }
+    #lyricsPasteTextInput { width: 100%; box-sizing: border-box; font: inherit; resize: vertical; }
+    #lyricsPasteTextError { margin: 0; color: #a21c29; }
+    .lyrics-paste-actions { display: flex; justify-content: flex-end; gap: 8px; }
     #saveLyricsEditBtn, #lyricsSaveAsBtn {
       width: 96px;
       height: 30px;
@@ -5512,6 +5525,7 @@ canvas,.master-timeline-inner,.playhead,.master-cursor{cursor:pointer}.playhead,
         <button type="button" id="cancelLyricsEditBtn">Cancel</button>
         
         <button type="button" id="lyricsLoadBtn">Load</button>
+        <button type="button" id="lyricsPasteTextBtn">Paste Text</button>
         <button type="button" id="saveLyricsEditBtn">Save Project</button>
         <button type="button" id="lyricsSaveAsBtn">Save Lyrics</button>
       </div>
@@ -5521,6 +5535,19 @@ canvas,.master-timeline-inner,.playhead,.master-cursor{cursor:pointer}.playhead,
 </div>
 
 <input type="file" id="lyricsLoadInput" accept=".json,.lrc,.srt,.txt" style="display:none">
+
+<dialog id="lyricsPasteTextDialog" aria-labelledby="lyricsPasteTextTitle">
+  <form id="lyricsPasteTextForm">
+    <h2 id="lyricsPasteTextTitle">Paste Lyrics</h2>
+    <label for="lyricsPasteTextInput">Enter one lyric line per row.</label>
+    <textarea id="lyricsPasteTextInput" rows="12" required autofocus></textarea>
+    <p id="lyricsPasteTextError" role="alert" hidden></p>
+    <div class="lyrics-paste-actions">
+      <button type="button" id="lyricsPasteTextCancel">Cancel</button>
+      <button type="submit">Apply</button>
+    </div>
+  </form>
+</dialog>
 
 <div id="lyricsSaveAsDialog" class="lyrics-saveas-dialog">
   <div class="lyrics-saveas-card">
@@ -19248,6 +19275,66 @@ lyricsLoadBtn.addEventListener("click", () => {
   lyricsLoadInput.click();
 });
 
+function pastedLyricsDraft(text, referenceLines, songDuration) {
+  const lines = text.replace(/\uFEFF/g, "").split(/\r\n?|\n/)
+    .map(line => line.trim()).filter(Boolean);
+  if (!lines.length) return { lines: [], reusedTiming: false };
+  const reusedTiming = lines.length === referenceLines.length
+    && referenceLines.every(line => Number.isFinite(line.start) && Number.isFinite(line.end)
+      && line.start >= 0 && line.end > line.start);
+  const duration = Number.isFinite(songDuration) && songDuration > 0 ? songDuration : lines.length;
+  const timedLines = lines.map((line, index) => {
+    const original = reusedTiming ? referenceLines[index] : null;
+    const start = original?.start ?? index * duration / lines.length;
+    const end = original?.end ?? (index + 1) * duration / lines.length;
+    const words = line.split(/\s+/);
+    const originalWords = original?.words;
+    const normalizeWord = word => String(word).normalize("NFC").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+    const reuseWords = originalWords?.length === words.length
+      && originalWords.every((word, index) => normalizeWord(word.word) === normalizeWord(words[index])
+        && Number.isFinite(word.start) && Number.isFinite(word.end) && word.end >= word.start);
+    return {
+      start,
+      end,
+      words: words.map((word, index) => reuseWords ? { ...originalWords[index], word } : {
+        word,
+        start: start + (end - start) * index / words.length,
+        end: start + (end - start) * (index + 1) / words.length
+      })
+    };
+  });
+  return { lines: timedLines, reusedTiming };
+}
+
+const lyricsPasteDialog = document.getElementById("lyricsPasteTextDialog");
+const lyricsPasteInput = document.getElementById("lyricsPasteTextInput");
+const lyricsPasteError = document.getElementById("lyricsPasteTextError");
+document.getElementById("lyricsPasteTextBtn").onclick = () => {
+  lyricsPasteError.hidden = true;
+  lyricsPasteDialog.showModal();
+};
+document.getElementById("lyricsPasteTextCancel").onclick = () => lyricsPasteDialog.close();
+lyricsPasteDialog.addEventListener("keydown", event => event.stopPropagation());
+document.getElementById("lyricsPasteTextForm").onsubmit = event => {
+  event.preventDefault();
+  const reference = lyricsEditorDraft.length ? lyricsEditorDraft : karaokeLines;
+  const result = pastedLyricsDraft(lyricsPasteInput.value, reference, duration);
+  if (!result.lines.length) {
+    lyricsPasteError.textContent = "Paste at least one lyric line.";
+    lyricsPasteError.hidden = false;
+    return;
+  }
+  pushLyricsHistory();
+  lyricsEditorDraft = result.lines;
+  lyricsEditorSelectedLine = 0;
+  lyricsPasteInput.value = "";
+  lyricsPasteDialog.close();
+  renderLyricsEditor();
+  updateLyricsUndoRedoButtons();
+  setLyricsEditorMessage(result.reusedTiming
+    ? "Text applied using the existing line timings."
+    : "Draft timings created. Use Set Start and Set End to sync with the audio.");
+};
 
 lyricsLoadInput.addEventListener("change", async () => {
   const file =
