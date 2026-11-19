@@ -45,7 +45,7 @@ window.mynusLogTime801=function(text){return String(text).replace(/\b\d{4}-\d{2}
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>  9.0.8 | set start/end fix </title>
+  <title>MyNus 9.0.9 | Lyrics borders</title>
 
 
  <style>
@@ -1765,8 +1765,8 @@ position: relative;
     }
 
     .lyrics-editor-row.selected {
-      border-color: #222;
-      background: #f0f0f0;
+      border-color: #ddd;
+      background: #fafafa;
     }
 
     .lyrics-editor-row input[type="text"] {
@@ -3157,14 +3157,16 @@ position: relative;
     .lyrics-editor-text-wrap { position: relative; min-width: 0; display: grid; }
     .lyrics-editor-karaoke { grid-area: 1 / 1; min-height: 46px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 5px; background: white; font-size: 13px; line-height: 1.35; cursor: text; }
     .lyrics-editor-karaoke-word { display: inline; padding: 1px 2px; border-radius: 3px; cursor: pointer; }
-    .lyrics-editor-karaoke-word.past { color: #888; }
-    .lyrics-editor-karaoke-word.active { background: #222; color: white; }
-    .lyrics-editor-row.karaoke-current-row { border-color: #222; }
+    .lyrics-editor-karaoke-word.past { color: inherit; }
+    .lyrics-editor-karaoke-word.active { text-decoration: underline; text-decoration-color: #16833b; text-underline-offset: 3px; font-weight: 700; }
+    .lyrics-editor-row.karaoke-current-row { border: 1px solid #16833b; }
+    .lyrics-editor-text-wrap.lyrics-edit-active textarea { border: 2px solid #176bd1; outline: none; }
+    .lyrics-editor-row input[type="text"]:focus { border-color: #176bd1; outline: 1px solid #176bd1; }
     .lyrics-editor-text-wrap textarea { grid-area: 1 / 1; display: none; position: relative; z-index: 2; }
     .lyrics-editor-text-wrap.lyrics-edit-active textarea { display: block; }
     .lyrics-editor-text-wrap.lyrics-edit-active .lyrics-editor-karaoke { visibility: hidden; }
     .lyrics-editor-edit-marker { display: none; position: absolute; z-index: 3; pointer-events: none; border-radius: 3px; box-sizing: border-box; background: rgba(34,34,34,.18); }
-    .lyrics-editor-text-wrap.lyrics-edit-active .lyrics-editor-edit-marker { display: block; }
+    .lyrics-editor-text-wrap.lyrics-edit-active .lyrics-editor-edit-marker { display: none; }
 
 
     .lyrics-editor-toolbar-center {
@@ -5405,7 +5407,10 @@ canvas,.master-timeline-inner,.playhead,.master-cursor{cursor:pointer}.playhead,
                 <button type="button" id="karaokeVideoIn" aria-pressed="false">IN</button>
                 <button type="button" id="karaokeVideoOut" aria-pressed="false">OUT</button>
               </div>
-              <button type="button" id="karaokeVideoExport" disabled>Export MP4</button>
+              <label>Fade In (s) <input id="karaokeVideoFadeIn" type="number" min="0" step="0.1" value="0"></label>
+              <label>Fade Out (s) <input id="karaokeVideoFadeOut" type="number" min="0" step="0.1" value="0"></label>
+              <label>Resize (%) <input id="karaokeVideoResize" type="number" min="10" max="400" step="1" value="100"></label>
+              <button type="button" id="karaokeVideoExport" title="Print Screen" disabled>Export MP4</button>
               <button type="button" id="karaokeVideoCancelExport" hidden>Cancel Export</button>
               <output id="karaokeVideoStatus" aria-live="polite" hidden></output>
             </div>
@@ -5426,6 +5431,7 @@ canvas,.master-timeline-inner,.playhead,.master-cursor{cursor:pointer}.playhead,
             <div><span>Shift + Win</span><span>Show / Hide Lyrics</span></div>
             <div><span>Shift + Ctrl</span><span>Show / Hide Controls</span></div>
             <div><span>Shift + Alt</span><span>Toggle video-only view</span></div>
+            <div><span>Print Screen</span><span>Export MP4</span></div>
             <div><span>Tab</span><span>Lyrics Editor</span></div>
             <div><span>Esc</span><span>Sequencer</span></div>
             <div><span>Backspace</span><span>Close all Full Screen windows</span></div>
@@ -5592,21 +5598,7 @@ canvas,.master-timeline-inner,.playhead,.master-cursor{cursor:pointer}.playhead,
   </form>
 </dialog>
 
-<dialog id="karaokeExportSettings" aria-labelledby="karaokeExportSettingsTitle">
-  <form id="karaokeExportSettingsForm">
-    <h2 id="karaokeExportSettingsTitle">Export Trim / Fade</h2>
-    <label>Trim IN (s) <input name="trimIn" type="number" step="0.01" min="0" placeholder="Auto"></label>
-    <label>Trim OUT (s) <input name="trimOut" type="number" step="0.01" min="0" placeholder="Auto"></label>
-    <label>Fade In (s) <input name="fadeIn" type="number" step="0.01" min="0" placeholder="0"></label>
-    <label>Fade Out (s) <input name="fadeOut" type="number" step="0.01" min="0" placeholder="0"></label>
-    <p>Leave Trim blank to use the current IN/OUT marks.</p>
-    <p id="karaokeExportSettingsError" role="alert" hidden></p>
-    <div class="lyrics-paste-actions">
-      <button type="button" id="karaokeExportSettingsCancel">Cancel</button>
-      <button type="submit">Apply</button>
-    </div>
-  </form>
-</dialog>
+
 
 <div id="lyricsSaveAsDialog" class="lyrics-saveas-dialog">
   <div class="lyrics-saveas-card">
@@ -6706,6 +6698,45 @@ let activeKaraokeLine =
 
 let lyricsEditorDraft = [];
 let lyricsEditorSelectedLine = -1;
+const lyricsTimingBasis909 = new WeakMap();
+
+function setLyricsLineBoundary909(line, key, value) {
+  if (!line || !Number.isFinite(value)) return;
+  const previousStart = Number(line.start);
+  const previousEnd = Number(line.end);
+  const cached = lyricsTimingBasis909.get(line);
+  let basis = previousEnd > previousStart ? {
+    start: previousStart, end: previousEnd,
+    words: (line.words || []).map(word => ({ start: word.start, end: word.end }))
+  } : cached;
+  if (cached && (cached.invalidStart !== previousStart || cached.invalidEnd !== previousEnd)) {
+    if (!(previousEnd > previousStart)) basis = null;
+  }
+  line[key] = value;
+  const start = Number(line.start);
+  const end = Number(line.end);
+  if (!(start >= 0 && end > start)) {
+    if (basis) lyricsTimingBasis909.set(line, { ...basis, invalidStart: start, invalidEnd: end });
+    return;
+  }
+  if (!basis && line.words?.length) {
+    const times = line.words.flatMap(word => [word.start, word.end]).filter(Number.isFinite);
+    const first = Math.min(...times), last = Math.max(...times);
+    if (last > first) basis = { start: first, end: last, words: line.words.map(word => ({ start: word.start, end: word.end })) };
+  }
+  const length = end - start;
+  let previous = start;
+  (line.words || []).forEach((word, index, words) => {
+    const original = basis?.words[index];
+    const position = (time, fallback) => basis && Number.isFinite(time)
+      ? start + (time - basis.start) * length / (basis.end - basis.start)
+      : start + length * fallback;
+    word.start = Math.min(end, Math.max(previous, position(original?.start, index / words.length)));
+    word.end = Math.min(end, Math.max(word.start, position(original?.end, (index + 1) / words.length)));
+    previous = word.end;
+  });
+  lyricsTimingBasis909.delete(line);
+}
 let lyricsEditorEditLineIndex = -1;
 let lyricsEditorCaretOffset = 0;
 let lyricsEditorEditStartState = null;
@@ -15336,7 +15367,7 @@ function updateKaraoke(
       line =>
         currentTime >= line.start
         &&
-        currentTime <= line.end
+        currentTime < line.end
     );
 
 
@@ -15379,8 +15410,10 @@ function updateKaraoke(
     "";
 
 
+  const activeWordIndex = currentTime >= line.start && currentTime < line.end
+    ? line.words.findIndex(word => currentTime >= Number(word.start) && currentTime < Number(word.end)) : -1;
   line.words.forEach(
-    word => {
+    (word, wordIndex) => {
 
       const span =
         document.createElement(
@@ -15410,9 +15443,7 @@ function updateKaraoke(
 
 
       if (
-        currentTime >= wordStart
-        &&
-        currentTime < wordEnd
+        wordIndex === activeWordIndex
       ) {
 
         span.classList.add(
@@ -15636,7 +15667,7 @@ function findLyricsLineIndexAtTime(time) {
   const current = Number(time);
   if (!Number.isFinite(current)) return -1;
   return lyricsEditorDraft.findIndex(line =>
-    current >= Number(line.start) && current <= Number(line.end)
+    current >= Number(line.start) && current < Number(line.end)
   );
 }
 
@@ -15757,35 +15788,9 @@ function enterLyricsEditAt(line, row, textWrap, textArea, karaokeBox, clientX, c
 }
 
 // Работа со Structure в Lyrics Editor.
-function updateLyricsEditMarker(row, line, currentTime) {
-  if (!row || !line) return;
-  const textWrap = row.querySelector(".lyrics-editor-text-wrap");
-  const marker = row.querySelector(".lyrics-editor-edit-marker");
-  const karaokeBox = row.querySelector(".lyrics-editor-karaoke");
-  if (!textWrap || !marker || !karaokeBox || Number(row.dataset.index) !== lyricsEditorEditLineIndex) {
-    if (marker) marker.style.display = "none";
-    return;
-  }
-
-  const wordIndex = (line.words || []).findIndex(word =>
-    currentTime >= Number(word.start) && currentTime <= Number(word.end)
-  );
-  const span = wordIndex >= 0
-    ? karaokeBox.querySelectorAll(".lyrics-editor-karaoke-word")[wordIndex]
-    : null;
-
-  if (!span) {
-    marker.style.display = "none";
-    return;
-  }
-
-  const wrapRect = textWrap.getBoundingClientRect();
-  const spanRect = span.getBoundingClientRect();
-  marker.style.display = "block";
-  marker.style.left = (spanRect.left - wrapRect.left) + "px";
-  marker.style.top = (spanRect.top - wrapRect.top) + "px";
-  marker.style.width = spanRect.width + "px";
-  marker.style.height = spanRect.height + "px";
+function updateLyricsEditMarker(row) {
+  const marker = row?.querySelector(".lyrics-editor-edit-marker");
+  if (marker) marker.style.display = "none";
 }
 
 // Работа со Structure в Lyrics Editor.
@@ -15866,7 +15871,7 @@ function updateLyricsFullScreenView(currentTime) {
   }
 
   let lineIndex = lines.findIndex(line =>
-    currentTime >= Number(line.start) && currentTime <= Number(line.end)
+    currentTime >= Number(line.start) && currentTime < Number(line.end)
   );
 
   if (lineIndex < 0) {
@@ -15881,7 +15886,9 @@ function updateLyricsFullScreenView(currentTime) {
     lyricsFullScreenCurrent.innerHTML = "";
     const highlightWords = !lyricsFullScreenView.classList.contains("lyrics-no-word-highlight");
     const words = Array.isArray(line?.words) ? line.words : [];
-    words.forEach(word => {
+    const activeWordIndex = currentTime >= line.start && currentTime < line.end
+      ? words.findIndex(word => currentTime >= Number(word.start) && currentTime < Number(word.end)) : -1;
+    words.forEach((word, wordIndex) => {
       const span = document.createElement("span");
       span.className = "lyrics-fullscreen-word";
       span.textContent = String(word?.word || "") + " ";
@@ -15889,7 +15896,7 @@ function updateLyricsFullScreenView(currentTime) {
       const start = Number(word?.start);
       const end = Number(word?.end);
       if (highlightWords && Number.isFinite(start) && Number.isFinite(end)) {
-        if (currentTime >= start && currentTime < end) span.classList.add("active");
+        if (wordIndex === activeWordIndex) span.classList.add("active");
         else if (currentTime >= end) span.classList.add("past");
       }
 
@@ -16555,6 +16562,7 @@ function setUiMode(nextMode) {
     else updateLyricsEditorKaraoke(getCurrentTime());
   }
   window.layoutMynusKaraokeVideo?.();
+  window.mynusSyncKaraokeKeys?.();
 }
 
 lyricsModeSwitchBtn?.addEventListener("click", () => setUiMode(UI_MODE.KARAOKE));
@@ -16564,51 +16572,31 @@ lyricsFullScreenBackBtn?.addEventListener("click", () => setUiMode(UI_MODE.LYRIC
 function updateLyricsEditorKaraoke(currentTime) {
   if (!isLyricsUiOpen()) return;
   updateLyricsFullScreenView(currentTime);
-
-  const currentLineIndex = lyricsEditorDraft.findIndex(
-    line => currentTime >= Number(line.start) && currentTime <= Number(line.end)
-  );
-  if (currentLineIndex < 0) return;
-
+  const currentLineIndex = lyricsEditorDraft.findIndex(line =>
+    Number.isFinite(line.start) && Number.isFinite(line.end)
+    && currentTime >= line.start && currentTime < line.end);
   const rows = lyricsEditorRows.querySelectorAll(".lyrics-editor-row");
-
   rows.forEach((row, rowIndex) => {
-    row.classList.toggle("karaoke-current-row", rowIndex === currentLineIndex);
-
+    const current = rowIndex === currentLineIndex;
+    row.classList.toggle("karaoke-current-row", current);
+    row.classList.toggle("selected", rowIndex === lyricsEditorSelectedLine);
     const line = lyricsEditorDraft[rowIndex];
-    const wordSpans = row.querySelectorAll(".lyrics-editor-karaoke-word");
-
-    wordSpans.forEach((span, wordIndex) => {
-      const word = line && line.words && line.words[wordIndex];
-      if (!word) return;
-
-      const start = Number(word.start);
-      const end = Number(word.end);
-
-      span.classList.toggle("active", currentTime >= start && currentTime <= end);
-      span.classList.toggle("past", currentTime > end);
+    const activeWord = current ? (line?.words || []).findIndex(word =>
+      Number.isFinite(word.start) && Number.isFinite(word.end)
+      && currentTime >= word.start && currentTime < word.end) : -1;
+    row.querySelectorAll(".lyrics-editor-karaoke-word").forEach((span, wordIndex) => {
+      span.classList.toggle("active", wordIndex === activeWord);
+      span.classList.remove("past");
     });
-
-    updateLyricsEditMarker(row, line, currentTime);
+    updateLyricsEditMarker(row);
   });
-
-  if (
-    lyricsEditorEditLineIndex < 0
-    && lyricsTransportMode === "master"
-    && lyricsStructureSelectedIndex < 0
-    && !lyricsStructureSelectedIndices.size
-    && lyricsEditorSelectedLine !== currentLineIndex
-  ) {
+  if (currentLineIndex >= 0 && lyricsEditorEditLineIndex < 0
+      && lyricsTransportMode === "master" && lyricsStructureSelectedIndex < 0
+      && !lyricsStructureSelectedIndices.size && lyricsEditorSelectedLine !== currentLineIndex) {
     lyricsEditorSelectedLine = currentLineIndex;
-
-    rows.forEach((row, rowIndex) => {
-      row.classList.toggle("selected", rowIndex === currentLineIndex);
-    });
-
+    rows.forEach((row, index) => row.classList.toggle("selected", index === currentLineIndex));
     updateLyricsEditorStats();
-
-    const currentRow = rows[currentLineIndex];
-    if (currentRow) currentRow.scrollIntoView({ block: "nearest" });
+    rows[currentLineIndex]?.scrollIntoView({ block: "nearest" });
   }
 }
 
@@ -18145,9 +18133,12 @@ function renderLyricsEditor() {
         if (committed) return;
         committed = true;
         const value = parseLyricsTime(input.value);
-        if (Number.isFinite(value)) line[key] = value;
+        if (Number.isFinite(value)) setLyricsLineBoundary909(line, key, value);
         input.value = formatLyricsTime(line[key]);
-        if (Number(line[key]) !== startValue) pushLyricsHistoryState(startState);
+        if (Number(line[key]) !== startValue) {
+          pushLyricsHistoryState(startState);
+          renderLyricsEditor();
+        }
       };
 
       input.addEventListener("focus", begin);
@@ -19014,43 +19005,22 @@ lyricsRepeatBtn.addEventListener(
   }
 );
 
-lyricsSetStartBtn.addEventListener("click", () => {
+function setLyricsBoundaryFromCursor909(key) {
   const line = getSelectedLyricsLine();
-  if (!line) return;
-
-  const time = masterCursorTime;
-  const firstWord = line.words[0];
+  if (!line || !Number.isFinite(masterCursorTime)) return;
   pushLyricsHistory();
-  line.start = time;
-  if (firstWord) firstWord.start = time;
+  setLyricsLineBoundary909(line, key, masterCursorTime);
   renderLyricsEditor();
-  if (!(time < line.end)) {
-    timingBoundaryWarning("red", "Line Start must be earlier than Line End.");
-  } else if (firstWord && !(time < firstWord.end)) {
-    timingBoundaryWarning("yellow", "Start conflicts with the end of the first word.");
-  } else {
-    timingBoundaryWarning();
-  }
-});
-
-lyricsSetEndBtn.addEventListener("click", () => {
-  const line = getSelectedLyricsLine();
-  if (!line) return;
-
-  const time = masterCursorTime;
-  const lastWord = line.words.at(-1);
-  pushLyricsHistory();
-  line.end = time;
-  if (lastWord) lastWord.end = time;
-  renderLyricsEditor();
-  if (!(time > line.start)) {
-    timingBoundaryWarning("red", "Line End must be later than Line Start.");
-  } else if (lastWord && !(time > lastWord.start)) {
-    timingBoundaryWarning("yellow", "End conflicts with the start of the last word.");
-  } else {
-    timingBoundaryWarning();
-  }
-});
+  const index = lyricsEditorDraft.indexOf(line);
+  const issues = timingIssues7916(lyricsEditorDraft).filter(issue =>
+    issue.i === index || issue.refs.some(ref => ref.o === line));
+  if (issues.length) {
+    const severity = issues.some(issue => issue.kind === "line" || issue.kind === "lines") ? "red" : "yellow";
+    timingBoundaryWarning(severity, issues.map(timingConflictMessage909).join("\n"));
+  } else timingBoundaryWarning();
+}
+lyricsSetStartBtn.addEventListener("click", () => setLyricsBoundaryFromCursor909("start"));
+lyricsSetEndBtn.addEventListener("click", () => setLyricsBoundaryFromCursor909("end"));
 
 lyricsPlayMasterBtn.addEventListener(
   "click",
@@ -21962,7 +21932,10 @@ function readProjectVideo(spec, entries) {
     file: new File([bytes], name, {type: typeof spec.mime === 'string' ? spec.mime : ''}),
     offset: Number.isFinite(spec.offset) ? spec.offset : 0,
     volume: Number.isFinite(spec.volume) ? Math.max(0, Math.min(1, spec.volume)) : 1,
-    loop: spec.loop === true
+    loop: spec.loop === true,
+    resize: Number.isFinite(spec.resize) ? Math.max(10, Math.min(400, spec.resize)) : 100,
+    fadeIn: Math.max(0, Number(spec.fadeIn) || 0),
+    fadeOut: Math.max(0, Number(spec.fadeOut) || 0)
   };
 }
 async function localImportProject(file, options = {}) {
@@ -22204,8 +22177,8 @@ async function saveCurrentProject(projectName, savePath, conflictAction = "", op
   const id=options.projectId||activeProjectId||crypto.randomUUID();
   const manifest={format:'MyNus Project',format_version:1,name,project,lyrics,media:specs};
   if(karaokeVideo){
-    const {file, offset, volume, loop}=karaokeVideo;
-    manifest.karaoke_video={name:file.name,mime:file.type,offset,volume,loop};
+    const {file, offset, volume, loop, resize, fadeIn, fadeOut}=karaokeVideo;
+    manifest.karaoke_video={name:file.name,mime:file.type,offset,volume,loop,resize,fadeIn,fadeOut};
     entries.push(['KaraokeVideo',file]);
   }
   entries.unshift(['Project.json',new Blob([JSON.stringify(manifest,null,2)],{type:'application/json'})]);
@@ -22788,7 +22761,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "8.6.3";
+const MYNUS_CLIENT_VERSION = "9.0.9";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -25088,7 +25061,7 @@ document.addEventListener("click", event => {
     const directorySize = view.getUint32(end + 12, true);
     const directoryStart = view.getUint32(end + 16, true);
 
-    if (![2,3,5].includes(count) || directoryStart + directorySize !== end) {
+    if (![2,3,4,5].includes(count) || directoryStart + directorySize !== end) {
       throw new Error("Unsupported .mynus structure.");
     }
 
@@ -25161,7 +25134,7 @@ document.addEventListener("click", event => {
     if (files.has("Karaoke.json")) {
       const data=readJson("Karaoke.json");
       if(data.format!=="MyNus Karaoke" || ![3,4].includes(data.format_version) || !/^(Master|Instrumental)\.[a-z0-9]+$/i.test(data.master?.file||"") ||
-        files.size!==(data.format_version===4&&data.microphone?3:2) || !files.has(data.master.file) || !data.project || !Array.isArray(data.lyrics?.lines) ||
+        files.size!==((data.format_version===4&&data.microphone?3:2)+(data.karaoke_video?1:0)) || !files.has(data.master.file) || !data.project || !Array.isArray(data.lyrics?.lines) ||
         !Array.isArray(data.structure) || !data.sequencer) throw new Error("Invalid karaoke archive");
       for(const line of data.lyrics.lines) {
         if(!line || !Number.isFinite(line.start) || !Number.isFinite(line.end) || !Array.isArray(line.words)) throw new Error("Invalid lyrics");
@@ -25171,7 +25144,7 @@ document.addEventListener("click", event => {
       const master=new Blob([files.get(data.master.file)],{type:data.master.mime_type||"application/octet-stream"});
       if(!master.size)throw new Error("Master is empty");
       if(data.microphone&&(!/^Microphone\.wav$/i.test(data.microphone.file||'')||!files.has(data.microphone.file)))throw Error('Invalid Microphone track');
-      return {project:{...data.project,original:data.original_backup||null},lyrics:{...data.lyrics,structure:data.structure},sequencer:data.sequencer,master,microphone:data.microphone?new Blob([files.get(data.microphone.file)],{type:'audio/wav'}):null,mix861:data.mix||null};
+      return {project:{...data.project,original:data.original_backup||null},lyrics:{...data.lyrics,structure:data.structure},sequencer:data.sequencer,master,microphone:data.microphone?new Blob([files.get(data.microphone.file)],{type:'audio/wav'}):null,mix861:data.mix||null,karaokeVideo:readProjectVideo(data.karaoke_video,files)};
     }
     const project = readJson("Project.json");
     const lyrics = readJson("Lyrics.json");
@@ -26357,7 +26330,7 @@ async function mountPreview780(box,jobId){
   const isJson=(await file.slice(0,256).text()).replace(/^\uFEFF/,'').trimStart().startsWith('{');
   if(!isJson){const entries=await localReadProjectArchive(file);if(entries.has('Project.json')){const data=JSON.parse(new TextDecoder().decode(entries.get('Project.json')));if(data.format==='MyNus Project')return localImportProject(file,{remember:false})}}
   const loaded=await window.mynusReadKaraoke800(file);await audioDuration(loaded.master);
-  const r=await record(loaded.project.name||file.name,loaded.master,loaded.lyrics,'mynus');if(loaded.microphone)r.media.microphone=loaded.microphone;r.karaoke800.mix861=loaded.mix861||null;r.project={...loaded.project,tracks:{...loaded.project.tracks,original:loaded.project.source_audio_name||file.name},sequencer:loaded.sequencer};return r;
+  const r=await record(loaded.project.name||file.name,loaded.master,loaded.lyrics,'mynus');if(loaded.microphone)r.media.microphone=loaded.microphone;r.karaoke800.mix861=loaded.mix861||null;r.karaokeVideo=loaded.karaokeVideo||null;r.project={...loaded.project,tracks:{...loaded.project.tracks,original:loaded.project.source_audio_name||file.name},sequencer:loaded.sequencer};return r;
  }
  async function importFiles(files, options={}){
   const errors=[],records=[],pairs=new Map();
@@ -26753,7 +26726,7 @@ window.addEventListener('keydown',e=>{
  // Escape/Tab navigation also works after editing a lyric text field.
  if((k==='Escape'||k==='Tab')&&!e.ctrlKey&&!e.altKey&&!(e.target.closest?.('.timing-window7917,.lyrics-log-search7917')&&e.target.matches?.('input,textarea,[contenteditable]'))){e.preventDefault();e.stopImmediatePropagation();if(!e.repeat)navigationUi796(k);return;}
  if(isTypingTarget(e.target))return;
- if(k==='Control'||k==='Alt'){modifierCandidate=null;e.stopImmediatePropagation();return;}
+ if(k==='Control'||k==='Alt'){modifierCandidate=null;if(!isKaraokeUiMode())e.stopImmediatePropagation();return;}
  if(e.repeat)return;
  const digit=/^(?:Digit|Numpad)([0-9])$/.exec(code),item=digit?trackMapUi796.find(t=>(t.key||String(t.number))===digit[1]):null;let action;
  if(code==='Backquote'&&!e.ctrlKey&&!e.altKey)action=()=>switchMode('original');
@@ -26765,7 +26738,7 @@ window.addEventListener('keydown',e=>{
  else if(k==='Backspace'&&!e.ctrlKey&&!e.altKey)action=()=>{globalStopUi796();stopBtn.click();};
  if(action){e.preventDefault();e.stopImmediatePropagation();Promise.resolve().then(action).catch(error=>fxProcessUi796(error.message,true));}
 },true);
-window.addEventListener('keyup',e=>{if(e.key==='Control'||e.key==='Alt'){modifierCandidate=null;e.stopImmediatePropagation();}},true);
+window.addEventListener('keyup',e=>{if(e.key==='Control'||e.key==='Alt'){modifierCandidate=null;if(!isKaraokeUiMode())e.stopImmediatePropagation();}},true);
 const installUi796=installGeneratedTrack;
 installGeneratedTrack=async function(...args){await installUi796(...args);refreshFxUi796();};
 const loadUi796=loadWaveforms;
@@ -28370,14 +28343,62 @@ function timingIssues7916(lines){
   });
  });return out;
 }
-function timingColours7916(lines){
- const values=timingValues7916(lines),colours=new Map(),changed=id=>timingBaseline7916.has(id)&&!Object.is(values.get(id),timingBaseline7916.get(id));
- // A corrected interval colours both ends, even when only one end was changed.
- lines.forEach((l,i)=>{const groups=[[`L${i}.start`,`L${i}.end`],...(l.words||[]).map((w,j)=>[`W${i}.${j}.start`,`W${i}.${j}.end`])];for(const pair of groups)if(pair.some(changed))pair.forEach(id=>colours.set(id,'green'));});
- const currentIssues=timingIssues7916(lines);for(const pair of timingPairs7916)if(pair.some(changed)){const unresolved=currentIssues.some(issue=>issue.refs.some(r=>pair.includes(r.id)));for(const id of pair)colours.set(id,unresolved?'yellow':'green');}
- for(const issue of currentIssues){const colour=issue.refs.some(r=>changed(r.id))?'yellow':'red';for(const r of issue.refs){const previous=colours.get(r.id);colours.set(r.id,previous==='yellow'||colour==='yellow'?'yellow':'red');}}
- for(const issue of currentIssues)if(issue.kind==='line')for(const ref of issue.refs)colours.set(ref.id,'red');
- return colours;
+function timingColours7916(lines) {
+  const values = timingValues7916(lines);
+  const colours = new Map();
+  for (const [id, value] of values) {
+    if (timingBaseline7916.has(id) && !Object.is(value, timingBaseline7916.get(id))) colours.set(id, "green");
+  }
+  for (const issue of timingIssues7916(lines)) {
+    const colour = issue.kind === "line" || issue.kind === "lines" ? "red" : "yellow";
+    for (const ref of issue.refs) if (colours.get(ref.id) !== "red") colours.set(ref.id, colour);
+  }
+  return colours;
+}
+function timingConflictMessage909(issue) {
+  const types = {
+    line: "Границы строки: начало отрицательное, не раньше конца или время некорректно",
+    lines: "Пересечение строк: предыдущая строка заканчивается после начала следующей",
+    word: "Интервал слова: начало отрицательное, не раньше конца или время некорректно",
+    before: "Слово начинается раньше начала своей строки",
+    after: "Слово заканчивается позже конца своей строки",
+    words: "Пересечение слов: предыдущее слово заканчивается после начала следующего"
+  };
+  const location = ref => {
+    const parts = ref.id.split(".");
+    return parts[0][0] === "L" ? "строка " + (Number(parts[0].slice(1)) + 1)
+      : "строка " + (Number(parts[0].slice(1)) + 1) + ", слово " + (Number(parts[1]) + 1) + ' «' + ref.o.word + '»';
+  };
+  const values = issue.refs.map(ref => location(ref) + ", " +
+    (ref.key === "start" ? "начало " : "конец ") + formatTiming7916(ref.o[ref.key]));
+  return (types[issue.kind] || issue.kind) + ": " + values.join("; ");
+}
+function timingConflictMap909(lines) {
+  const map = new Map();
+  for (const issue of timingIssues7916(lines)) for (const ref of issue.refs) {
+    if (!map.has(ref.id)) map.set(ref.id, []);
+    map.get(ref.id).push(issue);
+  }
+  return map;
+}
+function bindTimingConflict909(element, ids, conflicts, fallback = "") {
+  const issues = [...new Set(ids.flatMap(id => conflicts.get(id) || []))];
+  element.title = issues.length ? issues.map(timingConflictMessage909).join("\n") : fallback;
+  let reported = false;
+  const report = () => {
+    if (reported || !issues.length) return;
+    reported = true;
+    const message = issues.map(timingConflictMessage909).join("\n");
+    setLyricsEditorMessage(message);
+    if (window.mynusLocalConsole?.message) {
+      const colour = issues.some(issue => issue.kind === "line" || issue.kind === "lines") ? "#d42323" : "#b58500";
+      window.mynusLocalConsole.message("Lyrics", message, colour);
+    } else console.warn(message);
+  };
+  element.onpointerenter = report;
+  element.onpointerleave = () => { reported = false; };
+  element.onfocus = report;
+  element.onblur = () => { reported = false; };
 }
 function timingBoundaryWarning(colour, message) {
   if (!lyricsEditorErrorConsole) return;
@@ -28422,12 +28443,31 @@ function button7916(parent,label,action){const b=document.createElement('button'
 let reviewUI7916=null;
 function openTimingReview7916(){if(lyricsEditorEditLineIndex>=0)leaveLyricsEdit();ensureBaseline7916();if(!reviewUI7916){reviewUI7916=makePanel7916('Check Timings');review7916=reviewUI7916.overlay;button7916(reviewUI7916.footer,'Fix All',()=>timingChange7916(fixAllTimings7916));button7916(reviewUI7916.footer,'Undo',()=>lyricsUndoBtn.click());button7916(reviewUI7916.footer,'Redo',()=>lyricsRedoBtn.click());button7916(reviewUI7916.footer,'Close',()=>review7916.hidden=true);}review7916.hidden=false;renderTimingReview7916();paintTimingColours7916();}
 function renderTimingReview7916(){const ui=reviewUI7916;if(!ui)return;ui.body.replaceChildren();const issues=timingIssues7916(lyricsEditorDraft);ui.status.textContent=issues.length?`${issues.length} timing inconsistencies`:'No timing inconsistencies found.';for(const issue of issues){const row=document.createElement('div');row.className='issues7916';const text=document.createElement('span');text.textContent=issue.label+' ['+issue.refs.map(r=>formatTiming7916(r.o[r.key])).join(' → ')+']';row.append(text);button7916(row,'Fix',()=>timingChange7916(()=>fixTimingIssue7916(issue)));ui.body.append(row);}ui.footer.children[0].disabled=!issues.length;}
-function paintTimingColours7916(){
- ensureBaseline7916();const colours=timingColours7916(lyricsEditorDraft);
- lyricsEditorRows.querySelectorAll('.lyrics-editor-row').forEach((row,i)=>{
-  const inputs=row.querySelectorAll('input');['start','end'].forEach((key,n)=>{const input=inputs[n];if(input){input.classList.remove('timing-red7916','timing-yellow7916','timing-green7916');const c=colours.get(`L${i}.${key}`);if(c)input.classList.add(`timing-${c}7916`);}});
-  row.querySelectorAll('.lyrics-editor-karaoke-word').forEach((span,j)=>{span.classList.remove('timing-red7916','timing-yellow7916','timing-green7916');const a=colours.get(`W${i}.${j}.start`),b=colours.get(`W${i}.${j}.end`),c=a==='yellow'||b==='yellow'?'yellow':a==='red'||b==='red'?'red':a||b;if(c)span.classList.add(`timing-${c}7916`);const w=lyricsEditorDraft[i]?.words[j];if(w)span.title=`${formatTiming7916(w.start)} → ${formatTiming7916(w.end)}`;});
- });
+function paintTimingColours7916() {
+  ensureBaseline7916();
+  const colours = timingColours7916(lyricsEditorDraft);
+  const conflicts = timingConflictMap909(lyricsEditorDraft);
+  lyricsEditorRows.querySelectorAll(".lyrics-editor-row").forEach((row, i) => {
+    const inputs = row.querySelectorAll("input");
+    ["start", "end"].forEach((key, n) => {
+      const input = inputs[n];
+      if (!input) return;
+      input.classList.remove("timing-red7916", "timing-yellow7916", "timing-green7916");
+      const id = "L" + i + "." + key;
+      const colour = colours.get(id);
+      if (colour) input.classList.add("timing-" + colour + "7916");
+      bindTimingConflict909(input, [id], conflicts);
+    });
+    row.querySelectorAll(".lyrics-editor-karaoke-word").forEach((span, j) => {
+      span.classList.remove("timing-red7916", "timing-yellow7916", "timing-green7916");
+      const ids = ["W" + i + "." + j + ".start", "W" + i + "." + j + ".end"];
+      const values = ids.map(id => colours.get(id));
+      const colour = values.includes("red") ? "red" : values.includes("yellow") ? "yellow" : values.find(Boolean);
+      if (colour) span.classList.add("timing-" + colour + "7916");
+      const word = lyricsEditorDraft[i]?.words[j];
+      bindTimingConflict909(span, ids, conflicts, word ? formatTiming7916(word.start) + " → " + formatTiming7916(word.end) : "");
+    });
+  });
 }
 function formatTiming7916(n){if(!Number.isFinite(n))return String(n);const ms=Math.round(n*1000),minutes=Math.floor(ms/60000),seconds=(ms%60000)/1000;return String(minutes).padStart(2,'0')+':'+seconds.toFixed(3).padStart(6,'0');}
 function parseTiming7916(text){const parts=String(text).trim().split(':');if(parts.length===2&&/^\d+$/.test(parts[0])&&/^\d+(\.\d+)?$/.test(parts[1])&&Number(parts[1])<60)return Number(parts[0])*60+Number(parts[1]);return /^\d+(\.\d+)?$/.test(String(text).trim())?Number(text):NaN;}
@@ -28448,10 +28488,10 @@ function cancelCompact7916(){
  if(JSON.stringify(lyricsEditorDraft)!==JSON.stringify(karaokeLines))timingChange7916(()=>{lyricsEditorDraft=timingCopy7916(karaokeLines);});compact7916.hidden=true;
 }
 function refreshCompact7916(){
- if(!compactUI7916||compact7916.hidden)return;const ui=compactUI7916;const scroll=ui.body.scrollTop;ui.body.replaceChildren();const colours=timingColours7916(lyricsEditorDraft);
+ if(!compactUI7916||compact7916.hidden)return;const ui=compactUI7916;const scroll=ui.body.scrollTop;ui.body.replaceChildren();const colours=timingColours7916(lyricsEditorDraft),conflicts=timingConflictMap909(lyricsEditorDraft);
  function row(parent,line,i,word,j){const obj=word||line,prefix=word?`W${i}.${j}`:`L${i}`,r=document.createElement('div');r.className='data7916'+(word?' word7916':'');
-  for(const key of ['start','end']){const input=document.createElement('input');input.className='time7916';input.value=formatTiming7916(obj[key]);input.setAttribute('aria-label',`${word?'Word':'Line'} ${i+1} ${key}`);const colour=colours.get(prefix+'.'+key);if(colour)input.classList.add(`timing-${colour}7916`);input.onchange=()=>{const v=parseTiming7916(input.value);if(!Number.isFinite(v)){timingAction7917('Enter a valid time: mm:ss.mmm','red');input.value=formatTiming7916(obj[key]);return;}if(v!==obj[key])timingChange7916(()=>obj[key]=v);};r.append(input);if(key==='start'){const arrow=document.createElement('span');arrow.textContent='→';r.append(arrow);}}
-  const text=document.createElement('input');text.className='text7916';text.value=word?word.word:lineText(line);text.setAttribute('aria-label',word?'Word text':'Line text');text.onchange=()=>{if(text.value===(word?word.word:lineText(line)))return;timingChange7916(()=>{if(word){word.word=text.value;delete line._editedText;}else editLineText7916(line,text.value);});};r.append(text);parent.append(r);
+  for(const key of ['start','end']){const input=document.createElement('input');input.className='time7916';input.value=formatTiming7916(obj[key]);input.setAttribute('aria-label',`${word?'Word':'Line'} ${i+1} ${key}`);const colour=colours.get(prefix+'.'+key);if(colour)input.classList.add(`timing-${colour}7916`);bindTimingConflict909(input,[prefix+'.'+key],conflicts);input.onchange=()=>{const v=parseTiming7916(input.value);if(!Number.isFinite(v)){timingAction7917('Enter a valid time: mm:ss.mmm','red');input.value=formatTiming7916(obj[key]);return;}if(v!==obj[key])timingChange7916(()=>{if(word)obj[key]=v;else setLyricsLineBoundary909(line,key,v);});};r.append(input);if(key==='start'){const arrow=document.createElement('span');arrow.textContent='→';r.append(arrow);}}
+  const text=document.createElement('input');text.className='text7916';text.value=word?word.word:lineText(line);text.setAttribute('aria-label',word?'Word text':'Line text');bindTimingConflict909(text,[prefix+'.start',prefix+'.end'],conflicts);text.onchange=()=>{if(text.value===(word?word.word:lineText(line)))return;timingChange7916(()=>{if(word){word.word=text.value;delete line._editedText;}else editLineText7916(line,text.value);});};r.append(text);parent.append(r);
  }
  lyricsEditorDraft.forEach((line,i)=>{const block=document.createElement('div');block.className='line7916';row(block,line,i);(line.words||[]).forEach((word,j)=>row(block,line,i,word,j));ui.body.append(block);});ui.body.scrollTop=scroll;
  ui.footer.children[2].disabled=!lyricsUndoStack.length;ui.footer.children[3].disabled=!lyricsRedoStack.length;
@@ -28484,10 +28524,7 @@ const highlightWords7916 = button7916(settingsMenu7916, "Highlight Words", () =>
   updateLyricsFullScreenView(getCurrentTime());
 });
 highlightWords7916.setAttribute("aria-pressed", "true");
-button7916(settingsMenu7916, "Export Trim / Fade", () => {
-  settingsMenu7916.hidden = true;
-  window.mynusOpenExportSettings?.();
-});
+
 document.addEventListener('click',e=>{if(!controls7916.contains(e.target))settingsMenu7916.hidden=true;});
 // Establish the initial red state without modifying imported timestamps.
 ensureBaseline7916();paintTimingColours7916();
@@ -29518,6 +29555,7 @@ window.addEventListener('resize',layoutFullscreen861);
 // Two independent audio streams in MyNus. The master remains a computed mix.
 const saveMynusBefore861=saveMynus7911;
 saveMynus7911=function(){return withOperation7914('Save MyNus',async()=>{
+ const savedVideo=window.mynusKaraokeVideo?.snapshot();
  const snapshot=fullSongSnapshot7911(),buffer=await renderInstrumental861(snapshot),audio=await saveWav7911(buffer);
  const microphone=waveformData.microphone?await saveWav7911(waveformData.microphone):null;
  const p=snapshot.project;const project={name:snapshot.name,project_id:activeProjectId||window.currentMynusKaraoke?.project?.project_id||null,source_audio_name:p.source_audio_name,tonic:p.tonic,source_tonic:p.source_tonic,current_tonic:p.current_tonic,pitch_semitones:p.pitch_semitones,vocal_start:p.vocal_start,vocal_end:p.vocal_end};
@@ -29527,7 +29565,13 @@ saveMynus7911=function(){return withOperation7914('Save MyNus',async()=>{
  mix.input=cloneSerializable(micInput862,{});
  const manifest={format:'MyNus Karaoke',format_version:4,project,lyrics:snapshot.lyrics,structure:snapshot.lyrics.structure||[],sequencer:{},mix,
   master:{file:'Instrumental.wav',mime_type:'audio/wav'},microphone:microphone?{file:'Microphone.wav',mime_type:'audio/wav'}:null};
- const entries=[['Karaoke.json',new Blob([JSON.stringify(manifest,null,2)],{type:'application/json'})],['Instrumental.wav',audio]];
+ const entries=[['Instrumental.wav',audio]];
+ if(savedVideo){
+  const {file,offset,volume,loop,resize,fadeIn,fadeOut}=savedVideo;
+  manifest.karaoke_video={name:file.name,mime:file.type,offset,volume,loop,resize,fadeIn,fadeOut};
+  entries.push(['KaraokeVideo',file]);
+ }
+ entries.unshift(['Karaoke.json',new Blob([JSON.stringify(manifest,null,2)],{type:'application/json'})]);
  if(microphone)entries.push(['Microphone.wav',microphone]);
  download7911(await window.makeMynusZip7911(entries),snapshot.name+'.mynus');report7911('MyNus saved: Instrumental'+(microphone?' + Microphone':''));
  });};
@@ -29790,6 +29834,8 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
   }
   #karaokeVideoMenu { position: relative; font: 13px "Segoe UI", sans-serif; }
   #karaokeVideoMenu summary { cursor: pointer; padding: 5px 8px; }
+  #lyricsFullScreenView { overflow: hidden; }
+  #karaokeVideoFadeIn, #karaokeVideoFadeOut, #karaokeVideoResize { width: 88px; }
   .karaoke-video-options {
     position: absolute;
     z-index: 1;
@@ -29957,9 +30003,9 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
   const cancelExport = byId("karaokeVideoCancelExport");
   const videoIn = byId("karaokeVideoIn");
   const videoOut = byId("karaokeVideoOut");
-  const exportSettingsDialog = byId("karaokeExportSettings");
-  const exportSettingsForm = byId("karaokeExportSettingsForm");
-  const exportSettingsError = byId("karaokeExportSettingsError");
+  const fadeInInput = byId("karaokeVideoFadeIn");
+  const fadeOutInput = byId("karaokeVideoFadeOut");
+  const resizeInput = byId("karaokeVideoResize");
   const view = byId("lyricsFullScreenView");
   const masterMount = byId("karaokeVideoMasterMount");
   const strip = byId("karaokeVideoOverlay");
@@ -30009,28 +30055,18 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
     cancelExport.hidden = !exportJob;
   }
 
-  window.mynusOpenExportSettings = () => {
-    for (const [name, value] of Object.entries(exportSettings)) {
-      exportSettingsForm.elements.namedItem(name).value = value ?? "";
+  function updateInlineSettings() {
+    for (const [input, key] of [[fadeInInput, "fadeIn"], [fadeOutInput, "fadeOut"]]) {
+      const value = Math.max(0, input.valueAsNumber || 0);
+      input.value = String(value);
+      exportSettings[key] = value;
     }
-    exportSettingsError.hidden = true;
-    exportSettingsDialog.showModal();
-  };
-  byId("karaokeExportSettingsCancel").onclick = () => exportSettingsDialog.close();
-  exportSettingsDialog.addEventListener("keydown", event => event.stopPropagation());
-  exportSettingsForm.onsubmit = event => {
-    event.preventDefault();
-    const next = Object.fromEntries(Object.keys(exportSettings).map(name => {
-      const value = exportSettingsForm.elements.namedItem(name).valueAsNumber;
-      return [name, Number.isFinite(value) ? value : null];
-    }));
-    if (next.trimIn !== null && next.trimOut !== null && next.trimIn >= next.trimOut) {
-      exportSettingsError.textContent = "Trim OUT must be after Trim IN.";
-      exportSettingsError.hidden = false;
-      return;
-    }
-    exportSettings = next;
-    exportSettingsDialog.close();
+  }
+  fadeInInput.onchange = updateInlineSettings;
+  fadeOutInput.onchange = updateInlineSettings;
+  resizeInput.onchange = () => {
+    controller.setResize(resizeInput.valueAsNumber);
+    resizeInput.value = String(controller.snapshot()?.resize ?? 100);
   };
 
   function updateVideoRangeButtons() {
@@ -30220,7 +30256,7 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
   let otherKeyUsed = false;
   const modifierNames = new Set(["Shift", "Meta", "Control", "Alt"]);
   window.addEventListener("keydown", event => {
-    if (!isKaraokeUiMode()) return;
+    if (window.mynusNativeKaraokeKeys || !isKaraokeUiMode()) return;
     if (!modifierNames.has(event.key)) {
       if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) otherKeyUsed = true;
       pendingModifier = null;
@@ -30237,6 +30273,7 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
     }
   }, true);
   window.addEventListener("keyup", event => {
+    if (window.mynusNativeKaraokeKeys) return;
     const action = pendingModifier;
     if (action && (event.key === "Shift" || event.key === action)) {
       pendingModifier = null;
@@ -30264,6 +30301,7 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
   menu.addEventListener("keydown", event => event.stopPropagation());
 
   exportButton.onclick = async () => {
+    updateInlineSettings();
     const source = controller.snapshot();
     if (!source || exportJob) return;
     if (masterRecording || masterRecordArmed) {
@@ -30324,11 +30362,32 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
     }
   };
   cancelExport.onclick = () => exportJob?.abort();
+  function handleExportShortcut(event) {
+    if (window.mynusNativeKaraokeKeys || !isKaraokeUiMode() || event.key !== "PrintScreen") return;
+    event.preventDefault();
+    if (!exportButton.disabled) exportButton.click();
+  }
+  window.addEventListener("keyup", handleExportShortcut, true);
+  window.chrome?.webview?.addEventListener("message", event => {
+    if (!isKaraokeUiMode() || event.data?.type !== "mynus-karaoke-key") return;
+    const action = event.data.action;
+    if (action === "lyrics") setLyricsHidden(!lyricsHidden);
+    if (action === "controls") togglePresentation("lyrics");
+    if (action === "all") togglePresentation("video");
+    if (action === "export" && !exportButton.disabled) exportButton.click();
+  });
+  window.mynusSyncKaraokeKeys = () => {
+    window.chrome?.webview?.postMessage({type:"mynus-karaoke-keys-state",enabled:isKaraokeUiMode()});
+  };
+  window.mynusSyncKaraokeKeys();
+
 
   window.resetMynusKaraokeVideo = () => {
     exportJob?.abort();
     exportSettings = { trimIn: null, trimOut: null, fadeIn: null, fadeOut: null };
     controller.reset();
+    fadeInInput.value = fadeOutInput.value = "0";
+    resizeInput.value = "100";
     volume.value = "100";
     offset.value = "0";
     loop.checked = false;
@@ -30347,7 +30406,53 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
     volume.value = String(saved.volume * 100);
     loop.checked = saved.loop;
     attachVideo(saved.file);
+    controller.setResize(saved.resize ?? 100);
+    resizeInput.value = String(controller.snapshot().resize);
+    exportSettings = { trimIn: null, trimOut: null, fadeIn: saved.fadeIn ?? 0, fadeOut: saved.fadeOut ?? 0 };
+    fadeInInput.value = String(exportSettings.fadeIn);
+    fadeOutInput.value = String(exportSettings.fadeOut);
     controller.syncFromAudio(getCurrentTime(), isPlaying, { seek: true });
+  };
+  const videoSnapshot = controller.snapshot;
+  controller.snapshot = () => {
+    const state = videoSnapshot();
+    return state ? { ...state, fadeIn: Math.max(0, fadeInInput.valueAsNumber || 0), fadeOut: Math.max(0, fadeOutInput.valueAsNumber || 0) } : null;
+  };
+  window.mynusKaraokeVideo = controller;
+  layoutStrip(duration);
+  controller.setActive(isKaraokeUiMode());
+  controller.syncFromAudio(getCurrentTime(), isPlaying, { seek: true });
+</script>
+</body>
+</html>
+value = "0";
+    loop.checked = false;
+    remove.hidden = true;
+    hideAll.disabled = true;
+    updateExportButton();
+    if (presentation !== "normal") setPresentation("normal");
+    showStatus();
+  };
+  window.restoreMynusKaraokeVideo = saved => {
+    window.resetMynusKaraokeVideo();
+    if (!saved?.file) return;
+    controller.setVolume(saved.volume);
+    controller.setOffset(saved.offset);
+    controller.setLoop(saved.loop);
+    volume.value = String(saved.volume * 100);
+    loop.checked = saved.loop;
+    attachVideo(saved.file);
+    controller.setResize(saved.resize ?? 100);
+    resizeInput.value = String(controller.snapshot().resize);
+    exportSettings = { trimIn: null, trimOut: null, fadeIn: saved.fadeIn ?? 0, fadeOut: saved.fadeOut ?? 0 };
+    fadeInInput.value = String(exportSettings.fadeIn);
+    fadeOutInput.value = String(exportSettings.fadeOut);
+    controller.syncFromAudio(getCurrentTime(), isPlaying, { seek: true });
+  };
+  const videoSnapshot = controller.snapshot;
+  controller.snapshot = () => {
+    const state = videoSnapshot();
+    return state ? { ...state, fadeIn: Math.max(0, fadeInInput.valueAsNumber || 0), fadeOut: Math.max(0, fadeOutInput.valueAsNumber || 0) } : null;
   };
   window.mynusKaraokeVideo = controller;
   layoutStrip(duration);
