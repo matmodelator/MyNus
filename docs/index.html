@@ -45,7 +45,11 @@ window.mynusLogTime801=function(text){return String(text).replace(/\b\d{4}-\d{2}
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 9.0.9 | Lyrics borders</title>
+  <title>MyNus 9.0.10 | Вернуть оформление слов, которое я самовольно изменил: чёрная заливка активного слова и серый цвет прошедших слов. Убрать добавленное подчёркивание.
+
+Согласовывать тайминги всех слов пропорционально внутри корректных границ строки — при каждой загрузке и при изменении начала или конца строки. Без схлопывания слов до нулевой длительности.
+
+Убрать прокрутки поля сообщений. При наведении на длинное сообщение открывать полный текст в выпадающем окне с курсором для копирования и вставки. Внешний клик закрывает окно.</title>
 
 
  <style>
@@ -3157,8 +3161,8 @@ position: relative;
     .lyrics-editor-text-wrap { position: relative; min-width: 0; display: grid; }
     .lyrics-editor-karaoke { grid-area: 1 / 1; min-height: 46px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 5px; background: white; font-size: 13px; line-height: 1.35; cursor: text; }
     .lyrics-editor-karaoke-word { display: inline; padding: 1px 2px; border-radius: 3px; cursor: pointer; }
-    .lyrics-editor-karaoke-word.past { color: inherit; }
-    .lyrics-editor-karaoke-word.active { text-decoration: underline; text-decoration-color: #16833b; text-underline-offset: 3px; font-weight: 700; }
+    .lyrics-editor-karaoke-word.past { color: #888; }
+    .lyrics-editor-karaoke-word.active { background: #222; color: white; }
     .lyrics-editor-row.karaoke-current-row { border: 1px solid #16833b; }
     .lyrics-editor-text-wrap.lyrics-edit-active textarea { border: 2px solid #176bd1; outline: none; }
     .lyrics-editor-row input[type="text"]:focus { border-color: #176bd1; outline: 1px solid #176bd1; }
@@ -3204,7 +3208,8 @@ position: relative;
       min-height: 24px;
       max-height: 24px;
       resize: none;
-      overflow: auto;
+      overflow: hidden;
+      scrollbar-width: none;
       box-sizing: border-box;
       padding: 3px 5px;
       border: 1px solid #ccc;
@@ -6700,41 +6705,62 @@ let lyricsEditorDraft = [];
 let lyricsEditorSelectedLine = -1;
 const lyricsTimingBasis909 = new WeakMap();
 
-function setLyricsLineBoundary909(line, key, value) {
-  if (!line || !Number.isFinite(value)) return;
-  const previousStart = Number(line.start);
-  const previousEnd = Number(line.end);
-  const cached = lyricsTimingBasis909.get(line);
-  let basis = previousEnd > previousStart ? {
-    start: previousStart, end: previousEnd,
-    words: (line.words || []).map(word => ({ start: word.start, end: word.end }))
-  } : cached;
-  if (cached && (cached.invalidStart !== previousStart || cached.invalidEnd !== previousEnd)) {
-    if (!(previousEnd > previousStart)) basis = null;
-  }
-  line[key] = value;
-  const start = Number(line.start);
-  const end = Number(line.end);
-  if (!(start >= 0 && end > start)) {
-    if (basis) lyricsTimingBasis909.set(line, { ...basis, invalidStart: start, invalidEnd: end });
+// Fit a timing sequence, never changing text or splitting a highlight into words.
+function fitLyricsWords9010(line, basis = null) {
+  const start = Number(line.start), end = Number(line.end), words = line.words || [];
+  if (!(Number.isFinite(start) && Number.isFinite(end) && start >= 0 && end > start) || !words.length) return;
+  const original = basis?.words || words.map(w => ({ start: Number(w.start), end: Number(w.end) }));
+  let previous = -Infinity;
+  const ordered = original.length === words.length && original.every(w => {
+    const valid = Number.isFinite(w.start) && Number.isFinite(w.end) && w.end > w.start && w.start >= previous;
+    previous = w.end;
+    return valid;
+  });
+  if (ordered) {
+    const first = original[0].start, last = original[original.length - 1].end;
+    const useBasis = basis && basis.start >= 0 && basis.end > basis.start && first >= basis.start && last <= basis.end;
+    const from = useBasis ? basis.start : first, to = useBasis ? basis.end : last;
+    // Avoid rounding drift and make repeated loads idempotent.
+    if (from === start && to === end) return;
+    words.forEach((w, i) => {
+      w.start = start + (original[i].start - from) / (to - from) * (end - start);
+      w.end = start + (original[i].end - from) / (to - from) * (end - start);
+    });
     return;
   }
-  if (!basis && line.words?.length) {
-    const times = line.words.flatMap(word => [word.start, word.end]).filter(Number.isFinite);
-    const first = Math.min(...times), last = Math.max(...times);
-    if (last > first) basis = { start: first, end: last, words: line.words.map(word => ({ start: word.start, end: word.end })) };
-  }
-  const length = end - start;
-  let previous = start;
-  (line.words || []).forEach((word, index, words) => {
-    const original = basis?.words[index];
-    const position = (time, fallback) => basis && Number.isFinite(time)
-      ? start + (time - basis.start) * length / (basis.end - basis.start)
-      : start + length * fallback;
-    word.start = Math.min(end, Math.max(previous, position(original?.start, index / words.length)));
-    word.end = Math.min(end, Math.max(word.start, position(original?.end, (index + 1) / words.length)));
-    previous = word.end;
+  // Corrupt intervals have no valid rhythm to scale directly. Rebuild positive
+  // duration weights from their absolute lengths; retain positive pauses.
+  const durations = original.map(w => Number.isFinite(w.start) && Number.isFinite(w.end) ? Math.abs(w.end - w.start) : 0);
+  const positive = durations.filter(d => d > 0).sort((a, b) => a - b);
+  const fallback = positive.length ? positive[Math.floor(positive.length / 2)] : 1;
+  const weights = durations.map(d => d > 0 ? d : fallback);
+  const gaps = original.map((w, i) => i && Number.isFinite(w.start) && Number.isFinite(original[i - 1].end) ? Math.max(0, w.start - original[i - 1].end) : 0);
+  const total = weights.reduce((a, b) => a + b, 0) + gaps.reduce((a, b) => a + b, 0);
+  let cursor = 0;
+  words.forEach((w, i) => {
+    cursor += gaps[i];
+    w.start = start + cursor / total * (end - start);
+    cursor += weights[i];
+    w.end = i === words.length - 1 ? end : start + cursor / total * (end - start);
   });
+}
+function reconcileLyrics9010(lines) {
+  for (const line of lines || []) fitLyricsWords9010(line);
+  return lines;
+}
+function setLyricsLineBoundary909(line, key, value) {
+  if (!line || !Number.isFinite(value)) return;
+  const start = Number(line.start), end = Number(line.end);
+  const cached = lyricsTimingBasis909.get(line);
+  const basis = start >= 0 && end > start ? {
+    start, end, words: (line.words || []).map(w => ({ start: Number(w.start), end: Number(w.end) }))
+  } : cached && cached.invalidStart === start && cached.invalidEnd === end ? cached : null;
+  line[key] = value;
+  if (!(line.start >= 0 && line.end > line.start)) {
+    if (basis) lyricsTimingBasis909.set(line, { ...basis, invalidStart: line.start, invalidEnd: line.end });
+    return;
+  }
+  fitLyricsWords9010(line, basis);
   lyricsTimingBasis909.delete(line);
 }
 let lyricsEditorEditLineIndex = -1;
@@ -15251,7 +15277,7 @@ function buildKaraokeLines() {
     }
   });
 
-  karaokeLines = filteredLines;
+  karaokeLines = reconcileLyrics9010(filteredLines);
 
   activeKaraokeLine =
     -1;
@@ -16709,6 +16735,7 @@ function captureActiveLyrics() {
 function activateIndependentLyrics(isRu) {
   const state = independentLyrics[isRu ? 'ru' : 'original'];
   if (!state) return;
+  reconcileLyrics9010(state.lines);
   lyricsTranscriptionMode = isRu;
   lyricsEditorDraft = lyricsCopy(state.lines);
   karaokeLines = lyricsCopy(state.lines);
@@ -19479,6 +19506,8 @@ lyricsLoadInput.addEventListener("change", async () => {
     setLyricsEditorError("Load: use MyNus Lyrics JSON or TXT");
     return;
   }
+
+  reconcileLyrics9010(lyricsEditorDraft);
 
   lyricsEditorSelectedLine =
     lyricsEditorDraft.length
@@ -22749,6 +22778,7 @@ function restoreProjectLyricsJson(lyrics) {
       ru: hasRu ? {language: 'ru', lines: legacyLines(true), structure: lyricsCopy(lyrics?.structure || []), undo: [], redo: []} : null
     };
   }
+  for (const variant of Object.values(independentLyrics)) if (variant?.lines) reconcileLyrics9010(variant.lines);
   activateIndependentLyrics(!!lyrics?.transcription_mode && !!independentLyrics.ru);
 }
 
@@ -22761,7 +22791,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "9.0.9";
+const MYNUS_CLIENT_VERSION = "9.0.10";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -30390,42 +30420,6 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
     resizeInput.value = "100";
     volume.value = "100";
     offset.value = "0";
-    loop.checked = false;
-    remove.hidden = true;
-    hideAll.disabled = true;
-    updateExportButton();
-    if (presentation !== "normal") setPresentation("normal");
-    showStatus();
-  };
-  window.restoreMynusKaraokeVideo = saved => {
-    window.resetMynusKaraokeVideo();
-    if (!saved?.file) return;
-    controller.setVolume(saved.volume);
-    controller.setOffset(saved.offset);
-    controller.setLoop(saved.loop);
-    volume.value = String(saved.volume * 100);
-    loop.checked = saved.loop;
-    attachVideo(saved.file);
-    controller.setResize(saved.resize ?? 100);
-    resizeInput.value = String(controller.snapshot().resize);
-    exportSettings = { trimIn: null, trimOut: null, fadeIn: saved.fadeIn ?? 0, fadeOut: saved.fadeOut ?? 0 };
-    fadeInInput.value = String(exportSettings.fadeIn);
-    fadeOutInput.value = String(exportSettings.fadeOut);
-    controller.syncFromAudio(getCurrentTime(), isPlaying, { seek: true });
-  };
-  const videoSnapshot = controller.snapshot;
-  controller.snapshot = () => {
-    const state = videoSnapshot();
-    return state ? { ...state, fadeIn: Math.max(0, fadeInInput.valueAsNumber || 0), fadeOut: Math.max(0, fadeOutInput.valueAsNumber || 0) } : null;
-  };
-  window.mynusKaraokeVideo = controller;
-  layoutStrip(duration);
-  controller.setActive(isKaraokeUiMode());
-  controller.syncFromAudio(getCurrentTime(), isPlaying, { seek: true });
-</script>
-</body>
-</html>
-value = "0";
     loop.checked = false;
     remove.hidden = true;
     hideAll.disabled = true;
