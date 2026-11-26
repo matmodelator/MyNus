@@ -45,7 +45,7 @@ window.mynusLogTime801=function(text){return String(text).replace(/\b\d{4}-\d{2}
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 9.0.11 | Hoovers eng</title>
+  <title>MyNus 9.0.12 | Hoovers video track</title>
 
 
  <style>
@@ -2671,9 +2671,10 @@ position: relative;
     }
 
     .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-track {
-      height: 48px;
-      border-color: rgba(255,255,255,.55);
-    }
+  margin-top: 10px;
+  height: 38px;
+  border-color: rgba(255,255,255,.55);
+}
 
     .lyrics-editor-card.karaoke-fullscreen-mode .lyrics-structure-segment {
       color: #fff;
@@ -22787,7 +22788,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "9.0.11";
+const MYNUS_CLIENT_VERSION = "9.0.12";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -30140,6 +30141,7 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
   const controller = createKaraokeVideo({
     video,
     overlay: strip,
+    getTimelineDuration: () => isKaraokeUiMode() ? structureDuration : duration,
     getTimelineScale: () => {
       if (isKaraokeUiMode()) {
         return structureDuration > 0 ? lyricsStructureTimeline.clientWidth / structureDuration : 0;
@@ -30557,5 +30559,23 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
 })();
 
 </script>
+<style>
+/* Real video frames share the existing timeline and drag target. */
+.karaoke-video-overlay-clip,#lyricsStructureTimeline > .karaoke-video-overlay-clip{height:30px}
+#lyricsStructureTimeline{min-height:44px}
+#lyricsStructureTimeline > .karaoke-video-overlay-clip {
+  top:auto;
+  bottom:1px;
+  transform:translateY(16px);
+}#karaokeVideoOverlay{border:0;background:transparent;border-radius:0}
+#karaokeVideoOverlay::after{z-index:3}
+.video-cycle912{position:absolute;top:0;height:100%;overflow:hidden;box-sizing:border-box;border:2px solid var(--cycle-color);background:var(--cycle-color)}
+.video-cycle912 img{position:absolute;top:0;height:27px;object-fit:cover;pointer-events:none;opacity:.7}
+.video-cycle912 span{position:absolute;left:2px;top:0;z-index:2;font:700 10px/13px Arial;color:white;background:#000b;padding:0 3px;pointer-events:none}
+.video-frame-preview912{position:fixed;z-index:2147483647;background:#151515;color:white;border:1px solid #aaa;padding:4px;border-radius:4px;pointer-events:none;max-width:calc(100vw - 16px)}
+.video-frame-preview912[hidden]{display:none}
+.video-frame-preview912 canvas{display:block;width:240px;height:135px;max-width:100%}
+.video-frame-preview912 div{font:11px/18px Consolas,monospace;white-space:nowrap}
+</style>
 </body>
 </html>
