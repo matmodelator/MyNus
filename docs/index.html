@@ -45,11 +45,7 @@ window.mynusLogTime801=function(text){return String(text).replace(/\b\d{4}-\d{2}
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>MyNus 9.0.10 | Вернуть оформление слов, которое я самовольно изменил: чёрная заливка активного слова и серый цвет прошедших слов. Убрать добавленное подчёркивание.
-
-Согласовывать тайминги всех слов пропорционально внутри корректных границ строки — при каждой загрузке и при изменении начала или конца строки. Без схлопывания слов до нулевой длительности.
-
-Убрать прокрутки поля сообщений. При наведении на длинное сообщение открывать полный текст в выпадающем окне с курсором для копирования и вставки. Внешний клик закрывает окно.</title>
+  <title>MyNus 9.0.11 | Hoovers eng</title>
 
 
  <style>
@@ -22791,7 +22787,7 @@ let projectLoading = false;
 
 // Диагностика полной цепочки LOAD Project -> Full Screen | MyNus 5.4.13.
 // Каждая запись видна в HTML Service Console и отправляется серверу для CMD trace.
-const MYNUS_CLIENT_VERSION = "9.0.10";
+const MYNUS_CLIENT_VERSION = "9.0.11";
 const MYNUS_CLIENT_CHANGE = "Account changes with current-email confirmation and new-email verification; Payments preparation; no startup window";
 let projectLoadTraceId = null;
 let projectLoadTraceProject = null;
@@ -28387,20 +28383,20 @@ function timingColours7916(lines) {
 }
 function timingConflictMessage909(issue) {
   const types = {
-    line: "Границы строки: начало отрицательное, не раньше конца или время некорректно",
-    lines: "Пересечение строк: предыдущая строка заканчивается после начала следующей",
-    word: "Интервал слова: начало отрицательное, не раньше конца или время некорректно",
-    before: "Слово начинается раньше начала своей строки",
-    after: "Слово заканчивается позже конца своей строки",
-    words: "Пересечение слов: предыдущее слово заканчивается после начала следующего"
+    line: "Invalid line interval: start is negative, start is not before end, or a time is invalid",
+    lines: "Line overlap: the previous line ends after the next line starts",
+    word: "Invalid highlight interval: start is negative, start is not before end, or a time is invalid",
+    before: "Highlight starts before its line",
+    after: "Highlight ends after its line",
+    words: "Highlight overlap: the previous highlight ends after the next one starts"
   };
   const location = ref => {
     const parts = ref.id.split(".");
-    return parts[0][0] === "L" ? "строка " + (Number(parts[0].slice(1)) + 1)
-      : "строка " + (Number(parts[0].slice(1)) + 1) + ", слово " + (Number(parts[1]) + 1) + ' «' + ref.o.word + '»';
+    return parts[0][0] === "L" ? "line " + (Number(parts[0].slice(1)) + 1)
+      : "line " + (Number(parts[0].slice(1)) + 1) + ", highlight " + (Number(parts[1]) + 1) + ' «' + ref.o.word + '»';
   };
   const values = issue.refs.map(ref => location(ref) + ", " +
-    (ref.key === "start" ? "начало " : "конец ") + formatTiming7916(ref.o[ref.key]));
+    (ref.key === "start" ? "start " : "end ") + formatTiming7916(ref.o[ref.key]));
   return (types[issue.kind] || issue.kind) + ": " + values.join("; ");
 }
 function timingConflictMap909(lines) {
@@ -28413,13 +28409,19 @@ function timingConflictMap909(lines) {
 }
 function bindTimingConflict909(element, ids, conflicts, fallback = "") {
   const issues = [...new Set(ids.flatMap(id => conflicts.get(id) || []))];
+  element.dataset.timingConflict9011 = issues.length ? '1' : '0';
   element.title = issues.length ? issues.map(timingConflictMessage909).join("\n") : fallback;
   let reported = false;
   const report = () => {
     if (reported || !issues.length) return;
     reported = true;
     const message = issues.map(timingConflictMessage909).join("\n");
+    const severity = issues.some(issue => issue.kind === "line" || issue.kind === "lines") ? "red" : "yellow";
+    // Conflict hover must reach the message field even after a console search.
+    messageEditing7918 = false;
     setLyricsEditorMessage(message);
+    lyricsEditorErrorConsole.classList.add("timing-" + severity + "7916");
+    if (compactUI7916 && !compact7916.hidden) timingAction7917(message, severity);
     if (window.mynusLocalConsole?.message) {
       const colour = issues.some(issue => issue.kind === "line" || issue.kind === "lines") ? "#d42323" : "#b58500";
       window.mynusLocalConsole.message("Lyrics", message, colour);
@@ -28486,7 +28488,7 @@ function paintTimingColours7916() {
       const id = "L" + i + "." + key;
       const colour = colours.get(id);
       if (colour) input.classList.add("timing-" + colour + "7916");
-      bindTimingConflict909(input, [id], conflicts);
+      bindTimingConflict909(input, [id], conflicts, (key === 'start' ? 'Start' : 'End') + ' of line ' + (i + 1) + '. Enter mm:ss.fractions. Scale word timings and pauses to fit; keep the opposite line boundary fixed.');
     });
     row.querySelectorAll(".lyrics-editor-karaoke-word").forEach((span, j) => {
       span.classList.remove("timing-red7916", "timing-yellow7916", "timing-green7916");
@@ -28495,7 +28497,7 @@ function paintTimingColours7916() {
       const colour = values.includes("red") ? "red" : values.includes("yellow") ? "yellow" : values.find(Boolean);
       if (colour) span.classList.add("timing-" + colour + "7916");
       const word = lyricsEditorDraft[i]?.words[j];
-      bindTimingConflict909(span, ids, conflicts, word ? formatTiming7916(word.start) + " → " + formatTiming7916(word.end) : "");
+      bindTimingConflict909(span, ids, conflicts, word ? 'Highlight ' + (j + 1) + ': ' + formatTiming7916(word.start) + " → " + formatTiming7916(word.end) + '. Click to seek to this highlight. Black background marks the current highlight; gray text marks past highlights.' : "");
     });
   });
 }
@@ -28520,8 +28522,8 @@ function cancelCompact7916(){
 function refreshCompact7916(){
  if(!compactUI7916||compact7916.hidden)return;const ui=compactUI7916;const scroll=ui.body.scrollTop;ui.body.replaceChildren();const colours=timingColours7916(lyricsEditorDraft),conflicts=timingConflictMap909(lyricsEditorDraft);
  function row(parent,line,i,word,j){const obj=word||line,prefix=word?`W${i}.${j}`:`L${i}`,r=document.createElement('div');r.className='data7916'+(word?' word7916':'');
-  for(const key of ['start','end']){const input=document.createElement('input');input.className='time7916';input.value=formatTiming7916(obj[key]);input.setAttribute('aria-label',`${word?'Word':'Line'} ${i+1} ${key}`);const colour=colours.get(prefix+'.'+key);if(colour)input.classList.add(`timing-${colour}7916`);bindTimingConflict909(input,[prefix+'.'+key],conflicts);input.onchange=()=>{const v=parseTiming7916(input.value);if(!Number.isFinite(v)){timingAction7917('Enter a valid time: mm:ss.mmm','red');input.value=formatTiming7916(obj[key]);return;}if(v!==obj[key])timingChange7916(()=>{if(word)obj[key]=v;else setLyricsLineBoundary909(line,key,v);});};r.append(input);if(key==='start'){const arrow=document.createElement('span');arrow.textContent='→';r.append(arrow);}}
-  const text=document.createElement('input');text.className='text7916';text.value=word?word.word:lineText(line);text.setAttribute('aria-label',word?'Word text':'Line text');bindTimingConflict909(text,[prefix+'.start',prefix+'.end'],conflicts);text.onchange=()=>{if(text.value===(word?word.word:lineText(line)))return;timingChange7916(()=>{if(word){word.word=text.value;delete line._editedText;}else editLineText7916(line,text.value);});};r.append(text);parent.append(r);
+  for(const key of ['start','end']){const input=document.createElement('input');input.className='time7916';input.value=formatTiming7916(obj[key]);input.setAttribute('aria-label',`${word?'Word':'Line'} ${i+1} ${key}`);const colour=colours.get(prefix+'.'+key);if(colour)input.classList.add(`timing-${colour}7916`);bindTimingConflict909(input,[prefix+'.'+key],conflicts,(key==='start'?'Start':'End')+' '+(word?'of highlight '+(i+1)+'.'+(j+1):'of line '+(i+1))+'. Enter mm:ss.mmm or seconds. '+(word?'Change only this highlight boundary; keep the other boundary and line timings unchanged.':'Scale all word timings and pauses to fit the line; keep its opposite boundary fixed.'));input.onchange=()=>{const v=parseTiming7916(input.value);if(!Number.isFinite(v)){timingAction7917('Enter a valid time: mm:ss.mmm','red');input.value=formatTiming7916(obj[key]);return;}if(v!==obj[key])timingChange7916(()=>{if(word)obj[key]=v;else setLyricsLineBoundary909(line,key,v);});};r.append(input);if(key==='start'){const arrow=document.createElement('span');arrow.textContent='→';r.append(arrow);}}
+  const text=document.createElement('input');text.className='text7916';text.value=word?word.word:lineText(line);text.setAttribute('aria-label',word?'Word text':'Line text');bindTimingConflict909(text,[prefix+'.start',prefix+'.end'],conflicts,word?'Text of this timed highlight. Multiple words entered here share one interval and light up together.':'Text of the whole lyric line. Unchanged highlights retain their timing when the text is updated.');text.onchange=()=>{if(text.value===(word?word.word:lineText(line)))return;timingChange7916(()=>{if(word){word.word=text.value;delete line._editedText;}else editLineText7916(line,text.value);});};r.append(text);parent.append(r);
  }
  lyricsEditorDraft.forEach((line,i)=>{const block=document.createElement('div');block.className='line7916';row(block,line,i);(line.words||[]).forEach((word,j)=>row(block,line,i,word,j));ui.body.append(block);});ui.body.scrollTop=scroll;
  ui.footer.children[2].disabled=!lyricsUndoStack.length;ui.footer.children[3].disabled=!lyricsRedoStack.length;
@@ -30452,6 +30454,108 @@ input.gain850[data-pan863]::-moz-range-progress,.lyrics-fullscreen-track-control
   layoutStrip(duration);
   controller.setActive(isKaraokeUiMode());
   controller.syncFromAudio(getCurrentTime(), isPlaying, { seek: true });
+</script>
+
+<script>
+/* 9.0.11 — contextual help for Lyrics and Edit Timing. */
+(() => {
+  const help = {
+    lyricsModeSwitchBtn:'Switch between the Lyrics editor and Karaoke view.',
+    lyricsErrorClearBtn:'Clear the Lyrics message field. This does not change lyrics or timings.',
+    lyricsErrorCopyBtn:'Copy the entire message, including text that does not fit in the field.',
+    lyricsErrorSearch7917:'Search console messages for the text entered in this field.',
+    lyricsEditorErrorConsole:'Lyrics messages and timing conflicts. Enter a query and use Search to find console messages.',
+    lyricsSplitLineBtn:'Split the selected line at the text caret.',
+    lyricsMergeUpBtn:'Join the selected line to the previous line.',
+    lyricsMergeDownBtn:'Join the selected line to the next line.',
+    lyricsDeleteLineBtn:'Delete the selected lyric line. Use Undo to restore it.',
+    lyricsSetStartBtn:'Set the selected line start to the playhead. Keep its end fixed and scale word timings and pauses to fit.',
+    lyricsSetEndBtn:'Set the selected line end to the playhead. Keep its start fixed and scale word timings and pauses to fit.',
+    checkTimings7916:'List invalid intervals, overlaps, and words outside their line. Checking does not change timings.',
+    lyricsDatabaseBtn:'Find song lyrics in the lyrics database.',
+    lyricsUndoBtn:'Undo the last lyrics or timing edit. Shared with Edit Timing.',
+    lyricsRedoBtn:'Restore the last undone lyrics or timing edit. Shared with Edit Timing.',
+    lyricsResetBtn:'Reset the lyrics draft to its original state.',
+    lyricsPlayMasterBtn:'Play or pause the main audio. Lyrics follow its playhead.',
+    lyricsPlayLineBtn:'Loop playback within the selected lyric line.',
+    lyricsRepeatBtn:'Restart playback from the selected line.',
+    lyricsTranscriptionBtn:'Switch between original lyrics and Russian transcription when available.',
+    lyricsLoadBtn:'Load a MyNus Lyrics JSON or TXT file using the selected encoding.',
+    lyricsLoadEncoding:'Choose the text encoding for Load. Auto detects the encoding.',
+    applyLyrics7916:'Apply the current lyrics and timings to the song. This does not save a project file.',
+    cancelLyricsEditBtn:'Close the Lyrics editor.',
+    saveLyricsEditBtn:'Save a MyNus project containing the current lyrics and timings.',
+    lyricsSaveAsBtn:'Export lyrics in the selected format and encoding.',
+    lyricsSaveAsCancelBtn:'Close the export dialog without saving a lyrics file.',
+    lyricsSaveAsConfirmBtn:'Save the lyrics file with the selected name, format and encoding.',
+    lyricsStructureStartValue:'Start of the main audio timeline.',
+    lyricsStructureEndValue:'End of the main audio timeline.',
+    lyricsStructureMasterCounter:'Current playhead position in the main audio.',
+    lyricsStructureTrack:'Song structure on the main audio timeline. Click to seek; drag a section boundary to adjust it.',
+    lyricsStructureTimeline:'Main audio time scale. Click to move the playhead.',
+    lyricsEditorRows:'Lyric lines. The green outer border follows the playhead. The blue inner border marks text editing.'
+  };
+  const buttons = {
+    Check:'Find timing conflicts without changing any values.',
+    'Check Timings':'Find timing conflicts without changing any values.',
+    'Fix All':'Run the existing automatic fixes for all reported timing conflicts. Use Undo to revert.',
+    Fix:'Run the existing automatic fix for this conflict. Use Undo to revert.',
+    Undo:'Undo the last lyrics or timing edit in either editor.',
+    Redo:'Restore the last undone lyrics or timing edit.',
+    Apply:'Apply the draft lyrics and timings to the song without saving a project file.',
+    Cancel:'Discard changes since the last Apply and close Edit Timing.',
+    Close:'Close this window.',
+    'Paste Text':'Open the existing text import dialog to paste lyrics.',
+    Copy:'Copy this lyric line to the clipboard.',
+    Paste:'Paste clipboard text into this lyric line.',
+    Minimize:'Collapse this editor window.',
+    'Resize Mode':'Change the editor window size mode.',
+    'Full Screen':'Expand the editor window.',
+    Reset:'Restore the original lyrics draft.'
+  };
+  const roots='#lyricsEditorDialog,.edit-lyrics7916,#lyricsSaveAsDialog';
+  const objects='button,[role="button"],input,textarea,select,h3,.lyrics-editor-header,.lyrics-editor-row,.lyrics-editor-karaoke,.lyrics-editor-karaoke-word,.timing-number7917,.status7916,[id^="lyricsStructure"]';
+  function explain(el) {
+    if(el.dataset.timingConflict9011==='1') return;
+    if(help[el.id]) {el.title=help[el.id];return;}
+    if(el.matches('button,[role="button"]')) {
+      const label=el.getAttribute('aria-label')||el.textContent.trim();
+      const text=buttons[label]||buttons[el.title];
+      if(text) el.title=text;
+      return;
+    }
+    if(el.matches('.timing-number7917')) {
+      const number=el.textContent.trim();
+      el.title=number.includes('.')?'Line '+number.split('.')[0]+', highlight '+number.split('.')[1]+'. One highlight can contain more than one word.':'Lyric line '+number+'. The rows below contain its timed highlights.';
+    } else if(el.matches('.lyrics-editor-row')) {
+      el.title='Green outer border: the playhead is inside this line. Blue inner border: text is being edited. Both can be visible together.';
+    } else if(el.matches('.lyrics-editor-karaoke')) {
+      el.title='Click a word to seek to it. Click between words to edit the line text.';
+    } else if(el.matches('.status7916')) {
+      el.title=el.value||el.textContent||'Edit Timing messages. Hover or focus a conflicting value to show its cause and exact times here.';
+    } else if(el.matches('h3,.lyrics-editor-header')) {
+      el.title='Drag the header to move this editor window.';
+    } else if(el.matches('textarea')&&!el.title) {
+      el.title='Edit the text of this lyric line. Timing conflicts are reported separately.';
+    }
+    // Timing inputs and highlights receive their precise help from the shared
+    // conflict binder; never replace that help with a generic field label.
+  }
+  function decorate(root){root.querySelectorAll(objects).forEach(explain);}
+  document.querySelectorAll(roots).forEach(decorate);
+  document.addEventListener('pointerover',event=>{
+    const el=event.target.closest(objects);if(el?.closest(roots))explain(el);
+  },true);
+  document.addEventListener('focusin',event=>{if(event.target.closest(roots))explain(event.target);},true);
+  new MutationObserver(records=>{
+    for(const record of records)for(const node of record.addedNodes){
+      if(node.nodeType!==1)continue;
+      if(node.matches(roots)||node.closest(roots)){explain(node);decorate(node);}
+      else node.querySelectorAll(roots).forEach(decorate);
+    }
+  }).observe(document.body,{childList:true,subtree:true});
+})();
+
 </script>
 </body>
 </html>
