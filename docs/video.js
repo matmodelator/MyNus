@@ -1,5 +1,5 @@
 /*
- * 9.0.5 Save Video fix
+ * 9.0.8 fade fix
  */
 
 const VIDEO_DRIFT_SECONDS = 0.2;
@@ -340,6 +340,7 @@ export function createKaraokeVideo({
   const listeners = new AbortController();
   let sourceUrl = null;
   let sourceFile = null;
+  let resize = 100;
   let frameTiming = null;
   let offset = 0;
   let loop = false;
@@ -485,6 +486,12 @@ export function createKaraokeVideo({
     if (Number.isFinite(value)) video.volume = Math.min(1, Math.max(0, value));
   }
 
+  function setResize(value) {
+    if (!Number.isFinite(value)) return;
+    resize = Math.max(10, Math.min(400, value));
+    video.style.transform = `scale(${resize / 100})`;
+  }
+
   function setOffset(seconds) {
     if (!Number.isFinite(seconds) || offset === seconds) return;
     offset = seconds;
@@ -503,6 +510,7 @@ export function createKaraokeVideo({
     setOffset(0);
     setLoop(false);
     setVolume(1);
+    setResize(100);
   }
 
   const eventOptions = { signal: listeners.signal };
@@ -548,12 +556,13 @@ export function createKaraokeVideo({
   renderTimelineOverlay();
   return {
     snapshot() {
-      return sourceFile ? { file: sourceFile, offset, loop, volume: video.volume } : null;
+      return sourceFile ? { file: sourceFile, offset, loop, volume: video.volume, resize } : null;
     },
     loadVideo,
     clearVideo,
     setActive,
     setVolume,
+    setResize,
     setOffset,
     setLoop,
     syncFromAudio,
@@ -589,7 +598,7 @@ function waitForMedia(video, type, signal) {
   });
 }
 
-function drawExportLyrics(ctx, lines, time, width, height) {
+function drawExportLyrics(ctx, lines, time, width, height, highlightWords) {
   const line = lines.find(item => time >= item.start && time <= item.end);
   if (!line?.words.length) return;
   const size = Math.max(14, Math.round(height * 0.065));
@@ -615,7 +624,7 @@ function drawExportLyrics(ctx, lines, time, width, height) {
     let x = (width - row.reduce((sum, word) => sum + word.pixels, 0)) / 2;
     const y = height * 0.8 + (index - (rows.length - 1) / 2) * size * 1.2;
     for (const word of row) {
-      ctx.fillStyle = time >= word.start ? "#c8ff70" : "#ffffff";
+      ctx.fillStyle = !highlightWords || time >= word.start ? "#c8ff70" : "#ffffff";
       ctx.strokeText(word.text, x, y);
       ctx.fillText(word.text, x, y);
       x += word.pixels;
@@ -623,14 +632,37 @@ function drawExportLyrics(ctx, lines, time, width, height) {
   }
 }
 
+function exportFadeGain(elapsed, length, fadeIn, fadeOut) {
+  const leading = fadeIn > 0 ? elapsed / fadeIn : 1;
+  const trailing = fadeOut > 0 ? (length - elapsed) / fadeOut : 1;
+  return Math.max(0, Math.min(1, leading, trailing));
+}
+
+function scheduleExportFade(gain, origin, length, fadeIn, fadeOut) {
+  const breakpoints = new Set([length, fadeIn, length - fadeOut]);
+  if (fadeIn + fadeOut > length) {
+    breakpoints.add(length * fadeIn / (fadeIn + fadeOut));
+  }
+  gain.setValueAtTime(exportFadeGain(0, length, fadeIn, fadeOut), origin);
+  for (const elapsed of [...breakpoints].sort((a, b) => a - b)) {
+    if (elapsed > 0) {
+      gain.linearRampToValueAtTime(exportFadeGain(elapsed, length, fadeIn, fadeOut), origin + elapsed);
+    }
+  }
+}
+
 export async function exportKaraokeMp4({
-  source, prepareAudio, lyrics, start, end, signal, onProgress,
+  source, prepareAudio, lyrics, highlightWords = true, start, end, signal, onProgress,
+  fadeIn = 0, fadeOut = 0,
 }) {
   const mimeType = "video/mp4;codecs=avc1,mp4a.40.2";
   if (!globalThis.MediaRecorder?.isTypeSupported(mimeType)) {
     throw new Error("This WebView2 Runtime does not support H.264/AAC MP4 export.");
   }
   if (!(end > start)) throw new Error("There is no audio range to export.");
+  const length = end - start;
+  const fadeInSeconds = Math.min(length, Math.max(0, Number(fadeIn) || 0));
+  const fadeOutSeconds = Math.min(length, Math.max(0, Number(fadeOut) || 0));
   const video = document.createElement("video");
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d", { alpha: false });
@@ -654,7 +686,13 @@ export async function exportKaraokeMp4({
     if (!mix.buffer || !(mix.buffer.duration > start)) throw new Error("MyNus audio is unavailable for export.");
     const sink = audio.createMediaStreamDestination();
     const compressor = audio.createDynamicsCompressor();
-    compressor.connect(sink);
+    const fade = fadeInSeconds || fadeOutSeconds ? audio.createGain() : null;
+    if (fade) {
+      fade.gain.value = exportFadeGain(0, length, fadeInSeconds, fadeOutSeconds);
+      compressor.connect(fade).connect(sink);
+    } else {
+      compressor.connect(sink);
+    }
     const backing = audio.createBufferSource();
     backing.buffer = mix.buffer;
     const backingGain = audio.createGain();
@@ -669,8 +707,20 @@ export async function exportKaraokeMp4({
       const visible = elapsed >= 0 && (source.loop || elapsed < video.duration);
       ctx.fillStyle = "black";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      if (visible && video.readyState >= 2) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      drawExportLyrics(ctx, lyrics, time, canvas.width, canvas.height);
+      if (visible && video.readyState >= 2) {
+        const zoom = Math.max(10, Math.min(400, source.resize ?? 100)) / 100;
+        const width = canvas.width * zoom;
+        const height = canvas.height * zoom;
+        ctx.drawImage(video, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
+      }
+      drawExportLyrics(ctx, lyrics, time, canvas.width, canvas.height, highlightWords);
+      if (fade) {
+        ctx.save();
+        ctx.fillStyle = "black";
+        ctx.globalAlpha = 1 - exportFadeGain(time - start, length, fadeInSeconds, fadeOutSeconds);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      }
     };
     const initialTime = start - source.offset;
     video.loop = source.loop;
@@ -707,7 +757,8 @@ export async function exportKaraokeMp4({
 
         recorder.start(1000);
         const origin = audio.currentTime;
-        backing.start(origin, start, end - start);
+        if (fade) scheduleExportFade(fade.gain, origin, length, fadeInSeconds, fadeOutSeconds);
+        backing.start(origin, start, length);
         function tick() {
           try {
             const time = Math.min(end, start + audio.currentTime - origin);
