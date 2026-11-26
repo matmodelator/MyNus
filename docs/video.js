@@ -1,5 +1,5 @@
 /*
- * 9.0.8 fade fix
+ * 9.0.12 Hoovers video track
  */
 
 const VIDEO_DRIFT_SECONDS = 0.2;
@@ -334,6 +334,7 @@ export function createKaraokeVideo({
   video,
   overlay,
   getTimelineScale,
+  getTimelineDuration,
   onOffsetChange,
   onError = console.error,
 }) {
@@ -354,6 +355,7 @@ export function createKaraokeVideo({
   let pendingPlay = null;
   let playbackError = null;
   let drag = null;
+  const filmstrip = createFilmstrip912(overlay, getTimelineScale, getTimelineDuration);
 
   video.preload = "metadata";
   video.controls = false;
@@ -382,6 +384,7 @@ export function createKaraokeVideo({
       overlay.style.setProperty("--video-frame-spacing", `${framesPerTick * pixelsPerFrame}px`);
       overlay.title += ` · ${variable ? "≈" : ""}${Number(fps.toFixed(3))} fps · ${framesPerTick} frame(s) per mark`;
     }
+    filmstrip.render({ length, offset, loop });
   }
 
   function pauseVideo() {
@@ -451,6 +454,7 @@ export function createKaraokeVideo({
   }
 
   function clearVideo() {
+    filmstrip.clear();
     pauseVideo();
     video.hidden = true;
     if (sourceUrl) {
@@ -473,6 +477,7 @@ export function createKaraokeVideo({
     sourceUrl = nextUrl;
     sourceFile = file;
     video.src = nextUrl;
+    filmstrip.load(nextUrl);
     readFrameTiming(file).then(timing => {
       if (sourceUrl !== nextUrl) return;
       frameTiming = timing;
@@ -502,6 +507,7 @@ export function createKaraokeVideo({
 
   function setLoop(value) {
     loop = Boolean(value);
+    renderTimelineOverlay();
     syncFromAudio(audioTime, audioPlaying, { seek: true });
   }
 
@@ -574,6 +580,7 @@ export function createKaraokeVideo({
         overlay.releasePointerCapture(drag.pointerId);
       }
       drag = null;
+      filmstrip.dispose?.();
       listeners.abort();
       clearVideo();
     },
@@ -802,4 +809,91 @@ export async function exportKaraokeMp4({
     URL.revokeObjectURL(url);
     await audio.close();
   }
+}
+
+// A separate, muted decoder keeps thumbnail seeking away from the playing video.
+function createFilmstrip912(overlay, getScale, getEnd) {
+  if (!overlay) return {render(){},load(){},clear(){}};
+  let decoder=null, previewDecoder=null, revision=0, frames=[], length=0, offset=0, loop=false;
+  let signature='', hoverTimer, hoverRevision=0, sampleCount=0, previewWork=Promise.resolve();
+  const events=new AbortController(),options={signal:events.signal};
+  const popup=document.createElement('div');popup.className='video-frame-preview912';popup.hidden=true;
+  const picture=document.createElement('canvas');picture.width=240;picture.height=135;
+  const label=document.createElement('div');popup.append(picture,label);document.body.append(popup);
+  const stamp=t=>{const m=Math.floor(t/60);return String(m).padStart(2,'0')+':'+(t%60).toFixed(3).padStart(6,'0');};
+  const hide=()=>{clearTimeout(hoverTimer);hoverRevision++;popup.hidden=true;};
+  async function seek(media,time,token) {
+    if(token!==revision)throw Error('Cancelled');
+    time=Math.max(0,Math.min(time,Math.max(0,media.duration-.001)));
+    if(media.readyState>=2&&Math.abs(media.currentTime-time)<.0001)return;
+    await new Promise((resolve,reject)=>{
+      const done=error=>{clearTimeout(timer);media.removeEventListener('seeked',ok);media.removeEventListener('error',bad);error?reject(error):resolve();};
+      const ok=()=>done(),bad=()=>done(Error('Frame unavailable'));
+      const timer=setTimeout(bad,6000);media.addEventListener('seeked',ok,{once:true});media.addEventListener('error',bad,{once:true});
+      media.currentTime=time;
+    });
+    if(token!==revision)throw Error('Cancelled');
+  }
+  function draw(media,canvas){const ctx=canvas.getContext('2d');ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);const r=Math.min(canvas.width/media.videoWidth,canvas.height/media.videoHeight);const w=media.videoWidth*r,h=media.videoHeight*r;ctx.drawImage(media,(canvas.width-w)/2,(canvas.height-h)/2,w,h);}
+  function paint(){
+    if(!length)return;
+    overlay.querySelectorAll('.video-cycle912').forEach(cycle=>{
+      cycle.querySelectorAll('img').forEach(img=>img.remove());
+      if(!frames.length)return;
+      const scale=getScale(),start=Number(cycle.dataset.start),end=Number(cycle.dataset.end),cycleStart=Number(cycle.dataset.origin);
+      // Every visible tile represents its own point within the source clip.
+      for(let x=start;x<end;x+=48/scale){
+        const time=Math.max(0,Math.min(length,(x+Math.min(48/scale,end-x)/2)-cycleStart));
+        const frame=frames[Math.min(sampleCount-1,Math.floor(time/length*sampleCount))];
+        if(!frame)continue;
+        const img=document.createElement('img');img.src=frame;img.draggable=false;img.alt='Video frame';img.style.left=((x-start)*scale)+'px';img.style.width=Math.min(48,(end-x)*scale)+'px';cycle.append(img);
+      }
+    });
+  }
+  function render(state){
+    length=state.length;offset=state.offset;loop=state.loop;
+    const scale=getScale(),end=Number(getEnd?.())||0;
+    if(!length||!scale||end<=Math.max(0,offset)){overlay.replaceChildren();signature='';hide();return;}
+    const first=loop?Math.max(0,Math.floor(-offset/length)):0;
+    const last=loop?Math.max(first,Math.ceil((end-offset)/length)-1):0;
+    const key=[length,offset,loop,scale,end].join('|');
+    const left=Math.max(0,offset),right=Math.min(end,loop?end:offset+length);
+    overlay.style.left=(left*scale)+'px';overlay.style.width=(Math.max(0,right-left)*scale)+'px';
+    if(key===signature)return;signature=key;
+    overlay.replaceChildren();
+    if(right<=left)return;
+    for(let n=first;n<=last;n++){
+      const origin=offset+n*length,start=Math.max(0,origin),stop=Math.min(end,origin+length);if(stop<=start)continue;
+      const cycle=document.createElement('div');cycle.className='video-cycle912';cycle.dataset.start=start;cycle.dataset.end=stop;cycle.dataset.origin=origin;
+      cycle.style.left=((start-left)*scale)+'px';cycle.style.width=((stop-start)*scale)+'px';cycle.style.setProperty('--cycle-color', 'hsl('+((n*137.508+195)%360)+' 75% 55%)');
+      const badge=document.createElement('span');badge.textContent=loop?'Loop '+(n+1):'Video';cycle.append(badge);overlay.append(cycle);
+    }
+    paint();
+  }
+  function clear(){revision++;hide();signature='';frames=[];sampleCount=0;length=0;previewWork=Promise.resolve();overlay.replaceChildren();for(const media of [decoder,previewDecoder])if(media){media.pause();media.removeAttribute('src');media.load();}decoder=previewDecoder=null;}
+  function load(url){
+    clear();const token=revision;
+    const make=()=>{const media=document.createElement('video');media.muted=true;media.preload='auto';media.playsInline=true;media.src=url;return media;};
+    decoder=make();previewDecoder=make();const media=decoder;
+    media.addEventListener('loadeddata',async()=>{
+      if(token!==revision)return;
+      const count=Math.min(240,Math.max(1,Math.ceil(media.duration*Math.max(getScale(),1)/48)));
+      sampleCount=count;
+      const canvas=document.createElement('canvas');canvas.width=48;canvas.height=27;
+      try{for(let i=0;i<count;i++){await seek(media,(i+.5)/count*media.duration,token);draw(media,canvas);frames.push(canvas.toDataURL('image/jpeg',.75));if(i%8===0||i===count-1)paint();}}catch(error){if(token===revision)console.warn('Video thumbnails:',error.message);}
+    },{once:true});
+  }
+  overlay.addEventListener('pointermove',event=>{
+    if(event.buttons||!previewDecoder||!length){hide();return;}
+    clearTimeout(hoverTimer);const request=++hoverRevision,token=revision;
+    const rect=overlay.getBoundingClientRect(),timelineTime=Math.max(0,offset)+(event.clientX-rect.left)/getScale();
+    const elapsed=timelineTime-offset;if(elapsed<0||(!loop&&elapsed>=length)){hide();return;}
+    const cycle=Math.floor(elapsed/length),time=loop?elapsed%length:elapsed;
+    popup.style.left=Math.max(8,Math.min(event.clientX-120,window.innerWidth-256))+'px';
+    popup.style.top=Math.max(8,rect.top-166)+'px';
+    popup.hidden=false;label.textContent=(loop?'Loop '+(cycle+1)+' · ':'')+'Video '+stamp(time)+' · Timeline '+stamp(timelineTime);
+    hoverTimer=setTimeout(()=>{previewWork=previewWork.catch(()=>{}).then(async()=>{try{if(request!==hoverRevision||!previewDecoder||previewDecoder.readyState<2)return;const media=previewDecoder;await seek(media,time,token);if(request!==hoverRevision)return;draw(media,picture);}catch{}});},75);
+  },options);
+  overlay.addEventListener('pointerleave',hide,options);overlay.addEventListener('pointerdown',hide,options);window.addEventListener('resize',hide,options);
+  return {render,load,clear,dispose(){clear();events.abort();popup.remove();}};
 }
